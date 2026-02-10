@@ -10,6 +10,7 @@
 [✓] Task 5 — Rent metering & runtime accounting
 [✓] Task 5.1 — Architecture documentation
 [✓] Task 5.2 — Vision and positioning document
+[✓] Task 5.3 — Investor pitch document
 
 ---
 
