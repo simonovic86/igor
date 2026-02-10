@@ -143,20 +143,101 @@ This protocol verifies that:
 - Protocol negotiation works correctly
 - Basic stream communication functions
 
+## Agent Runtime
+
+Igor nodes execute autonomous agents in a sandboxed WASM environment using **wazero**.
+
+### Running an Agent Locally
+
+```bash
+./bin/igord --run-agent agents/example/agent.wasm
+```
+
+The runtime will:
+- Load and compile the WASM module
+- Initialize the agent
+- Execute tick() every second
+- Checkpoint state every 5 seconds
+- Save checkpoint to disk
+- Resume from checkpoint on restart
+
+### Agent Lifecycle
+
+Agents must implement four lifecycle functions:
+
+**`agent_init()`**
+Called once when the agent first starts. Initialize state here.
+
+**`agent_tick()`**
+Called periodically (every 1 second). Must be short-lived (<100ms timeout enforced).
+
+**`agent_checkpoint() -> size`**
+Returns the size of serialized state. State data location provided by `agent_checkpoint_ptr()`.
+
+**`agent_checkpoint_ptr() -> ptr`**
+Returns pointer to checkpoint data in WASM memory.
+
+**`agent_resume(ptr, size)`**
+Restores agent from previously checkpointed state.
+
+### Sandbox Constraints
+
+The WASM runtime enforces:
+- **Memory limit**: 64MB per agent
+- **No filesystem access**: Agents cannot read/write files
+- **No network access**: Agents cannot make network calls
+- **Execution timeout**: Each tick must complete within 100ms
+
+### Example Agent
+
+See `agents/example/` for a minimal counter agent that:
+- Maintains a counter in state
+- Increments on each tick
+- Checkpoints state
+- Survives restarts
+
+Build with TinyGo:
+```bash
+cd agents/example
+make build
+```
+
+### Survival Test
+
+**First run:**
+```bash
+./bin/igord --run-agent agents/example/agent.wasm
+# Agent ticks: 1, 2, 3, 4, 5, 6, 7
+# Ctrl+C to stop
+```
+
+**Second run (restart):**
+```bash
+./bin/igord --run-agent agents/example/agent.wasm
+# Agent resumes from counter=7
+# Agent continues: 8, 9, 10, 11...
+```
+
+The agent survives infrastructure restarts by checkpointing state to disk and resuming automatically.
+
 ## Development Status
 
-**Current Phase**: P2P foundation
+**Current Phase**: Local agent execution
 
 The repository now includes:
 - ✓ Basic P2P networking with libp2p
 - ✓ Peer identity and connection management
 - ✓ Ping protocol for connectivity testing
+- ✓ WASM agent runtime with wazero
+- ✓ Agent lifecycle (init, tick, checkpoint, resume)
+- ✓ Local agent execution with survival through restarts
+- ✓ Sandboxed execution (memory limits, no filesystem/network)
 
 Not yet implemented:
-- Agent execution (WASM runtime)
-- Migration logic
-- Payment system
-- Agent storage and persistence
+- Agent-to-agent migration over P2P
+- Payment system and metering
+- Multi-agent coordination
+- Persistent agent storage
 
 ## Design Philosophy
 
