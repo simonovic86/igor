@@ -9,6 +9,7 @@ import (
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/simonovic86/igor/internal/runtime"
+	"github.com/simonovic86/igor/internal/storage"
 )
 
 // Instance represents a running agent instance.
@@ -17,6 +18,7 @@ type Instance struct {
 	Compiled wazero.CompiledModule
 	Module   api.Module
 	Engine   *runtime.Engine
+	Storage  storage.Provider
 	State    []byte
 	logger   *slog.Logger
 }
@@ -27,6 +29,7 @@ func LoadAgent(
 	engine *runtime.Engine,
 	wasmPath string,
 	agentID string,
+	storageProvider storage.Provider,
 	logger *slog.Logger,
 ) (*Instance, error) {
 	logger.Info("Loading agent", "agent_id", agentID, "path", wasmPath)
@@ -48,6 +51,7 @@ func LoadAgent(
 		Compiled: compiled,
 		Module:   module,
 		Engine:   engine,
+		Storage:  storageProvider,
 		State:    nil,
 		logger:   logger,
 	}
@@ -215,6 +219,43 @@ func (i *Instance) Resume(ctx context.Context, state []byte) error {
 
 	i.State = state
 	i.logger.Info("Agent resumed", "agent_id", i.AgentID)
+	return nil
+}
+
+// SaveCheckpointToStorage checkpoints the agent and saves to storage provider.
+func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
+	// Checkpoint agent state
+	state, err := i.Checkpoint(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to checkpoint agent: %w", err)
+	}
+
+	// Save to storage provider
+	if err := i.Storage.SaveCheckpoint(ctx, i.AgentID, state); err != nil {
+		return fmt.Errorf("failed to save checkpoint: %w", err)
+	}
+
+	return nil
+}
+
+// LoadCheckpointFromStorage loads checkpoint from storage and resumes agent.
+func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
+	// Load from storage provider
+	state, err := i.Storage.LoadCheckpoint(ctx, i.AgentID)
+	if err != nil {
+		if err == storage.ErrCheckpointNotFound {
+			// No checkpoint exists - this is normal for new agents
+			i.logger.Info("No existing checkpoint found", "agent_id", i.AgentID)
+			return nil
+		}
+		return fmt.Errorf("failed to load checkpoint: %w", err)
+	}
+
+	// Resume agent from state
+	if err := i.Resume(ctx, state); err != nil {
+		return fmt.Errorf("failed to resume agent: %w", err)
+	}
+
 	return nil
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/simonovic86/igor/internal/logging"
 	"github.com/simonovic86/igor/internal/p2p"
 	"github.com/simonovic86/igor/internal/runtime"
+	"github.com/simonovic86/igor/internal/storage"
 )
 
 func main() {
@@ -50,7 +51,7 @@ func main() {
 
 	// If --run-agent flag is provided, run agent locally
 	if *runAgent != "" {
-		if err := runLocalAgent(ctx, *runAgent, logger); err != nil {
+		if err := runLocalAgent(ctx, cfg, *runAgent, logger); err != nil {
 			logging.Error(logger, "Failed to run agent", "error", err)
 			os.Exit(1)
 		}
@@ -68,7 +69,13 @@ func main() {
 }
 
 // runLocalAgent loads and executes an agent locally with tick loop and checkpointing.
-func runLocalAgent(ctx context.Context, wasmPath string, logger *slog.Logger) error {
+func runLocalAgent(ctx context.Context, cfg *config.Config, wasmPath string, logger *slog.Logger) error {
+	// Create storage provider
+	storageProvider, err := storage.NewFSProvider(cfg.CheckpointDir, logger)
+	if err != nil {
+		return fmt.Errorf("failed to create storage provider: %w", err)
+	}
+
 	// Create WASM runtime engine
 	engine, err := runtime.NewEngine(ctx, logger)
 	if err != nil {
@@ -77,7 +84,7 @@ func runLocalAgent(ctx context.Context, wasmPath string, logger *slog.Logger) er
 	defer engine.Close(ctx)
 
 	// Load agent
-	instance, err := agent.LoadAgent(ctx, engine, wasmPath, "local-agent", logger)
+	instance, err := agent.LoadAgent(ctx, engine, wasmPath, "local-agent", storageProvider, logger)
 	if err != nil {
 		return fmt.Errorf("failed to load agent: %w", err)
 	}
@@ -88,14 +95,10 @@ func runLocalAgent(ctx context.Context, wasmPath string, logger *slog.Logger) er
 		return fmt.Errorf("failed to initialize agent: %w", err)
 	}
 
-	// Check for existing checkpoint file
-	checkpointPath := wasmPath + ".checkpoint"
-	if data, err := os.ReadFile(checkpointPath); err == nil {
-		logger.Info("Found existing checkpoint, resuming agent", "bytes", len(data))
-		if err := instance.Resume(ctx, data); err != nil {
-			logger.Error("Failed to resume from checkpoint", "error", err)
-			// Continue anyway with fresh state
-		}
+	// Load checkpoint from storage if it exists
+	if err := instance.LoadCheckpointFromStorage(ctx); err != nil {
+		logger.Error("Failed to load checkpoint", "error", err)
+		// Continue anyway with fresh state
 	}
 
 	// Setup signal handling
@@ -120,13 +123,8 @@ func runLocalAgent(ctx context.Context, wasmPath string, logger *slog.Logger) er
 			logger.Info("Received interrupt signal, checkpointing and shutting down...")
 			
 			// Final checkpoint before exit
-			state, err := instance.Checkpoint(ctx)
-			if err != nil {
-				logger.Error("Failed to checkpoint on shutdown", "error", err)
-			} else if err := os.WriteFile(checkpointPath, state, 0644); err != nil {
-				logger.Error("Failed to save checkpoint", "error", err)
-			} else {
-				logger.Info("Checkpoint saved", "path", checkpointPath)
+			if err := instance.SaveCheckpointToStorage(ctx); err != nil {
+				logger.Error("Failed to save checkpoint on shutdown", "error", err)
 			}
 			return nil
 
@@ -139,17 +137,8 @@ func runLocalAgent(ctx context.Context, wasmPath string, logger *slog.Logger) er
 
 		case <-checkpointTicker.C:
 			// Periodic checkpoint
-			state, err := instance.Checkpoint(ctx)
-			if err != nil {
-				logger.Error("Checkpoint failed", "error", err)
-				continue
-			}
-
-			// Save to file
-			if err := os.WriteFile(checkpointPath, state, 0644); err != nil {
+			if err := instance.SaveCheckpointToStorage(ctx); err != nil {
 				logger.Error("Failed to save checkpoint", "error", err)
-			} else {
-				logger.Info("Checkpoint saved", "path", checkpointPath)
 			}
 		}
 	}

@@ -220,6 +220,56 @@ make build
 
 The agent survives infrastructure restarts by checkpointing state to disk and resuming automatically.
 
+## Checkpoint Storage Abstraction
+
+Igor decouples agent state persistence from the storage implementation through the `storage.Provider` interface. This architectural pattern enables:
+
+- **Migration-ready state handling**: Agent checkpoints can be transferred between nodes
+- **Pluggable storage backends**: Filesystem, remote storage, or distributed systems
+- **Atomic writes**: Guaranteed consistency through temp-file-fsync-rename pattern
+- **Clean separation of concerns**: Agent runtime doesn't know about filesystems
+
+### Storage Provider Interface
+
+```go
+type Provider interface {
+    SaveCheckpoint(ctx context.Context, agentID string, state []byte) error
+    LoadCheckpoint(ctx context.Context, agentID string) ([]byte, error)
+    DeleteCheckpoint(ctx context.Context, agentID string) error
+}
+```
+
+### Filesystem Provider
+
+The reference implementation (`FSProvider`) stores checkpoints locally:
+
+- **Location**: `./checkpoints/<agentID>.checkpoint`
+- **Atomic writes**: Uses temp file + fsync + rename to prevent partial state
+- **Directory auto-creation**: Creates checkpoint directory if missing
+- **Logging**: All operations logged with agent ID
+
+### Configuration
+
+Set checkpoint directory in config (default: `./checkpoints`):
+
+```go
+cfg := &config.Config{
+    CheckpointDir: "./checkpoints",
+    // ...
+}
+```
+
+### Architecture Benefits
+
+The storage abstraction prepares Igor for migration by ensuring:
+
+1. **No direct file I/O in agent runtime**: All persistence through Provider interface
+2. **Testable**: Easy to mock storage for unit tests
+3. **Extensible**: Can add remote storage (S3, IPFS, libp2p) without changing agent code
+4. **Atomic guarantees**: fsync ensures durability before visibility
+
+Future migration will use the same interface to transfer checkpoints between nodes over libp2p.
+
 ## Development Status
 
 **Current Phase**: Local agent execution

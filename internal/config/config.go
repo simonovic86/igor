@@ -18,6 +18,9 @@ type Config struct {
 
 	// BootstrapPeers is a list of multiaddrs to connect to on startup.
 	BootstrapPeers []string
+
+	// CheckpointDir is the directory where agent checkpoints are stored.
+	CheckpointDir string
 }
 
 // Load returns a Config with default values applied.
@@ -27,6 +30,7 @@ func Load() (*Config, error) {
 		ListenAddress:  "/ip4/0.0.0.0/tcp/4001",
 		PricePerSecond: 0.001,
 		BootstrapPeers: []string{},
+		CheckpointDir:  "./checkpoints",
 	}
 	return cfg, nil
 }
