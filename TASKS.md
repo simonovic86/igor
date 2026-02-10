@@ -6,8 +6,8 @@
 [✓] Task 1 — P2P bootstrap & ping  
 [✓] Task 2 — WASM sandbox runtime & local survivable agents  
 [✓] Task 3 — Checkpoint persistence abstraction & storage provider  
+[✓] Task 4 — Migration protocol over libp2p
 
-[ ] Task 4 — Migration protocol over libp2p
 [ ] Task 5 — Rent metering & runtime accounting
 
 ---
