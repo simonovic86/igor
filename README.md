@@ -272,22 +272,31 @@ Future migration will use the same interface to transfer checkpoints between nod
 
 ## Development Status
 
-**Current Phase**: Local agent execution
+**Current Phase**: Phase 1 Complete ✅
 
-The repository now includes:
-- ✓ Basic P2P networking with libp2p
-- ✓ Peer identity and connection management
-- ✓ Ping protocol for connectivity testing
-- ✓ WASM agent runtime with wazero
-- ✓ Agent lifecycle (init, tick, checkpoint, resume)
-- ✓ Local agent execution with survival through restarts
-- ✓ Sandboxed execution (memory limits, no filesystem/network)
+Igor v0 has completed all Phase 1 (Survival) tasks:
 
-Not yet implemented:
-- Agent-to-agent migration over P2P
-- Payment system and metering
-- Multi-agent coordination
-- Persistent agent storage
+- ✅ P2P networking with libp2p
+- ✅ Peer identity and connection management
+- ✅ Connectivity testing (ping protocol)
+- ✅ WASM agent runtime with wazero
+- ✅ Agent lifecycle (init, tick, checkpoint, resume)
+- ✅ Local agent execution with survival through restarts
+- ✅ Sandboxed execution (memory limits, timeouts, no filesystem/network)
+- ✅ Checkpoint storage abstraction
+- ✅ Agent migration between nodes over P2P
+- ✅ Runtime rent metering and budget enforcement
+
+**All 6 success criteria from PROJECT_CONTEXT.md are met:**
+
+1. ✅ Agent can run on Node A
+2. ✅ Agent can checkpoint state explicitly
+3. ✅ Agent can migrate to Node B
+4. ✅ Agent resumes execution from checkpoint
+5. ✅ Agent pays runtime rent to hosting node
+6. ✅ System has no centralized coordination
+
+**Next Phase:** Autonomy - Enable agents to make migration decisions independently.
 
 ## Design Philosophy
 
@@ -299,9 +308,23 @@ Igor v0 follows strict design principles:
 - **Minimal scope** over feature richness
 - **Fail loudly** on invariant violations
 
-## Authoritative Design Document
+## Documentation
 
-See [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) for the complete and authoritative design specification.
+### Core Documents
+
+- [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Authoritative design specification
+- [TASKS.md](./TASKS.md) - Development task tracker
+
+### Detailed Documentation
+
+- [Overview](./docs/overview.md) - System introduction and quick start
+- [Architecture](./docs/architecture.md) - System structure and components
+- [Agent Lifecycle](./docs/agent-lifecycle.md) - How agents execute and survive
+- [Migration Protocol](./docs/migration-protocol.md) - How agents move between nodes
+- [Budget Model](./docs/budget-model.md) - How agents pay for execution
+- [Security Model](./docs/security-model.md) - Sandbox and trust boundaries
+- [Invariants](./docs/invariants.md) - System guarantees and constraints
+- [Roadmap](./docs/roadmap.md) - Future development phases
 
 ## What Igor v0 Is NOT
 
