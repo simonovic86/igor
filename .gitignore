@@ -1,0 +1,26 @@
+# Binaries
+bin/
+*.wasm
+
+# Checkpoints
+checkpoints/
+
+# Test artifacts
+*.checkpoint
+/tmp/
+
+# Build artifacts
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
