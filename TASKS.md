@@ -9,6 +9,7 @@
 [✓] Task 4 — Migration protocol over libp2p
 [✓] Task 5 — Rent metering & runtime accounting
 [✓] Task 5.1 — Architecture documentation
+[✓] Task 5.2 — Vision and positioning document
 
 ---
 
