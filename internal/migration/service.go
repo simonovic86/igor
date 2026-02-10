@@ -2,10 +2,12 @@ package migration
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -100,12 +102,26 @@ func (s *Service) MigrateAgent(
 		"checkpoint_size", len(checkpoint),
 	)
 
+	// Extract budget metadata from checkpoint for package visibility
+	// Checkpoint format: [budget:8][pricePerSecond:8][state:...]
+	var budget, pricePerSecond float64
+	if len(checkpoint) >= 16 {
+		budget = math.Float64frombits(binary.LittleEndian.Uint64(checkpoint[0:8]))
+		pricePerSecond = math.Float64frombits(binary.LittleEndian.Uint64(checkpoint[8:16]))
+		s.logger.Info("Budget metadata extracted",
+			"budget", fmt.Sprintf("%.6f", budget),
+			"price_per_second", fmt.Sprintf("%.6f", pricePerSecond),
+		)
+	}
+
 	// Create agent package
 	pkg := protomsg.AgentPackage{
-		AgentID:    agentID,
-		WASMBinary: wasmBinary,
-		Checkpoint: checkpoint,
-		ManifestData: []byte("{}"), // TODO: Add manifest
+		AgentID:        agentID,
+		WASMBinary:     wasmBinary,
+		Checkpoint:     checkpoint,
+		ManifestData:   []byte("{}"), // TODO: Add manifest
+		Budget:         budget,
+		PricePerSecond: pricePerSecond,
 	}
 
 	transfer := protomsg.AgentTransfer{
@@ -187,6 +203,8 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		"agent_id", pkg.AgentID,
 		"wasm_size", len(pkg.WASMBinary),
 		"checkpoint_size", len(pkg.Checkpoint),
+		"budget", fmt.Sprintf("%.6f", pkg.Budget),
+		"price_per_second", fmt.Sprintf("%.6f", pkg.PricePerSecond),
 	)
 
 	// Save checkpoint to storage
@@ -204,13 +222,15 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		return
 	}
 
-	// Load agent
+	// Load agent with budget from package
 	instance, err := agent.LoadAgent(
 		ctx,
 		s.runtimeEngine,
 		wasmPath,
 		pkg.AgentID,
 		s.storageProvider,
+		pkg.Budget,
+		pkg.PricePerSecond,
 		s.logger,
 	)
 	if err != nil {

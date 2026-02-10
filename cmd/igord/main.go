@@ -22,6 +22,7 @@ import (
 func main() {
 	// Parse CLI flags
 	runAgent := flag.String("run-agent", "", "Path to WASM agent to run locally")
+	budget := flag.Float64("budget", 1.0, "Initial budget for agent execution")
 	migrateAgent := flag.String("migrate-agent", "", "Agent ID to migrate")
 	targetPeer := flag.String("to", "", "Target peer multiaddr for migration")
 	wasmPath := flag.String("wasm", "", "WASM binary path for migration")
@@ -98,7 +99,7 @@ func main() {
 
 	// If --run-agent flag is provided, run agent locally
 	if *runAgent != "" {
-		if err := runLocalAgent(ctx, cfg, *runAgent, migrationSvc, logger); err != nil {
+		if err := runLocalAgent(ctx, cfg, *runAgent, *budget, migrationSvc, logger); err != nil {
 			logging.Error(logger, "Failed to run agent", "error", err)
 			os.Exit(1)
 		}
@@ -120,6 +121,7 @@ func runLocalAgent(
 	ctx context.Context,
 	cfg *config.Config,
 	wasmPath string,
+	budget float64,
 	migrationSvc *migration.Service,
 	logger *slog.Logger,
 ) error {
@@ -136,8 +138,17 @@ func runLocalAgent(
 	}
 	defer engine.Close(ctx)
 
-	// Load agent
-	instance, err := agent.LoadAgent(ctx, engine, wasmPath, "local-agent", storageProvider, logger)
+	// Load agent with budget
+	instance, err := agent.LoadAgent(
+		ctx,
+		engine,
+		wasmPath,
+		"local-agent",
+		storageProvider,
+		budget,
+		cfg.PricePerSecond,
+		logger,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to load agent: %w", err)
 	}
@@ -145,6 +156,11 @@ func runLocalAgent(
 
 	// Register agent with migration service
 	migrationSvc.RegisterAgent("local-agent", instance)
+
+	logger.Info("Agent loaded with budget",
+		"budget", fmt.Sprintf("%.6f", budget),
+		"price_per_second", fmt.Sprintf("%.6f", cfg.PricePerSecond),
+	)
 
 	// Initialize agent
 	if err := instance.Init(ctx); err != nil {
@@ -187,6 +203,21 @@ func runLocalAgent(
 		case <-ticker.C:
 			// Execute tick
 			if err := instance.Tick(ctx); err != nil {
+				// Check if budget exhausted
+				if instance.Budget <= 0 {
+					logger.Info("Agent budget exhausted, terminating",
+						"agent_id", "local-agent",
+						"reason", "budget_exhausted",
+					)
+					
+					// Final checkpoint
+					if err := instance.SaveCheckpointToStorage(ctx); err != nil {
+						logger.Error("Failed to save checkpoint on termination", "error", err)
+					}
+					
+					return fmt.Errorf("agent terminated: budget exhausted")
+				}
+				
 				logger.Error("Tick failed", "error", err)
 				return err
 			}

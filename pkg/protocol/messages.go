@@ -26,10 +26,12 @@ type MigrationAccept struct {
 
 // AgentPackage contains all data needed to transfer an agent.
 type AgentPackage struct {
-	AgentID      string
-	WASMBinary   []byte
-	Checkpoint   []byte
-	ManifestData []byte
+	AgentID        string
+	WASMBinary     []byte
+	Checkpoint     []byte
+	ManifestData   []byte
+	Budget         float64
+	PricePerSecond float64
 }
 
 // AgentTransfer represents the payload of an agent being transferred

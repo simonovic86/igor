@@ -2,8 +2,10 @@ package agent
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/tetratelabs/wazero"
@@ -14,13 +16,15 @@ import (
 
 // Instance represents a running agent instance.
 type Instance struct {
-	AgentID  string
-	Compiled wazero.CompiledModule
-	Module   api.Module
-	Engine   *runtime.Engine
-	Storage  storage.Provider
-	State    []byte
-	logger   *slog.Logger
+	AgentID        string
+	Compiled       wazero.CompiledModule
+	Module         api.Module
+	Engine         *runtime.Engine
+	Storage        storage.Provider
+	State          []byte
+	Budget         float64 // Remaining budget in arbitrary currency units
+	PricePerSecond float64 // Cost per second of execution
+	logger         *slog.Logger
 }
 
 // LoadAgent loads and compiles a WASM agent from a file.
@@ -30,6 +34,8 @@ func LoadAgent(
 	wasmPath string,
 	agentID string,
 	storageProvider storage.Provider,
+	budget float64,
+	pricePerSecond float64,
 	logger *slog.Logger,
 ) (*Instance, error) {
 	logger.Info("Loading agent", "agent_id", agentID, "path", wasmPath)
@@ -47,13 +53,15 @@ func LoadAgent(
 	}
 
 	instance := &Instance{
-		AgentID:  agentID,
-		Compiled: compiled,
-		Module:   module,
-		Engine:   engine,
-		Storage:  storageProvider,
-		State:    nil,
-		logger:   logger,
+		AgentID:        agentID,
+		Compiled:       compiled,
+		Module:         module,
+		Engine:         engine,
+		Storage:        storageProvider,
+		State:          nil,
+		Budget:         budget,
+		PricePerSecond: pricePerSecond,
+		logger:         logger,
 	}
 
 	// Verify required exports exist
@@ -95,8 +103,13 @@ func (i *Instance) Init(ctx context.Context) error {
 	return nil
 }
 
-// Tick executes one tick of the agent with a timeout.
+// Tick executes one tick of the agent with a timeout and meters execution cost.
 func (i *Instance) Tick(ctx context.Context) error {
+	// Check budget before execution
+	if i.Budget <= 0 {
+		return fmt.Errorf("budget exhausted: %.6f", i.Budget)
+	}
+
 	// Enforce tick timeout
 	tickCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel()
@@ -114,9 +127,16 @@ func (i *Instance) Tick(ctx context.Context) error {
 		return fmt.Errorf("agent_tick failed: %w", err)
 	}
 
-	i.logger.Debug("Tick completed",
+	// Calculate and deduct execution cost
+	durationSeconds := elapsed.Seconds()
+	cost := durationSeconds * i.PricePerSecond
+	i.Budget -= cost
+
+	i.logger.Info("Tick completed",
 		"agent_id", i.AgentID,
 		"duration_ms", elapsed.Milliseconds(),
+		"cost", fmt.Sprintf("%.6f", cost),
+		"budget_remaining", fmt.Sprintf("%.6f", i.Budget),
 	)
 
 	return nil
@@ -223,6 +243,7 @@ func (i *Instance) Resume(ctx context.Context, state []byte) error {
 }
 
 // SaveCheckpointToStorage checkpoints the agent and saves to storage provider.
+// The checkpoint includes budget metadata and agent state.
 func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 	// Checkpoint agent state
 	state, err := i.Checkpoint(ctx)
@@ -230,8 +251,15 @@ func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 		return fmt.Errorf("failed to checkpoint agent: %w", err)
 	}
 
+	// Create checkpoint with budget metadata
+	// Format: [budget:8][pricePerSecond:8][state:...]
+	checkpoint := make([]byte, 16+len(state))
+	binary.LittleEndian.PutUint64(checkpoint[0:8], math.Float64bits(i.Budget))
+	binary.LittleEndian.PutUint64(checkpoint[8:16], math.Float64bits(i.PricePerSecond))
+	copy(checkpoint[16:], state)
+
 	// Save to storage provider
-	if err := i.Storage.SaveCheckpoint(ctx, i.AgentID, state); err != nil {
+	if err := i.Storage.SaveCheckpoint(ctx, i.AgentID, checkpoint); err != nil {
 		return fmt.Errorf("failed to save checkpoint: %w", err)
 	}
 
@@ -239,9 +267,10 @@ func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 }
 
 // LoadCheckpointFromStorage loads checkpoint from storage and resumes agent.
+// The checkpoint includes budget metadata and agent state.
 func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 	// Load from storage provider
-	state, err := i.Storage.LoadCheckpoint(ctx, i.AgentID)
+	checkpoint, err := i.Storage.LoadCheckpoint(ctx, i.AgentID)
 	if err != nil {
 		if err == storage.ErrCheckpointNotFound {
 			// No checkpoint exists - this is normal for new agents
@@ -250,6 +279,26 @@ func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 		}
 		return fmt.Errorf("failed to load checkpoint: %w", err)
 	}
+
+	// Parse checkpoint format: [budget:8][pricePerSecond:8][state:...]
+	if len(checkpoint) < 16 {
+		return fmt.Errorf("invalid checkpoint format: too short")
+	}
+
+	// Extract budget metadata
+	budget := math.Float64frombits(binary.LittleEndian.Uint64(checkpoint[0:8]))
+	pricePerSecond := math.Float64frombits(binary.LittleEndian.Uint64(checkpoint[8:16]))
+	state := checkpoint[16:]
+
+	// Update instance budget
+	i.Budget = budget
+	i.PricePerSecond = pricePerSecond
+
+	i.logger.Info("Budget restored from checkpoint",
+		"agent_id", i.AgentID,
+		"budget", fmt.Sprintf("%.6f", budget),
+		"price_per_second", fmt.Sprintf("%.6f", pricePerSecond),
+	)
 
 	// Resume agent from state
 	if err := i.Resume(ctx, state); err != nil {
