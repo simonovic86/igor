@@ -67,6 +67,33 @@ Ensure `$(go env GOPATH)/bin` is in your PATH.
 
 ## Development Workflow
 
+### Initial Setup
+
+After cloning the repository, install Git hooks:
+
+```bash
+./scripts/install-hooks.sh
+```
+
+This installs pre-commit hooks that enforce code quality before each commit.
+
+### Local Quality Gates
+
+**Pre-commit hooks automatically run:**
+- Code formatting check (`make fmt-check`)
+- Static analysis (`make vet`)
+- Linting (`make lint`)
+- Tests (`make test`)
+
+If any check fails, the commit is rejected. Fix issues before committing.
+
+**To bypass hooks** (not recommended):
+```bash
+git commit --no-verify
+```
+
+Only bypass for work-in-progress commits on feature branches.
+
 ### Building Igor
 
 Build the node runtime:

@@ -294,18 +294,24 @@ The GitHub Actions CI pipeline implements all stages described above:
 
 **Matrix Build:**
 - OS: ubuntu-latest, macos-latest
-- Go: 1.24.x, 1.25.x (current and previous minor)
+- Go version: Read from go.mod (ensures toolchain alignment)
 
 **Concurrency Control:**
 - Cancels previous runs on same PR/branch
 - Reduces unnecessary CI resource usage
+
+**Toolchain Alignment:**
+- Go version pinned via `go-version-file: go.mod`
+- golangci-lint uses latest version (supports Go 1.25+)
+- Timeout increased to 5m for large dependency graphs
+- Prevents version drift between CI and development
 
 ### Pipeline Stages
 
 **Job 1: Lint & Test**
 
 1. Checkout code (actions/checkout@v4)
-2. Setup Go (actions/setup-go@v5) with module caching
+2. Setup Go (actions/setup-go@v5) with version from go.mod
 3. Install goimports
 4. Validate dependencies: `go mod tidy` + diff check
 5. Format check: `make fmt-check`
@@ -333,6 +339,29 @@ GitHub Actions auto-caches:
 Cache invalidates on:
 - go.mod/go.sum changes
 - .golangci.yml changes
+
+### Local Quality Enforcement
+
+**Pre-commit hooks:**
+
+Install hooks to enforce quality before commits:
+
+```bash
+./scripts/install-hooks.sh
+```
+
+The hook runs automatically on `git commit` and checks:
+- Formatting (`make fmt-check`)
+- Static analysis (`make vet`)
+- Linting (`make lint`)
+- Tests (`make test`)
+
+Commits are rejected if any check fails.
+
+**Bypass hook** (use sparingly):
+```bash
+git commit --no-verify
+```
 
 ### Debugging CI Failures
 
