@@ -1,4 +1,4 @@
-.PHONY: help build clean test lint vet fmt fmt-check tidy agent run-agent
+.PHONY: help bootstrap build clean test lint vet fmt fmt-check tidy agent run-agent
 
 .DEFAULT_GOAL := help
 
@@ -26,6 +26,10 @@ help: ## Show this help message
 	@echo 'Targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+
+bootstrap: ## Install development toolchain and verify environment
+	@echo "Running developer environment bootstrap..."
+	@./scripts/bootstrap.sh
 
 build: ## Build igord binary
 	@echo "Building $(BINARY_NAME)..."

@@ -26,6 +26,34 @@ Invariant violations cause immediate errors. Correctness over graceful degradati
 
 See [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) for authoritative design specification.
 
+## Toolchain Requirements
+
+Igor requires deterministic builds with explicit version locking.
+
+**Required versions:**
+- Go 1.25.4
+- golangci-lint v1.63.4
+- goimports (latest from golang.org/x/tools)
+- TinyGo 0.40.1+ (optional, for agent development)
+
+**Automated setup:**
+
+```bash
+./scripts/bootstrap.sh
+```
+
+This installs all required tools, verifies versions, and runs initial quality checks.
+
+**Why version locking:**
+
+Igor's philosophy of "deterministic behavior preferred" extends to the development toolchain. Pinned versions ensure:
+- CI and local builds produce identical results
+- No silent version drift
+- Reproducible across contributors
+- Predictable linter behavior
+
+See [docs/TOOLCHAIN.md](./docs/TOOLCHAIN.md) for version upgrade procedures.
+
 ## Development Setup
 
 ### Prerequisites
