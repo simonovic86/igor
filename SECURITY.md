@@ -68,7 +68,7 @@ Igor v0 has intentional security limitations:
 - No access control
 - Identity not carried in migrations
 
-These limitations are documented in [docs/security-model.md](./docs/security-model.md).
+These limitations are documented in [docs/SECURITY_MODEL.md](./docs/SECURITY_MODEL.md).
 
 **Do not deploy Igor v0 on public networks or with sensitive data.**
 
@@ -176,8 +176,8 @@ No timeline or commitment. Listed for context only.
 
 ## Security Resources
 
-- [docs/security-model.md](./docs/security-model.md) - Detailed threat model
-- [docs/invariants.md](./docs/invariants.md) - System guarantees
+- [docs/SECURITY_MODEL.md](./docs/SECURITY_MODEL.md) - Detailed threat model
+- [docs/INVARIANTS.md](./docs/INVARIANTS.md) - System guarantees
 - [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Design philosophy
 
 ## Contact

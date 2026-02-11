@@ -280,24 +280,108 @@ See [RELEASE_PROCESS.md](./RELEASE_PROCESS.md) for details.
 - Track flakiness
 - Identify bottlenecks
 
+## GitHub Actions Implementation
+
+**Status:** Implemented in `.github/workflows/ci.yml`
+
+### Pipeline Overview
+
+The GitHub Actions CI pipeline implements all stages described above:
+
+**Triggers:**
+- Push to main/master branch
+- Pull requests to main/master
+
+**Matrix Build:**
+- OS: ubuntu-latest, macos-latest
+- Go: 1.24.x, 1.25.x (current and previous minor)
+
+**Concurrency Control:**
+- Cancels previous runs on same PR/branch
+- Reduces unnecessary CI resource usage
+
+### Pipeline Stages
+
+**Job 1: Lint & Test**
+
+1. Checkout code (actions/checkout@v4)
+2. Setup Go (actions/setup-go@v5) with module caching
+3. Install goimports
+4. Validate dependencies: `go mod tidy` + diff check
+5. Format check: `make fmt-check`
+6. Static analysis: `make vet`
+7. Lint: golangci-lint via official action
+8. Tests: `make test`
+9. Build: `make build`
+10. Verify binary exists
+
+**Job 2: Build Agent (Optional)**
+
+1. Checkout code
+2. Install TinyGo (Ubuntu only)
+3. Build example agent: `make agent`
+4. Verify WASM artifact
+
+Marked `continue-on-error: true` since TinyGo setup varies by platform.
+
+### Caching Strategy
+
+GitHub Actions auto-caches:
+- Go modules via `setup-go` action
+- golangci-lint cache via official action
+
+Cache invalidates on:
+- go.mod/go.sum changes
+- .golangci.yml changes
+
+### Debugging CI Failures
+
+**Reproduce locally:**
+
+```bash
+# Run exact CI checks
+make check      # Runs fmt-check, vet, lint
+make test       # Runs unit tests
+make build      # Verifies compilation
+```
+
+**Check specific failures:**
+
+```bash
+# Format issues
+make fmt-check
+make fmt  # Auto-fix
+
+# Lint issues
+make lint
+
+# Test failures
+make test
+```
+
+All CI checks run through Makefile targets, ensuring local/CI parity.
+
 ## Current State
 
 **Implemented:**
-- Makefile with quality check targets
-- golangci-lint configuration
-- Formatting enforcement tools
-- Developer documentation
+- Makefile with quality check targets ✓
+- golangci-lint configuration ✓
+- Formatting enforcement tools ✓
+- Developer documentation ✓
+- GitHub Actions CI pipeline ✓
+- Matrix builds (OS + Go versions) ✓
+- Automated checks on PR ✓
 
 **Not Yet Implemented:**
-- CI configuration files
-- Automated checks on PR
-- Branch protection rules
+- Branch protection rules (manual GitHub configuration)
 - Release automation
-
-This document will be updated as CI infrastructure is added.
+- Performance benchmarks
+- Security scanning
+- Coverage reporting
 
 ## References
 
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - Local development workflow
 - [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution guidelines
 - [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) - Design principles
+- [.github/workflows/ci.yml](../.github/workflows/ci.yml) - CI configuration

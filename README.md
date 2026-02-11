@@ -317,14 +317,14 @@ Igor v0 follows strict design principles:
 
 ### Detailed Documentation
 
-- [Overview](./docs/overview.md) - System introduction and quick start
-- [Architecture](./docs/architecture.md) - System structure and components
-- [Agent Lifecycle](./docs/agent-lifecycle.md) - How agents execute and survive
-- [Migration Protocol](./docs/migration-protocol.md) - How agents move between nodes
-- [Budget Model](./docs/budget-model.md) - How agents pay for execution
-- [Security Model](./docs/security-model.md) - Sandbox and trust boundaries
-- [Invariants](./docs/invariants.md) - System guarantees and constraints
-- [Roadmap](./docs/roadmap.md) - Future development phases
+- [Overview](./docs/OVERVIEW.md) - System introduction and quick start
+- [Architecture](./docs/ARCHITECTURE.md) - System structure and components
+- [Agent Lifecycle](./docs/AGENT_LIFECYCLE.md) - How agents execute and survive
+- [Migration Protocol](./docs/MIGRATION_PROTOCOL.md) - How agents move between nodes
+- [Budget Model](./docs/BUDGET_MODEL.md) - How agents pay for execution
+- [Security Model](./docs/SECURITY_MODEL.md) - Sandbox and trust boundaries
+- [Invariants](./docs/INVARIANTS.md) - System guarantees and constraints
+- [Roadmap](./docs/ROADMAP.md) - Future development phases
 
 ## What Igor v0 Is NOT
 

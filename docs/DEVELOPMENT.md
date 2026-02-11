@@ -489,5 +489,5 @@ Performance optimization is secondary to correctness.
 
 - [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) - Authoritative design specification
 - [docs/ARCHITECTURE.md](./ARCHITECTURE.md) - Technical architecture
-- [docs/agent-lifecycle.md](./agent-lifecycle.md) - Agent development guide
+- [docs/AGENT_LIFECYCLE.md](./AGENT_LIFECYCLE.md) - Agent development guide
 - [TASKS.md](../TASKS.md) - Development roadmap
