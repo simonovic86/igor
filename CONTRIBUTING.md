@@ -26,33 +26,45 @@ Invariant violations cause immediate errors. Correctness over graceful degradati
 
 See [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) for authoritative design specification.
 
-## Toolchain Requirements
+## Development Environment Setup
 
-Igor requires deterministic builds with explicit version locking.
+Igor uses bootstrap-driven toolchain management for deterministic builds.
 
-**Required versions:**
-- Go 1.25.4
-- golangci-lint v1.63.4
-- goimports (latest from golang.org/x/tools)
-- TinyGo 0.40.1+ (optional, for agent development)
-
-**Automated setup:**
+**Single-command setup:**
 
 ```bash
-./scripts/bootstrap.sh
+make bootstrap
 ```
 
-This installs all required tools, verifies versions, and runs initial quality checks.
+This runs `scripts/bootstrap.sh` which:
+- Verifies Go 1.25.4 is installed
+- Installs golangci-lint v1.63.4 (from tools.go)
+- Installs goimports (from tools.go)
+- Downloads all module dependencies
+- Installs Git pre-commit hooks
+- Verifies build succeeds
+- Runs quality checks
 
-**Why version locking:**
+**Why bootstrap-driven:**
 
-Igor's philosophy of "deterministic behavior preferred" extends to the development toolchain. Pinned versions ensure:
-- CI and local builds produce identical results
-- No silent version drift
-- Reproducible across contributors
-- Predictable linter behavior
+Igor's philosophy of "deterministic behavior preferred" extends to the development toolchain. The bootstrap script is the single source of truth for:
+- Tool versions (read from tools.go and go.mod)
+- Installation procedures
+- Environment verification
 
-See [docs/TOOLCHAIN.md](./docs/TOOLCHAIN.md) for version upgrade procedures.
+This ensures:
+- CI and local environments are identical
+- No version drift between contributors
+- Reproducible across machines
+- Predictable linter and formatter behavior
+
+**Toolchain versions:**
+- Go 1.25.4 (required)
+- golangci-lint v1.63.4 (locked in go.mod via tools.go)
+- goimports (latest, locked in go.mod via tools.go)
+- TinyGo 0.40.1+ (optional, for agent development)
+
+See [docs/TOOLCHAIN.md](./docs/TOOLCHAIN.md) for upgrade procedures.
 
 ## Development Setup
 

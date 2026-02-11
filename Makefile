@@ -53,8 +53,8 @@ test: ## Run tests
 lint: ## Run golangci-lint
 	@echo "Running linters..."
 	@which golangci-lint > /dev/null || \
-		(echo "golangci-lint not found. Install: brew install golangci-lint" && exit 1)
-	golangci-lint run ./...
+		(echo "golangci-lint not found. Run: make bootstrap" && exit 1)
+	golangci-lint run --timeout=5m
 
 vet: ## Run go vet
 	@echo "Running go vet..."
@@ -63,7 +63,7 @@ vet: ## Run go vet
 fmt: ## Format code with gofmt and goimports
 	@echo "Formatting code..."
 	@which $(GOIMPORTS) > /dev/null || \
-		(echo "goimports not found. Install: go install golang.org/x/tools/cmd/goimports@latest" && exit 1)
+		(echo "goimports not found. Run: make bootstrap" && exit 1)
 	@find . -name '*.go' -not -path './vendor/*' -exec $(GOFMT) -w -s {} \;
 	@find . -name '*.go' -not -path './vendor/*' -exec $(GOIMPORTS) -w {} \;
 	@echo "Formatting complete"
@@ -86,7 +86,7 @@ tidy: ## Tidy go.mod and go.sum
 agent: ## Build example agent WASM
 	@echo "Building example agent..."
 	@which tinygo > /dev/null || \
-		(echo "tinygo not found. Install: brew tap tinygo-org/tools && brew install tinygo" && exit 1)
+		(echo "tinygo not found. See docs/DEVELOPMENT.md for installation" && exit 1)
 	cd $(AGENT_DIR) && $(MAKE) build
 	@echo "Agent built: $(AGENT_DIR)/agent.wasm"
 

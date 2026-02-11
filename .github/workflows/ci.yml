@@ -26,34 +26,22 @@ jobs:
           go-version: '1.25.4'
           cache: true
       
-      - name: Verify Go version
-        run: go version
+      - name: Verify toolchain infrastructure
+        run: |
+          test -f tools.go || (echo "tools.go missing" && exit 1)
+          test -f scripts/bootstrap.sh || (echo "bootstrap.sh missing" && exit 1)
+          test -f scripts/pre-commit.sh || (echo "pre-commit.sh missing" && exit 1)
       
-      - name: Install goimports
-        run: go install golang.org/x/tools/cmd/goimports@latest
+      - name: Bootstrap development environment
+        run: make bootstrap
       
       - name: Verify dependencies are tidy
         run: |
           go mod tidy
           git diff --exit-code go.mod go.sum
       
-      - name: Check code formatting
-        run: make fmt-check
-      
-      - name: Run static analysis
-        run: make vet
-      
-      - name: Run linters
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.63.4
-          args: --timeout=5m
-      
-      - name: Run tests
-        run: make test
-      
-      - name: Build igord binary
-        run: make build
+      - name: Run all quality checks
+        run: make check
       
       - name: Verify binary
         run: |

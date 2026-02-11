@@ -300,45 +300,55 @@ The GitHub Actions CI pipeline implements all stages described above:
 - Cancels previous runs on same PR/branch
 - Reduces unnecessary CI resource usage
 
+**Bootstrap-Driven Toolchain:**
+- Single source of truth: `scripts/bootstrap.sh`
+- Tool versions locked in `tools.go` and `go.mod`
+- CI and local environments use identical bootstrap procedure
+- No external linter actions (prevents version mismatches)
+
 **Toolchain Alignment:**
-- Go version pinned via `go-version-file: go.mod`
-- golangci-lint uses latest version (supports Go 1.25+)
-- Timeout increased to 5m for large dependency graphs
-- Prevents version drift between CI and development
+- Go 1.25.4 pinned explicitly
+- golangci-lint v1.63.4 installed via `go install` (not external action)
+- goimports installed via `go install`
+- All tool versions tracked in go.mod/go.sum
+- Prevents version drift by design
 
 ### Pipeline Stages
 
-**Job 1: Lint & Test**
+**Single Job: Quality Checks**
 
 1. Checkout code (actions/checkout@v4)
-2. Setup Go (actions/setup-go@v5) with version from go.mod
-3. Install goimports
-4. Validate dependencies: `go mod tidy` + diff check
-5. Format check: `make fmt-check`
-6. Static analysis: `make vet`
-7. Lint: golangci-lint via official action
-8. Tests: `make test`
-9. Build: `make build`
-10. Verify binary exists
+2. Setup Go 1.25.4 (actions/setup-go@v5 with caching)
+3. Verify toolchain infrastructure (tools.go, bootstrap.sh, pre-commit.sh exist)
+4. Bootstrap environment (`make bootstrap`)
+   - Installs golangci-lint v1.63.4
+   - Installs goimports
+   - Installs Git hooks
+   - Verifies build
+5. Validate dependencies (`go mod tidy` + diff check)
+6. Run all quality checks (`make check`)
+   - Format check
+   - Static analysis (go vet)
+   - Linting (golangci-lint)
+   - Tests
+7. Verify binary (build succeeded during bootstrap)
 
-**Job 2: Build Agent (Optional)**
+**Why no external linter action:**
 
-1. Checkout code
-2. Install TinyGo (Ubuntu only)
-3. Build example agent: `make agent`
-4. Verify WASM artifact
-
-Marked `continue-on-error: true` since TinyGo setup varies by platform.
+External linter binaries are pre-compiled with unknown Go versions, causing version mismatches. Installing via `go install` ensures the linter is built with the project's Go version (1.25.4), eliminating compatibility issues.
 
 ### Caching Strategy
 
 GitHub Actions auto-caches:
 - Go modules via `setup-go` action
-- golangci-lint cache via official action
+- Go build cache
+
+golangci-lint cache is managed by the tool itself (not via external action).
 
 Cache invalidates on:
 - go.mod/go.sum changes
 - .golangci.yml changes
+- tools.go changes
 
 ### Local Quality Enforcement
 
