@@ -1,0 +1,33 @@
+# Igor Code Owners
+#
+# This file defines code ownership for pull request reviews.
+# Lines starting with '#' are comments.
+# Each line is a file pattern followed by one or more owners.
+#
+# Owners are referenced by their GitHub username with @.
+# Order is important: the last matching pattern takes precedence.
+
+# Default owner for everything in the repo
+* @simonovic86
+
+# Examples of future subsystem ownership (commented out):
+#
+# Core runtime subsystems:
+# /internal/runtime/ @simonovic86 @runtime-team
+# /internal/agent/ @simonovic86 @agent-team
+#
+# P2P and migration:
+# /internal/p2p/ @simonovic86 @networking-team
+# /internal/migration/ @simonovic86 @migration-team
+#
+# Storage and checkpointing:
+# /internal/storage/ @simonovic86 @storage-team
+#
+# Protocol definitions:
+# /pkg/protocol/ @simonovic86 @protocol-team
+#
+# Documentation:
+# /docs/ @simonovic86 @docs-team
+#
+# Agent examples:
+# /agents/ @simonovic86 @agent-developers

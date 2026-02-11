@@ -1,0 +1,31 @@
+# Git attributes for Igor v0
+# Ensures consistent line endings and file handling
+
+# Auto-detect text files and normalize line endings to LF
+* text=auto
+
+# Go source files
+*.go text eol=lf
+
+# Markdown files
+*.md text eol=lf
+
+# YAML files
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+
+# Makefiles must use tabs
+Makefile text eol=lf
+*.mk text eol=lf
+
+# Binary files
+*.wasm binary
+*.checkpoint binary
+
+# Archives
+*.zip binary
+*.tar.gz binary
+*.tgz binary
