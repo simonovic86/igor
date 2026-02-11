@@ -10,7 +10,7 @@ type MigrationRequest struct {
 
 // MigrationOffer represents a node offering to host an agent.
 type MigrationOffer struct {
-	NodeID        string
+	NodeID         string
 	PricePerSecond float64
 	AvailableUntil int64
 }
@@ -52,8 +52,8 @@ type AgentStarted struct {
 
 // AgentTerminated is emitted when an agent stops execution on a node.
 type AgentTerminated struct {
-	AgentID   string
-	NodeID    string
-	EndTime   int64
-	Reason    string
+	AgentID string
+	NodeID  string
+	EndTime int64
+	Reason  string
 }

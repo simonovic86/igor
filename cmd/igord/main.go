@@ -193,7 +193,7 @@ func runLocalAgent(
 
 		case <-sigChan:
 			logger.Info("Received interrupt signal, checkpointing and shutting down...")
-			
+
 			// Final checkpoint before exit
 			if err := instance.SaveCheckpointToStorage(ctx); err != nil {
 				logger.Error("Failed to save checkpoint on shutdown", "error", err)
@@ -209,15 +209,15 @@ func runLocalAgent(
 						"agent_id", "local-agent",
 						"reason", "budget_exhausted",
 					)
-					
+
 					// Final checkpoint
 					if err := instance.SaveCheckpointToStorage(ctx); err != nil {
 						logger.Error("Failed to save checkpoint on termination", "error", err)
 					}
-					
+
 					return fmt.Errorf("agent terminated: budget exhausted")
 				}
-				
+
 				logger.Error("Tick failed", "error", err)
 				return err
 			}

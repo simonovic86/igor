@@ -56,6 +56,7 @@ func agent_resume(ptr, size uint32) {
 	}
 
 	// Deserialize state from memory
+	//nolint:gosec // Unsafe pointer required for WASM memory access
 	buf := unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), size)
 	state.Counter = binary.LittleEndian.Uint64(buf)
 

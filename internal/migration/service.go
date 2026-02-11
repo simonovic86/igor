@@ -26,11 +26,11 @@ const MigrateProtocol protocol.ID = "/igor/migrate/1.0.0"
 
 // Service coordinates agent migration between nodes.
 type Service struct {
-	host           host.Host
-	runtimeEngine  *runtime.Engine
+	host            host.Host
+	runtimeEngine   *runtime.Engine
 	storageProvider storage.Provider
-	logger         *slog.Logger
-	
+	logger          *slog.Logger
+
 	// Active agents running on this node
 	activeAgents map[string]*agent.Instance
 }
@@ -275,10 +275,10 @@ func (s *Service) sendStartConfirmation(
 	errorMsg string,
 ) {
 	started := protomsg.AgentStarted{
-		AgentID:   agentID,
-		NodeID:    s.host.ID().String(),
-		Success:   success,
-		Error:     errorMsg,
+		AgentID: agentID,
+		NodeID:  s.host.ID().String(),
+		Success: success,
+		Error:   errorMsg,
 	}
 
 	encoder := json.NewEncoder(stream)
