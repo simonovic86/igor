@@ -1,64 +1,67 @@
 # Igor
 
-**Runtime for Autonomous Economic Agents**
+**Runtime for Survivable Autonomous Agents**
+
+Igor is a decentralized runtime enabling software agents to checkpoint state, migrate between peer nodes, and pay for their own execution. Agents persist independently of any infrastructure provider.
 
 ---
 
-## What Igor Is
+## Why Igor Exists
 
-Igor is a decentralized runtime that enables software agents to survive infrastructure failure, migrate between execution nodes, and pay for their own operation. Agents carry explicit state, internal budgets, and migrate across peer-to-peer networks without centralized coordination.
+Autonomous economic software can execute decisions independently but cannot survive infrastructure failure independently.
 
-Igor implements a survival-centric execution model. Agents checkpoint their state explicitly. When infrastructure fails, agents resume from checkpoints. When execution becomes expensive, agents migrate to cheaper nodes. When budget exhausts, agents terminate gracefully. The agent persists; the infrastructure is transient.
+Trading strategies manage capital without human approval yet stop when servers fail. Oracle participants must maintain continuous uptime yet depend entirely on operators. AI service agents process requests autonomously yet cannot survive the loss of their hosting infrastructure.
 
-## What Igor Is Not
-
-Igor v0 explicitly does **not** implement:
-
-- Agent marketplaces or discovery protocols
-- Reputation systems
-- Staking, tokens, or blockchain integration
-- AI / LLM reasoning capabilities
-- Multi-agent coordination frameworks
-- Advanced security or cryptographic systems
-- Distributed consensus protocols
-
-These are out of scope by design. Igor is a minimal proof-of-survival runtime focused on demonstrating that autonomous agents can checkpoint, migrate, and self-fund execution.
+Igor provides survival primitives: explicit state checkpointing, peer-to-peer migration, and runtime budget enforcement. Agents persist across infrastructure changes. Infrastructure becomes fungible; agents become persistent.
 
 ## Core Guarantees
 
 - **Survival:** Agents checkpoint state and resume after node failure
-- **Migration:** Agents transfer between nodes over P2P streams (libp2p)
-- **Single-instance:** At most one active instance exists at any time
-- **Budgets:** Execution metered per-tick, cost deducted from agent budget
-- **Sandboxing:** Agents execute in WASM with 64MB memory limit, no filesystem/network access
-- **Decentralization:** No centralized coordinator, nodes are symmetric peers
+- **Migration:** Agents transfer between nodes over libp2p streams
+- **Single-instance:** At most one active instance exists (no split-brain)
+- **Budget enforcement:** Execution metered per-tick, cost deducted automatically
+- **Sandboxing:** WASM isolation, 64MB memory limit, no filesystem/network access
+- **Decentralization:** Peer-to-peer coordination, no central authority
+
+## What Igor Does Not Provide
+
+Igor is **not**:
+
+- An AI reasoning framework
+- An agent marketplace or discovery protocol
+- A blockchain or consensus system
+- A multi-agent coordination platform
+- A general-purpose orchestration system
+
+Igor is a minimal survival runtime. It implements checkpointing, migration, and budget metering. Nothing more.
 
 ## Architecture
 
 ### Agents
 
-WASM executables that implement four lifecycle functions:
+WASM executables implementing four lifecycle functions:
 
 - `agent_init()` - Initialize state
-- `agent_tick()` - Execute one step (called ~1 Hz)
+- `agent_tick()` - Execute one step (~1 Hz)
 - `agent_checkpoint()` - Serialize state
 - `agent_resume(ptr, len)` - Restore from state
 
-Agents carry budgets and pay for execution time: `cost = duration × price_per_second`
+Agents carry budgets. Cost calculated per tick: `duration_seconds × price_per_second`
 
 ### Nodes
 
-Peer-to-peer participants that:
+Peer-to-peer participants providing execution services:
 
 - Execute agents in wazero WASM sandbox
 - Meter resource consumption per tick
 - Charge agents per second of execution
 - Facilitate migration via libp2p streams
-- Operate autonomously without coordination
+
+Nodes operate autonomously without coordination.
 
 ### Checkpoints
 
-Atomic snapshots containing:
+Atomic snapshots preserving agent state and budget:
 
 ```
 [0-7]   Budget (float64)
@@ -66,44 +69,65 @@ Atomic snapshots containing:
 [16+]   Agent State (application-defined)
 ```
 
-Checkpoints enable agents to resume after failure or migration.
+### Migration Protocol
 
-### Migration
-
-Agents migrate via direct peer-to-peer protocol:
+Agents migrate via direct peer-to-peer streams:
 
 1. Source checkpoints agent
 2. Source packages: WASM + checkpoint + budget
-3. Source transfers to target via libp2p stream
-4. Target resumes agent from checkpoint
+3. Source transfers to target (libp2p stream)
+4. Target resumes agent
 5. Target confirms success
 6. Source terminates local instance
 
 Single-instance invariant maintained throughout.
 
-## Project Status
+## Current Capabilities
 
-**Current:** Phase 1 (Survival) complete  
-**Maturity:** Experimental, research-stage  
-**Production:** Not ready for production use
+**Phase 1 (Survival) - Complete**
 
-All 6 success criteria from [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) are met. Phase 1 validates that agents can survive, migrate, and self-fund execution.
+All 6 success criteria met:
+
+1. ✓ Agent runs on Node A
+2. ✓ Agent checkpoints state explicitly
+3. ✓ Agent migrates to Node B
+4. ✓ Agent resumes from checkpoint
+5. ✓ Agent pays runtime rent
+6. ✓ No centralized coordination
+
+## Project Status: Experimental
+
+**Maturity:** Research-stage, proof-of-concept  
+**Production:** Not ready for production use  
+**Security:** Limited threat model, no cryptographic verification  
 
 **Known limitations:**
-- Single-hop migration only (no routing)
-- Trusted runtime accounting (no cryptographic receipts)
-- Local filesystem storage only
+- Trusted runtime accounting (no payment receipts)
+- Single-hop migration (no routing)
+- Local filesystem storage (no distribution)
 - No agent discovery protocol
-- No payment verification
+- Minimal security hardening
 
-See [docs/SECURITY_MODEL.md](./docs/SECURITY_MODEL.md) for complete threat model.
+**Do not use for:**
+- Production workloads
+- Public network deployments
+- Sensitive data
+- Financial transactions
 
-## Running Locally
+**Suitable for:**
+- Research and experimentation
+- Trusted network environments
+- Understanding autonomous agent patterns
+- Academic exploration
+
+See [SECURITY.md](./SECURITY.md) for complete security model.
+
+## Quick Start
 
 ### Prerequisites
 
 - Go 1.25.4+
-- TinyGo (for building agents)
+- TinyGo 0.40.1+ (for agents)
 - golangci-lint (for development)
 
 ### Build and Run
@@ -115,48 +139,47 @@ make build
 # Build example agent
 make agent
 
-# Run agent locally
+# Run agent with budget
 ./bin/igord --run-agent agents/example/agent.wasm --budget 10.0
 ```
 
-The agent will tick every second, checkpointing every 5 seconds, until budget exhausts or interrupted.
-
-### Survival Demo
+### Survival Demonstration
 
 ```bash
 # First run
 ./bin/igord --run-agent agents/example/agent.wasm --budget 1.0
-# Agent ticks: 1, 2, 3, 4, 5, 6, 7
-# Ctrl+C (checkpoint saved)
+# Agent ticks: 1, 2, 3, 4, 5...
+# Ctrl+C (checkpoint saved to ./checkpoints/)
 
 # Second run (restart)
 ./bin/igord --run-agent agents/example/agent.wasm --budget 1.0
-# Agent resumes: 8, 9, 10, 11...
+# Agent resumes: 6, 7, 8, 9...
 ```
 
 Agent state survives restart via checkpoint.
 
 ## Documentation
 
-**Essential:**
+**Start here:**
 - [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Authoritative design specification
-- [docs/VISION.md](./docs/VISION.md) - Why autonomous software needs survival
-- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) - Runtime implementation details
+- [docs/VISION.md](./docs/VISION.md) - Why autonomous agents need survival
+- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) - Implementation details
 
-**Technical:**
+**Technical reference:**
 - [docs/AGENT_LIFECYCLE.md](./docs/AGENT_LIFECYCLE.md) - Building agents
-- [docs/MIGRATION_PROTOCOL.md](./docs/MIGRATION_PROTOCOL.md) - Migration mechanics
-- [docs/BUDGET_MODEL.md](./docs/BUDGET_MODEL.md) - Economic model
+- [docs/MIGRATION_PROTOCOL.md](./docs/MIGRATION_PROTOCOL.md) - P2P migration
+- [docs/BUDGET_MODEL.md](./docs/BUDGET_MODEL.md) - Economic metering
 - [docs/INVARIANTS.md](./docs/INVARIANTS.md) - System guarantees
-- [docs/SECURITY_MODEL.md](./docs/SECURITY_MODEL.md) - Threat model
+- [docs/SECURITY_MODEL.md](./docs/SECURITY_MODEL.md) - Threat analysis
 
 **Development:**
-- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) - Developer setup
-- [CONTRIBUTING.md](./CONTRIBUTING.md) - Contribution workflow
-- [docs/CI_PIPELINE.md](./docs/CI_PIPELINE.md) - CI documentation
+- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) - Setup and workflow
+- [CONTRIBUTING.md](./CONTRIBUTING.md) - Contribution guidelines
 - [docs/ROADMAP.md](./docs/ROADMAP.md) - Future phases
 
 ## Development
+
+### Setup
 
 Install Git hooks for local quality enforcement:
 
@@ -164,31 +187,35 @@ Install Git hooks for local quality enforcement:
 ./scripts/install-hooks.sh
 ```
 
-Run quality checks before committing:
+### Quality Checks
+
+Run before committing:
 
 ```bash
-make check      # Runs fmt-check, vet, lint, test
-make precommit  # Alias for check
+make check      # fmt-check + vet + lint + test
+make precommit  # alias for check
 ```
 
-See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) for complete developer guide.
+Pre-commit hooks automatically enforce quality.
 
-## Technology Stack
+See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) for complete guide.
+
+## Technology
 
 - **Runtime:** Go 1.25.4
-- **WASM Engine:** wazero (pure Go, deterministic sandbox)
-- **P2P Transport:** libp2p-go
-- **Agent Compilation:** TinyGo → WASM
+- **WASM Engine:** wazero (pure Go, deterministic)
+- **P2P:** libp2p-go
+- **Agents:** TinyGo → WASM
 
 ## Contributing
 
 Contributions welcome. Please read:
 
-- [CONTRIBUTING.md](./CONTRIBUTING.md) - Guidelines
-- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) - Setup
+- [CONTRIBUTING.md](./CONTRIBUTING.md) - Guidelines and workflow
+- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) - Developer setup
 - [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Design philosophy
 
-Report security issues via [SECURITY.md](./SECURITY.md).
+Security issues: [SECURITY.md](./SECURITY.md)
 
 ## License
 
