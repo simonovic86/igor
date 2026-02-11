@@ -1,0 +1,303 @@
+# CI Pipeline Documentation
+
+## Overview
+
+This document describes Igor's continuous integration philosophy and intended pipeline structure. Actual CI workflows will be introduced in a future task.
+
+**Status:** Documentation only. CI configuration not yet implemented.
+
+## CI Goals
+
+Igor's CI pipeline is designed to ensure:
+
+**Deterministic Builds:**
+- Same inputs produce identical outputs
+- No dependency on build environment specifics
+- Reproducible across developers and CI runners
+
+**Lint Enforcement:**
+- All code passes golangci-lint
+- Formatting verified with gofmt
+- Import organization checked with goimports
+
+**Test Coverage Verification:**
+- All tests pass
+- No flaky tests
+- Coverage metrics tracked (future)
+
+**Dependency Hygiene:**
+- `go.mod` and `go.sum` are tidy
+- No unexpected dependency additions
+- Security scanning of dependencies (future)
+
+**Reproducible Binaries:**
+- Build artifacts consistent across runs
+- Version information embedded in binaries (future)
+- Release artifacts generated automatically (future)
+
+## Suggested Pipeline Stages
+
+### Stage 1: Setup
+
+**Actions:**
+- Check out repository code
+- Set up Go toolchain (version from go.mod)
+- Cache Go modules for faster builds
+- Install required tools (golangci-lint, goimports)
+
+**Commands:**
+```bash
+go version
+go env
+```
+
+### Stage 2: Dependency Validation
+
+**Actions:**
+- Verify go.mod and go.sum are tidy
+- Check for security vulnerabilities in dependencies
+
+**Commands:**
+```bash
+make tidy
+git diff --exit-code go.mod go.sum
+```
+
+**Purpose:** Ensure dependency files are correct and committed.
+
+### Stage 3: Formatting Check
+
+**Actions:**
+- Verify code is properly formatted
+- Check import organization
+
+**Commands:**
+```bash
+make fmt-check
+```
+
+**Purpose:** Enforce consistent code style.
+
+### Stage 4: Static Analysis
+
+**Actions:**
+- Run go vet on all packages
+- Run golangci-lint with full configuration
+
+**Commands:**
+```bash
+make vet
+make lint
+```
+
+**Purpose:** Catch potential bugs and code quality issues.
+
+### Stage 5: Unit Testing
+
+**Actions:**
+- Run all unit tests
+- Generate coverage report
+- Verify coverage thresholds (future)
+
+**Commands:**
+```bash
+make test
+# Future: go test -coverprofile=coverage.txt -covermode=atomic ./...
+```
+
+**Purpose:** Ensure functionality correctness.
+
+### Stage 6: Build Verification
+
+**Actions:**
+- Build igord binary
+- Build example agent WASM
+- Verify binaries are produced
+
+**Commands:**
+```bash
+make build
+make agent
+```
+
+**Purpose:** Ensure code compiles successfully.
+
+### Stage 7: Integration Testing (Future)
+
+**Actions:**
+- Start test nodes
+- Run agent migration tests
+- Verify checkpoint survival
+- Test budget enforcement
+
+**Commands:**
+```bash
+# Future: make integration-test
+```
+
+**Purpose:** Validate end-to-end behavior.
+
+## Pipeline Configuration
+
+### Matrix Strategy
+
+Test across:
+
+**Operating Systems:**
+- Ubuntu 22.04 (primary)
+- macOS 13 (secondary)
+- Windows (future, if needed)
+
+**Go Versions:**
+- Latest stable (1.25.x currently)
+- Previous minor (1.24.x)
+
+### Caching Strategy
+
+Cache:
+- Go modules (`~/go/pkg/mod`)
+- golangci-lint cache (`~/.cache/golangci-lint`)
+- Build cache (`~/.cache/go-build`)
+
+Invalidate on:
+- `go.mod` or `go.sum` changes
+- `.golangci.yml` changes
+
+### Failure Handling
+
+**On Failure:**
+- Mark build as failed
+- Post detailed error logs
+- Block merge if required check
+
+**On Flaky Test:**
+- Investigate immediately
+- Fix or skip temporarily with issue tracking
+- Aim for zero flaky tests
+
+## CI Providers
+
+Potential CI platforms for Igor:
+
+**GitHub Actions:**
+- Tight GitHub integration
+- Free for public repos
+- Easy matrix builds
+- Good Go support
+
+**GitLab CI:**
+- Self-hostable
+- Strong caching
+- Docker-friendly
+
+**CircleCI:**
+- Fast build times
+- Good free tier
+- Complex workflows
+
+**Decision pending.** GitHub Actions likely for simplicity.
+
+## Branch Protection
+
+### Main Branch Protection (Future)
+
+Require:
+- Status checks pass (lint, vet, test, build)
+- At least one approval from code owner
+- No direct pushes (all changes via PR)
+- Linear history (rebase or squash merge)
+
+### Development Workflow
+
+```
+feature branch → PR → review → checks pass → merge to main
+```
+
+No long-lived branches. Features merge quickly after validation.
+
+## Performance Benchmarks (Future)
+
+Track performance metrics:
+- WASM compilation time
+- Agent tick latency
+- Migration duration
+- Checkpoint write latency
+
+Run benchmarks on:
+- Every PR (compare against main)
+- Daily (track trends)
+
+Alert on:
+- Regressions > 10%
+- Increased memory usage
+- Slower migration
+
+## Security Scanning (Future)
+
+Include security tools:
+
+**Dependency Scanning:**
+```bash
+go list -json -m all | nancy sleuth
+```
+
+**Static Security Analysis:**
+```bash
+gosec ./...
+```
+
+**License Compliance:**
+```bash
+go-licenses check ./...
+```
+
+Run on every PR and nightly.
+
+## Release Pipeline (Future)
+
+Automated release process:
+
+1. Tag version (vX.Y.Z)
+2. Trigger release pipeline
+3. Build binaries for multiple platforms
+4. Generate checksums
+5. Create GitHub release
+6. Publish release notes
+7. Update documentation
+
+See [RELEASE_PROCESS.md](./RELEASE_PROCESS.md) for details.
+
+## Monitoring and Observability
+
+**Build Metrics:**
+- Build success rate
+- Average build duration
+- Test execution time
+- Cache hit rates
+
+**Dashboard (future):**
+- Visualize trends
+- Track flakiness
+- Identify bottlenecks
+
+## Current State
+
+**Implemented:**
+- Makefile with quality check targets
+- golangci-lint configuration
+- Formatting enforcement tools
+- Developer documentation
+
+**Not Yet Implemented:**
+- CI configuration files
+- Automated checks on PR
+- Branch protection rules
+- Release automation
+
+This document will be updated as CI infrastructure is added.
+
+## References
+
+- [DEVELOPMENT.md](./DEVELOPMENT.md) - Local development workflow
+- [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution guidelines
+- [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) - Design principles

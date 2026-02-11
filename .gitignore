@@ -1,26 +1,54 @@
-# Binaries
-bin/
-*.wasm
-
-# Checkpoints
-checkpoints/
-
-# Test artifacts
-*.checkpoint
-/tmp/
+# Igor v0 .gitignore
 
 # Build artifacts
-*.test
+bin/
+dist/
+build/
+*.exe
 *.out
+*.test
+coverage.txt
+*.coverprofile
 
-# IDE
-.idea/
+# Go module artifacts
+vendor/
+
+# WASM artifacts
+*.wasm
+!agents/**/agent.wasm.example
+
+# Checkpoint and runtime files
+*.checkpoint
+checkpoints/
+tmp/
+temp/
+
+# Test artifacts
+/tmp/
+*.log
+
+# IDE and editor files
 .vscode/
+.idea/
 *.swp
 *.swo
+*.swn
+*~
 
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
 
-# Logs
-*.log
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+.directory
+
+# Go workspace
+go.work
+go.work.sum

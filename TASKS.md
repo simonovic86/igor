@@ -14,6 +14,7 @@
 [✓] Task 5.4 — Investor positioning memo
 [✓] Task 5.5 — Philosophical manifesto
 [✓] Task 5.6 — Linting and developer tooling standardization
+[✓] Task 5.7 — Repository governance and contributor workflow setup
 
 ---
 
