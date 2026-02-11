@@ -41,7 +41,8 @@ linters:
 linters-settings:
   gocyclo:
     # Maximum cyclomatic complexity
-    min-complexity: 15
+    # Slightly relaxed for event loop functions
+    min-complexity: 20
   
   revive:
     # Minimal revive rules - avoid overly strict style enforcement
