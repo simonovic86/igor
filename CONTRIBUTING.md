@@ -62,14 +62,15 @@ See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) for detailed development guide.
 
 ### Before Submitting
 
-1. **Run quality checks:**
+1. **Install Git hooks (first time only):**
    ```bash
-   make check
+   ./scripts/install-hooks.sh
    ```
 
-2. **Run tests:**
+2. **Run all quality checks:**
    ```bash
-   make test
+   make check      # Runs fmt-check, vet, lint, test
+   make precommit  # Alias for check
    ```
 
 3. **Build successfully:**
@@ -78,6 +79,8 @@ See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) for detailed development guide.
    ```
 
 4. **Update documentation** if adding features or changing behavior
+
+The pre-commit hook automatically runs `make check` on every commit. Fix all issues before committing.
 
 ### PR Requirements
 

@@ -90,8 +90,11 @@ run-agent: build agent ## Build and run example agent locally
 	@echo "Running agent with default budget (1.0)..."
 	./$(BINARY_DIR)/$(BINARY_NAME) --run-agent $(AGENT_DIR)/agent.wasm --budget 1.0
 
-check: fmt-check vet lint ## Run all checks (formatting, vet, lint)
+check: fmt-check vet lint test ## Run all checks (formatting, vet, lint, tests)
 	@echo "All checks passed"
+
+precommit: check ## Alias for check (use before committing)
+	@echo "Pre-commit checks complete"
 
 all: clean build test check ## Clean, build, test, and run all checks
 	@echo "Build and checks complete"

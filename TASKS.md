@@ -18,6 +18,7 @@
 [✓] Task 5.8 — Documentation normalization and GitHub Actions CI pipeline
 [✓] Task 5.9 — Documentation consolidation and public release preparation
 [✓] Task 5.10 — CI stability and local quality enforcement
+[✓] Task 5.11 — Tooling finalization and public-readiness cleanup
 
 ---
 
