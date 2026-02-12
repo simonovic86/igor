@@ -1,4 +1,4 @@
-.PHONY: help bootstrap build clean test lint vet fmt fmt-check tidy agent run-agent
+.PHONY: help bootstrap build clean test lint vet fmt fmt-check tidy agent run-agent gh-check gh-metadata gh-release
 
 .DEFAULT_GOAL := help
 
@@ -102,3 +102,17 @@ precommit: check ## Alias for check (use before committing)
 
 all: clean build test check ## Clean, build, test, and run all checks
 	@echo "Build and checks complete"
+
+gh-check: ## Verify GitHub CLI authentication
+	@./scripts/verify-gh-auth.sh
+
+gh-metadata: ## Configure GitHub repository metadata (requires gh auth)
+	@./scripts/configure-repo-metadata.sh
+
+gh-release: ## Prepare GitHub release draft (usage: make gh-release VERSION=v0.1.0)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION required"; \
+		echo "Usage: make gh-release VERSION=v0.1.0-genesis"; \
+		exit 1; \
+	fi
+	@./scripts/prepare-release.sh $(VERSION)

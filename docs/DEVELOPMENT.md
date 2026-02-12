@@ -488,6 +488,84 @@ func agent_tick() {
 
 Output appears in igord logs.
 
+## GitHub CLI Usage
+
+Igor provides scripts for repository management using GitHub CLI (`gh`).
+
+### Authentication
+
+Check authentication status:
+
+```bash
+make gh-check
+# Or: ./scripts/verify-gh-auth.sh
+```
+
+Authenticate if needed:
+
+```bash
+gh auth login
+```
+
+### Repository Metadata
+
+Configure repository description and topics (once pushed to GitHub):
+
+```bash
+make gh-metadata
+# Or: ./scripts/configure-repo-metadata.sh
+```
+
+This sets:
+- Repository description
+- Topic tags (autonomous-agents, wasm-runtime, libp2p, etc.)
+- Discoverability metadata
+
+### Branch Protection
+
+View recommended branch protection settings:
+
+```bash
+./scripts/suggest-branch-protection.sh
+```
+
+Prints suggested `gh` commands without applying them automatically.
+
+### Creating Releases
+
+Prepare a draft release:
+
+```bash
+make gh-release VERSION=v0.1.0-genesis
+# Or: ./scripts/prepare-release.sh v0.1.0-genesis
+```
+
+This creates a draft GitHub release with:
+- Release notes from template
+- Marked as pre-release
+- Ready for review and publication
+
+### Common gh Commands
+
+```bash
+# View repository
+gh repo view
+
+# View in browser
+gh repo view --web
+
+# List releases
+gh release list
+
+# View issues
+gh issue list
+
+# Create issue
+gh issue create
+```
+
+See `gh help` for complete command reference.
+
 ## Contributing
 
 ### Pull Request Checklist

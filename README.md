@@ -6,6 +6,23 @@ Igor is a decentralized runtime enabling software agents to checkpoint state, mi
 
 ---
 
+## About This Repository
+
+**What:** Experimental infrastructure for autonomous agent survival  
+**Status:** Research-stage (Phase 1 complete)  
+**Purpose:** Demonstrate that software can checkpoint, migrate, and self-fund execution
+
+**Read first:**
+- [ANNOUNCEMENT.md](./ANNOUNCEMENT.md) - Public project introduction
+- [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Authoritative design specification
+- [docs/VISION.md](./docs/VISION.md) - Why autonomous software needs survival
+
+**Contribute:**
+- [CONTRIBUTING.md](./CONTRIBUTING.md) - Guidelines and workflow
+- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) - Developer setup
+
+---
+
 ## Why Igor Exists
 
 Autonomous economic software can execute decisions independently but cannot survive infrastructure failure independently.

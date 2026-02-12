@@ -95,6 +95,18 @@ else
     exit 1
 fi
 
+# Check GitHub CLI (optional)
+echo ""
+echo "→ Checking GitHub CLI (optional for repository management)..."
+if command -v gh &> /dev/null; then
+    GH_VERSION=$(gh version | head -1 | awk '{print $3}')
+    echo -e "${GREEN}✓ GitHub CLI $GH_VERSION installed${NC}"
+else
+    echo -e "${YELLOW}⚠ GitHub CLI not found (optional)${NC}"
+    echo "  Install from: https://cli.github.com/"
+    echo "  Required only for repository metadata management"
+fi
+
 echo ""
 echo -e "${GREEN}✅ Bootstrap complete!${NC}"
 echo ""
