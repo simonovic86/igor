@@ -50,7 +50,7 @@ echo "✓ Topics added"
 # Verify configuration
 echo ""
 echo "→ Verifying configuration..."
-gh repo view --json description,repositoryTopics
+gh repo view --json description,repositoryTopics | cat
 
 echo ""
 echo "✅ Repository metadata configured successfully"
