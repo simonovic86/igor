@@ -1,3 +1,6 @@
+// Package migration implements peer-to-peer agent relocation and transfer protocols.
+// Coordinates autonomous agent migration between distributed nodes using libp2p streams
+// while maintaining single-instance invariants and budget preservation guarantees.
 package migration
 
 import (

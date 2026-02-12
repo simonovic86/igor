@@ -246,6 +246,22 @@ Performance optimization is secondary to correctness.
 - Mark conversations as resolved when addressed
 - Request re-review after substantial changes
 
+## Discoverability and Metadata
+
+When updating README, repository description, or GitHub metadata:
+
+**Maintain discoverability through technical accuracy:**
+- Use keywords from [docs/KEYWORDS.md](./docs/KEYWORDS.md)
+- Avoid marketing hype or exaggerated claims
+- Preserve experimental status clarity
+- Keep technical credibility as priority over SEO
+
+**Preserve canonical tagline:**
+- "Runtime for survivable autonomous agents"
+- Do not introduce variations without approval
+
+See [docs/KEYWORDS.md](./docs/KEYWORDS.md) for complete keyword governance.
+
 ## Code Style
 
 ### Formatting

@@ -33,13 +33,23 @@ TOPICS=(
     "autonomous-agents"
     "distributed-systems"
     "wasm-runtime"
+    "webassembly"
+    "wasm"
     "libp2p"
     "runtime-economics"
     "survivable-software"
     "agent-infrastructure"
     "peer-to-peer"
+    "p2p-runtime"
     "systems-research"
     "go"
+    "distributed-runtime"
+    "agent-runtime"
+    "survivable-systems"
+    "economic-agents"
+    "execution-runtime"
+    "research-infrastructure"
+    "distributed-compute"
 )
 
 for topic in "${TOPICS[@]}"; do

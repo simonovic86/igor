@@ -2,7 +2,7 @@
 
 **Runtime for Survivable Autonomous Agents**
 
-Igor is a decentralized runtime enabling software agents to checkpoint state, migrate between peer nodes, and pay for their own execution. Agents persist independently of any infrastructure provider.
+Igor is a decentralized execution runtime for autonomous software agents. It provides infrastructure primitives enabling agents to checkpoint state, migrate between peer nodes over libp2p, and pay for execution using internal budgets. Agents built on Igor persist independently of any infrastructure provider through WASM sandbox execution, peer-to-peer migration protocols, and runtime economics.
 
 ---
 
@@ -25,11 +25,38 @@ Igor is a decentralized runtime enabling software agents to checkpoint state, mi
 
 ## Why Igor Exists
 
-Autonomous economic software can execute decisions independently but cannot survive infrastructure failure independently.
+Autonomous economic software—including DeFi automation, oracle networks, and AI service agents—can execute decisions independently but cannot survive infrastructure failure autonomously. These distributed systems hold capital, operate continuously, yet remain existentially tied to specific infrastructure.
 
 Trading strategies manage capital without human approval yet stop when servers fail. Oracle participants must maintain continuous uptime yet depend entirely on operators. AI service agents process requests autonomously yet cannot survive the loss of their hosting infrastructure.
 
-Igor provides survival primitives: explicit state checkpointing, peer-to-peer migration, and runtime budget enforcement. Agents persist across infrastructure changes. Infrastructure becomes fungible; agents become persistent.
+Igor provides survivable agent runtime primitives: explicit state checkpointing, peer-to-peer agent migration, and runtime economic metering. Agents persist across distributed infrastructure changes. Infrastructure becomes fungible; agents become persistent.
+
+## Technical Domains
+
+Igor addresses challenges in:
+
+* **Autonomous agent infrastructure** - Runtime for self-managing software entities
+* **Survivable distributed systems** - Execution persistence across infrastructure failure
+* **WASM sandbox runtimes** - Portable deterministic agent execution (wazero)
+* **Peer-to-peer compute mobility** - Agent migration over libp2p networks
+* **Runtime economic accounting** - Budget-based execution metering and enforcement
+* **Self-hosting autonomous software** - Agents that pay for their own compute
+* **Distributed systems research** - Experimental infrastructure for agent survival
+
+## Related Ecosystem Areas
+
+Igor occupies a lower-level runtime infrastructure layer, distinct from agent reasoning or orchestration frameworks.
+
+Relevant adjacent domains:
+* Autonomous AI agent infrastructure and runtimes
+* Distributed compute execution environments
+* WebAssembly execution engines and sandbox runtimes
+* Peer-to-peer service fabrics and distributed protocols
+* DeFi solver network infrastructure
+* Oracle and economic automation service infrastructure
+* Mobile code and process migration research
+
+Igor provides execution survival primitives that these higher-level systems could build upon.
 
 ## Core Guarantees
 
@@ -52,7 +79,32 @@ Igor is **not**:
 
 Igor is a minimal survival runtime. It implements checkpointing, migration, and budget metering. Nothing more.
 
-## Architecture
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────┐
+│  Autonomous Agent (WASM)                        │
+│  ┌──────────┐  ┌───────────┐  ┌──────────────┐ │
+│  │  Init    │→ │ Tick Loop │→ │  Checkpoint  │ │
+│  └──────────┘  └─────┬─────┘  └──────┬───────┘ │
+│                      │                │         │
+│                      ↓                ↓         │
+│              ┌──────────────┐  ┌─────────────┐ │
+│              │ Budget       │  │ State       │ │
+│              │ Metering     │  │ Persistence │ │
+│              └──────────────┘  └─────────────┘ │
+└─────────────────────────────────────────────────┘
+                       │
+                       │ Migration (libp2p)
+                       ↓
+┌─────────────────────────────────────────────────┐
+│  Igor Runtime (Node)                            │
+│  ┌──────────┐  ┌───────────┐  ┌──────────────┐ │
+│  │  WASM    │  │ Migration │  │  P2P         │ │
+│  │  Sandbox │  │ Protocol  │  │  Network     │ │
+│  └──────────┘  └───────────┘  └──────────────┘ │
+└─────────────────────────────────────────────────┘
+```
 
 ### Agents
 
@@ -233,6 +285,24 @@ Contributions welcome. Please read:
 - [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Design philosophy
 
 Security issues: [SECURITY.md](./SECURITY.md)
+
+---
+
+## Discovery Keywords
+
+**Core Identity:**
+Autonomous agent runtime | Survivable distributed systems | WASM agent execution | Peer-to-peer agent migration | Runtime economics | Decentralized execution infrastructure
+
+**Technical Stack:**
+WebAssembly sandbox | wazero runtime | libp2p networking | Go distributed systems | Agent checkpoint persistence | Budget metering infrastructure
+
+**Use Cases:**
+DeFi automation infrastructure | Oracle network runtime | AI agent execution platform | Economic software agents | Autonomous service infrastructure | Distributed compute mobility
+
+**Research Areas:**
+Agent survival primitives | Mobile code execution | Process migration protocols | Runtime accounting systems | Survivable software research | Experimental distributed infrastructure
+
+See [docs/KEYWORDS.md](./docs/KEYWORDS.md) for keyword governance policy.
 
 ## License
 

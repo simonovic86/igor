@@ -1,3 +1,6 @@
+// Package storage provides checkpoint persistence abstraction for survivable agents.
+// Implements atomic write guarantees and storage provider interfaces enabling
+// agent state to persist across infrastructure failures and migrations.
 package storage
 
 import (
