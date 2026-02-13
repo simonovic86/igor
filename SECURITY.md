@@ -177,7 +177,7 @@ No timeline or commitment. Listed for context only.
 ## Security Resources
 
 - [docs/runtime/SECURITY_MODEL.md](./docs/runtime/SECURITY_MODEL.md) - Detailed threat model
-- [docs/constitution/RUNTIME_ENFORCEMENT_INVARIANTS.md](./docs/constitution/RUNTIME_ENFORCEMENT_INVARIANTS.md) - System guarantees
+- [docs/enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md](./docs/enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md) - System guarantees
 - [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Design philosophy
 
 ## Contact

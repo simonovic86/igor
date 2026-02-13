@@ -1,5 +1,7 @@
 # Execution Invariants
 
+> **Specification cross-references:** [Spec Index](../SPEC_INDEX.md) | [Invariant Dependency Graph](../enforcement/INVARIANT_DEPENDENCY_GRAPH.md) | [Runtime Constitution](./RUNTIME_CONSTITUTION.md)
+
 ## Purpose
 
 This document defines the foundational runtime invariants governing Igor agent execution. These are conceptual contracts specifying what the runtime MUST guarantee regardless of implementation strategy.
@@ -150,7 +152,7 @@ If the runtime detects or infers that two nodes claim authority for the same age
 
 ## Relationship to Specification Hierarchy
 
-This document is part of the constitutional specification layer defined by the [Runtime Constitution](./RUNTIME_CONSTITUTION.md). Constitutional invariants defined here are implemented by enforcement rules in [RUNTIME_ENFORCEMENT_INVARIANTS.md](./RUNTIME_ENFORCEMENT_INVARIANTS.md).
+This document is part of the constitutional specification layer defined by the [Runtime Constitution](./RUNTIME_CONSTITUTION.md). Constitutional invariants defined here are implemented by enforcement rules in [RUNTIME_ENFORCEMENT_INVARIANTS.md](../enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md).
 
 ---
 

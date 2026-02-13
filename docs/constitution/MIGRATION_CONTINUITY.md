@@ -1,5 +1,7 @@
 # Migration Continuity
 
+> **Specification cross-references:** [Spec Index](../SPEC_INDEX.md) | [Invariant Dependency Graph](../enforcement/INVARIANT_DEPENDENCY_GRAPH.md) | [Runtime Constitution](./RUNTIME_CONSTITUTION.md)
+
 ## Purpose
 
 This document defines the conceptual migration contract governing how Igor transfers execution continuity between nodes. It formalizes migration guarantees, overlap constraints, and failure safety invariants.

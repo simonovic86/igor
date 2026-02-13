@@ -1,10 +1,14 @@
 # Runtime Enforcement Invariants
 
+> **Specification cross-references:** [Spec Index](../SPEC_INDEX.md) | [Invariant Dependency Graph](./INVARIANT_DEPENDENCY_GRAPH.md) | [Runtime Constitution](../constitution/RUNTIME_CONSTITUTION.md)
+>
+> This document defines enforcement rules derived from the constitutional guarantees in [RUNTIME_CONSTITUTION.md](../constitution/RUNTIME_CONSTITUTION.md). Enforcement invariants operationalize constitutional contracts; they do not introduce new guarantees.
+
 ## Overview
 
-This document defines runtime enforcement rules that implement the constitutional guarantees specified in the [Runtime Constitution](./RUNTIME_CONSTITUTION.md) and its referenced specification documents.
+This document defines runtime enforcement rules that implement the constitutional guarantees specified in the [Runtime Constitution](../constitution/RUNTIME_CONSTITUTION.md) and its referenced specification documents.
 
-These invariants describe **how the runtime upholds constitutional guarantees** through concrete enforcement mechanisms. They are derived from, and subordinate to, the constitutional invariants defined in [EXECUTION_INVARIANTS.md](./EXECUTION_INVARIANTS.md), [OWNERSHIP_AND_AUTHORITY.md](./OWNERSHIP_AND_AUTHORITY.md), and [MIGRATION_CONTINUITY.md](./MIGRATION_CONTINUITY.md).
+These invariants describe **how the runtime upholds constitutional guarantees** through concrete enforcement mechanisms. They are derived from, and subordinate to, the constitutional invariants defined in [EXECUTION_INVARIANTS.md](../constitution/EXECUTION_INVARIANTS.md), [OWNERSHIP_AND_AUTHORITY.md](../constitution/OWNERSHIP_AND_AUTHORITY.md), and [MIGRATION_CONTINUITY.md](../constitution/MIGRATION_CONTINUITY.md).
 
 The system is designed to **fail loudly** when enforcement invariants are violated.
 
@@ -287,7 +291,7 @@ init → [tick* → checkpoint*] → resume (optional)
 3. **Memory limited to 64MB**
 4. **Budget decreases monotonically**
 5. **Checkpoints are atomic**
-6. **At most one instance exists** (constitutional — see [EI-1](./EXECUTION_INVARIANTS.md))
+6. **At most one instance exists** (constitutional — see [EI-1](../constitution/EXECUTION_INVARIANTS.md))
 7. **State persists through restart**
 8. **Migration preserves budget**
 
@@ -319,7 +323,7 @@ These failures preserve invariants:
 These violate invariants (should never happen):
 
 1. **Partial checkpoint write** → State corruption
-2. **Double instance** → Split-brain (constitutional violation — see [EI-1](./EXECUTION_INVARIANTS.md))
+2. **Double instance** → Split-brain (constitutional violation — see [EI-1](../constitution/EXECUTION_INVARIANTS.md))
 3. **Budget increase** → Economic model broken
 4. **Sandbox escape** → Host compromise
 
@@ -547,4 +551,4 @@ Each enforcement invariant should have:
 
 **Type:** Runtime Enforcement Specification
 **Scope:** Enforcement rules implementing constitutional guarantees — includes implementation-level detail.
-**Authority:** Subordinate to [RUNTIME_CONSTITUTION.md](./RUNTIME_CONSTITUTION.md) and its referenced constitutional specifications.
+**Authority:** Subordinate to [RUNTIME_CONSTITUTION.md](../constitution/RUNTIME_CONSTITUTION.md) and its referenced constitutional specifications.

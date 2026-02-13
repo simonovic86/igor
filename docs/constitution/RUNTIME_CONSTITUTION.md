@@ -97,7 +97,7 @@ All runtime enforcement invariants MUST derive from constitutional invariants.
 
 Runtime enforcement rules — such as checkpoint atomicity mechanisms, budget monotonicity enforcement, tick duration limits, and sandbox isolation — implement and operationalize the constitutional guarantees. They describe *how* the runtime upholds the constitution, not *what* the constitution requires.
 
-The enforcement layer is defined in [RUNTIME_ENFORCEMENT_INVARIANTS.md](./RUNTIME_ENFORCEMENT_INVARIANTS.md). Every enforcement invariant must trace its justification to one or more constitutional invariants defined in the documents listed above.
+The enforcement layer is defined in [RUNTIME_ENFORCEMENT_INVARIANTS.md](../enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md). Every enforcement invariant must trace its justification to one or more constitutional invariants defined in the documents listed above.
 
 No enforcement invariant may contradict a constitutional invariant. In case of conflict, the constitutional invariant prevails.
 

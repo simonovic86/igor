@@ -16,8 +16,13 @@ Constitutional documents define non-negotiable runtime guarantees. They MUST rem
 **constitution/EXECUTION_INVARIANTS.md** - Foundational runtime invariants  
 **constitution/OWNERSHIP_AND_AUTHORITY.md** - Authority lifecycle model  
 **constitution/MIGRATION_CONTINUITY.md** - Migration continuity contracts  
-**constitution/RUNTIME_ENFORCEMENT_INVARIANTS.md** - Enforcement rules implementing constitutional guarantees  
-**constitution/INVARIANT_DEPENDENCY_GRAPH.md** - Invariant dependency relationships  
+
+### Enforcement Layer — `docs/enforcement/`
+
+Enforcement documents define how constitutional guarantees are upheld through runtime enforcement rules and invariant derivation mappings. Every enforcement invariant derives from one or more constitutional invariants.
+
+**enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md** - Enforcement rules implementing constitutional guarantees  
+**enforcement/INVARIANT_DEPENDENCY_GRAPH.md** - Invariant dependency relationships and cross-document traceability  
 
 ### Runtime Implementation Layer — `docs/runtime/`
 

@@ -267,7 +267,7 @@ Given same state and inputs, tick produces same outputs (agent responsibility).
 **I7: Tick Timeout**  
 Each tick completes within 100ms or is aborted.
 
-See [RUNTIME_ENFORCEMENT_INVARIANTS.md](../constitution/RUNTIME_ENFORCEMENT_INVARIANTS.md) for enforcement specifications and [EXECUTION_INVARIANTS.md](../constitution/EXECUTION_INVARIANTS.md) for constitutional invariants.
+See [RUNTIME_ENFORCEMENT_INVARIANTS.md](../enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md) for enforcement specifications and [EXECUTION_INVARIANTS.md](../constitution/EXECUTION_INVARIANTS.md) for constitutional invariants.
 
 ## Technology Stack
 

@@ -227,6 +227,18 @@ make agent
 
 Agent state survives restart via checkpoint.
 
+## Specification Overview
+
+Igor's specification is organized into layered authority domains. See the full [Specification Index](./docs/SPEC_INDEX.md) for cross-references.
+
+| Layer | Purpose | Location |
+|-------|---------|----------|
+| **Constitution** | WHAT Igor guarantees | [docs/constitution/](./docs/constitution/) |
+| **Enforcement** | HOW guarantees are upheld | [docs/enforcement/](./docs/enforcement/) |
+| **Runtime** | HOW Igor operates | [docs/runtime/](./docs/runtime/) |
+| **Governance** | HOW Igor evolves | [docs/governance/](./docs/governance/) |
+| **Philosophy** | WHY Igor exists | [docs/philosophy/](./docs/philosophy/) |
+
 ## Documentation
 
 **Start here:**
@@ -238,7 +250,7 @@ Agent state survives restart via checkpoint.
 - [docs/runtime/AGENT_LIFECYCLE.md](./docs/runtime/AGENT_LIFECYCLE.md) - Building agents
 - [docs/runtime/MIGRATION_PROTOCOL.md](./docs/runtime/MIGRATION_PROTOCOL.md) - P2P migration
 - [docs/runtime/BUDGET_MODEL.md](./docs/runtime/BUDGET_MODEL.md) - Economic metering
-- [docs/constitution/RUNTIME_ENFORCEMENT_INVARIANTS.md](./docs/constitution/RUNTIME_ENFORCEMENT_INVARIANTS.md) - System guarantees
+- [docs/enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md](./docs/enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md) - System guarantees
 - [docs/runtime/SECURITY_MODEL.md](./docs/runtime/SECURITY_MODEL.md) - Threat analysis
 
 **Development:**

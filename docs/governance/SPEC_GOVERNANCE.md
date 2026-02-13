@@ -35,8 +35,8 @@ Igor's specification is organized into three layers. Each layer has distinct res
 ### Mechanism Design Layer
 
 **Documents:**
-- [RUNTIME_ENFORCEMENT_INVARIANTS.md](../constitution/RUNTIME_ENFORCEMENT_INVARIANTS.md)
-- [INVARIANT_DEPENDENCY_GRAPH.md](../constitution/INVARIANT_DEPENDENCY_GRAPH.md)
+- [RUNTIME_ENFORCEMENT_INVARIANTS.md](../enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md)
+- [INVARIANT_DEPENDENCY_GRAPH.md](../enforcement/INVARIANT_DEPENDENCY_GRAPH.md)
 
 **Contains:**
 - Enforcement rules implementing constitutional guarantees

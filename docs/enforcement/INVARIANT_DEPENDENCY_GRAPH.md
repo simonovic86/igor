@@ -1,5 +1,9 @@
 # Invariant Dependency Graph
 
+> **Specification cross-references:** [Spec Index](../SPEC_INDEX.md) | [Runtime Enforcement Invariants](./RUNTIME_ENFORCEMENT_INVARIANTS.md) | [Runtime Constitution](../constitution/RUNTIME_CONSTITUTION.md)
+>
+> This document maps relationships between invariants without redefining them. All invariant definitions reside in their authoritative constitutional or enforcement documents.
+
 ## Purpose
 
 This document maps the dependency relationships between Igor's constitutional invariants and runtime enforcement invariants. It shows how enforcement rules derive from constitutional guarantees and how constitutional invariants depend on each other.
@@ -169,8 +173,100 @@ Every enforcement invariant (RE-*) traces to at least one constitutional invaria
 
 ---
 
+## Cross-Document Traceability
+
+### Root Constitutional Invariants
+
+#### Single Active Ticker Law (EI-1)
+
+- **Defined in:** EXECUTION_INVARIANTS.md
+- **Referenced in:** OWNERSHIP_AND_AUTHORITY.md, MIGRATION_CONTINUITY.md, RUNTIME_CONSTITUTION.md
+- **Enforced by:** RE-5 (tick duration limit)
+- **Validated by:** Single-instance detection via log analysis, process counting
+
+#### Checkpoint Lineage Canonicality (EI-3)
+
+- **Defined in:** EXECUTION_INVARIANTS.md
+- **Referenced in:** MIGRATION_CONTINUITY.md (MC-3), RUNTIME_CONSTITUTION.md
+- **Enforced by:** RE-1 (atomic checkpoints), RE-3 (budget conservation), RE-4 (budget monotonicity), RE-6 (tick determinism)
+- **Validated by:** Checkpoint format verification, lineage chain integrity checks
+
+#### Authority Uniqueness per Epoch (EI-5)
+
+- **Defined in:** EXECUTION_INVARIANTS.md
+- **Referenced in:** OWNERSHIP_AND_AUTHORITY.md (OA-2 through OA-7), MIGRATION_CONTINUITY.md (MC-5)
+- **Enforced by:** Authority lifecycle state machine (OA-2, OA-3), transfer serialization (OA-5)
+- **Validated by:** Conflicting authority detection triggering RECOVERY_REQUIRED (OA-7, EI-11)
+
+#### Safety-Over-Liveness Rule (EI-6)
+
+- **Defined in:** EXECUTION_INVARIANTS.md
+- **Referenced in:** OWNERSHIP_AND_AUTHORITY.md, MIGRATION_CONTINUITY.md (FS-1 through FS-4)
+- **Enforced by:** RECOVERY_REQUIRED state (OA-7), fail-stop behavior (EI-7)
+- **Validated by:** Execution halt under ambiguity, migration pause acceptance (EI-9)
+
+### Derived Enforcement Invariants
+
+#### RE-1: Atomic Checkpoints
+
+- **Defined in:** RUNTIME_ENFORCEMENT_INVARIANTS.md
+- **Derives from:** EI-2 (checkpoint boundary resumption), EI-3 (lineage integrity)
+- **Referenced in:** INVARIANT_DEPENDENCY_GRAPH.md
+- **Validated by:** Checkpoint read/write error detection, format validation
+
+#### RE-2: State Persistence
+
+- **Defined in:** RUNTIME_ENFORCEMENT_INVARIANTS.md
+- **Derives from:** EI-2 (checkpoint boundary resumption), EI-10 (migration checkpoint continuity)
+- **Referenced in:** INVARIANT_DEPENDENCY_GRAPH.md
+- **Validated by:** Resume success verification, checkpoint presence after shutdown
+
+#### RE-3: Budget Conservation
+
+- **Defined in:** RUNTIME_ENFORCEMENT_INVARIANTS.md
+- **Derives from:** EI-3 (lineage integrity)
+- **Referenced in:** INVARIANT_DEPENDENCY_GRAPH.md
+- **Validated by:** Budget sum tracking across migrations
+
+#### RE-4: Budget Monotonicity
+
+- **Defined in:** RUNTIME_ENFORCEMENT_INVARIANTS.md
+- **Derives from:** EI-3 (lineage integrity)
+- **Referenced in:** INVARIANT_DEPENDENCY_GRAPH.md
+- **Validated by:** Budget increase detection in logs
+
+#### RE-5: Tick Duration Limit
+
+- **Defined in:** RUNTIME_ENFORCEMENT_INVARIANTS.md
+- **Derives from:** EI-1 (single active instance)
+- **Referenced in:** INVARIANT_DEPENDENCY_GRAPH.md
+- **Validated by:** Timeout error detection, agent termination logs
+
+#### RE-6: Tick Determinism
+
+- **Defined in:** RUNTIME_ENFORCEMENT_INVARIANTS.md
+- **Derives from:** EI-3 (lineage integrity)
+- **Referenced in:** INVARIANT_DEPENDENCY_GRAPH.md
+- **Validated by:** Manual testing, cross-run comparison (agent contract)
+
+#### RE-7: Storage Isolation
+
+- **Defined in:** RUNTIME_ENFORCEMENT_INVARIANTS.md
+- **Derives from:** EI-4 (authority/durability separation), OA-1 (canonical identity)
+- **Referenced in:** INVARIANT_DEPENDENCY_GRAPH.md
+- **Validated by:** Checkpoint collision detection, wrong-state-loaded errors
+
+#### RE-8: Lifecycle Order
+
+- **Defined in:** RUNTIME_ENFORCEMENT_INVARIANTS.md
+- **Derives from:** EI-2 (checkpoint boundary resumption), OA-2 (authority lifecycle states)
+- **Referenced in:** INVARIANT_DEPENDENCY_GRAPH.md
+- **Validated by:** Agent crash detection, undefined behavior logs
+
+---
+
 ## Document Status
 
-**Type:** Mechanism Design Specification
-**Scope:** Invariant dependency relationships and derivation chains.
-**Authority:** Descriptive — documents relationships between invariants defined in constitutional and enforcement specifications.
+**Type:** Enforcement Specification
+**Scope:** Invariant dependency relationships, derivation chains, and cross-document traceability.
+**Authority:** Descriptive — documents relationships between invariants defined in constitutional and enforcement specifications. Part of the enforcement layer; see [SPEC_INDEX.md](../SPEC_INDEX.md) for full specification map.

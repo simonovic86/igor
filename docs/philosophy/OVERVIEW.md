@@ -135,5 +135,5 @@ go build -o bin/igord ./cmd/igord
 - [Budget Model](../runtime/BUDGET_MODEL.md) - How agents pay for execution
 - [Security Model](../runtime/SECURITY_MODEL.md) - Sandbox and trust boundaries
 - [Runtime Constitution](../constitution/RUNTIME_CONSTITUTION.md) - Constitutional specification root
-- [Runtime Enforcement Invariants](../constitution/RUNTIME_ENFORCEMENT_INVARIANTS.md) - System guarantees and enforcement
+- [Runtime Enforcement Invariants](../enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md) - System guarantees and enforcement
 - [Roadmap](../governance/ROADMAP.md) - Future development phases
