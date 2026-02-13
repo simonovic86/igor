@@ -99,7 +99,7 @@ Before tagging a release:
 ```bash
 # Review and update
 vim README.md
-vim docs/ARCHITECTURE.md
+vim docs/runtime/ARCHITECTURE.md
 vim TASKS.md
 ```
 

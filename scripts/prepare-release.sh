@@ -32,7 +32,7 @@ fi
 if ! git rev-parse "$VERSION" > /dev/null 2>&1; then
     echo "Error: Tag $VERSION does not exist"
     echo "Create tag first:"
-    echo "  git tag -a $VERSION -F docs/GENESIS_TAG_ANNOTATION.md"
+    echo "  git tag -a $VERSION -F docs/archive/GENESIS_TAG_ANNOTATION.md"
     exit 1
 fi
 
@@ -81,8 +81,8 @@ make build
 ## Documentation
 
 - [README.md](./README.md) - Overview and quick start
-- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) - Technical details
-- [docs/VISION.md](./docs/VISION.md) - Why Igor exists
+- [docs/runtime/ARCHITECTURE.md](./docs/runtime/ARCHITECTURE.md) - Technical details
+- [docs/philosophy/VISION.md](./docs/philosophy/VISION.md) - Why Igor exists
 - [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Design specification
 
 ## Contributing

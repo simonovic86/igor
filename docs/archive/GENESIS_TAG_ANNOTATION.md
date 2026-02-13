@@ -30,7 +30,7 @@ All 6 success criteria met:
 Status: Experimental, research-stage
 Not production-ready.
 
-See README.md and docs/ARCHITECTURE.md for details.
+See README.md and docs/runtime/ARCHITECTURE.md for details.
 EOF
 )"
 ```
@@ -70,7 +70,7 @@ All 6 success criteria met:
 Status: Experimental, research-stage
 Not production-ready.
 
-See README.md and docs/ARCHITECTURE.md for details.
+See README.md and docs/runtime/ARCHITECTURE.md for details.
 ```
 
 ---
@@ -80,7 +80,7 @@ See README.md and docs/ARCHITECTURE.md for details.
 **Create tag:**
 
 ```bash
-git tag -a v0.1.0-genesis -F docs/GENESIS_TAG_ANNOTATION.md
+git tag -a v0.1.0-genesis -F docs/archive/GENESIS_TAG_ANNOTATION.md
 ```
 
 **Verify tag:**

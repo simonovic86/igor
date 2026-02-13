@@ -155,7 +155,7 @@ Reads versions from `go.mod`.
    - `.golangci.yml` (run.go)
    - `.github/workflows/ci.yml`
    - `scripts/bootstrap.sh`
-   - `docs/TOOLCHAIN.md`
+   - `docs/governance/TOOLCHAIN.md`
 
 3. **Verify CI passes:**
    Push to branch, ensure green build

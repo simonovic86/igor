@@ -86,7 +86,7 @@ tidy: ## Tidy go.mod and go.sum
 agent: ## Build example agent WASM
 	@echo "Building example agent..."
 	@which tinygo > /dev/null || \
-		(echo "tinygo not found. See docs/DEVELOPMENT.md for installation" && exit 1)
+		(echo "tinygo not found. See docs/governance/DEVELOPMENT.md for installation" && exit 1)
 	cd $(AGENT_DIR) && $(MAKE) build
 	@echo "Agent built: $(AGENT_DIR)/agent.wasm"
 

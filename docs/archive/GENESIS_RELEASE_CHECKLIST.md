@@ -120,7 +120,7 @@ Pre-release verification checklist for Igor v0.1.0-genesis.
 - [ ] Do not use for financial transactions
 - [ ] Suitable only for research/experimentation
 
-Documented in: README.md, SECURITY.md, docs/SECURITY_MODEL.md
+Documented in: README.md, SECURITY.md, docs/runtime/SECURITY_MODEL.md
 
 ---
 
@@ -219,7 +219,7 @@ git log --oneline -10  # Review recent commits
 ### 1. Create Tag
 
 ```bash
-git tag -a v0.1.0-genesis -F docs/GENESIS_COMMIT.md
+git tag -a v0.1.0-genesis -F docs/archive/GENESIS_COMMIT.md
 ```
 
 ### 2. Verify Tag
