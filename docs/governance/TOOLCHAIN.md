@@ -329,5 +329,5 @@ Toolchain determinism ensures:
 ## References
 
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - Development workflow
-- [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution guidelines
-- [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) - Design philosophy
+- [CONTRIBUTING.md](../../CONTRIBUTING.md) - Contribution guidelines
+- [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) - Design philosophy

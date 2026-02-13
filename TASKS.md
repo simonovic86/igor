@@ -4,6 +4,7 @@
 
 [✓] Runtime Invariant Specification
 [✓] Constitutional Spec Consolidation & Governance Hardening
+[✓] Documentation authority-layer reorganization
 
 ---
 

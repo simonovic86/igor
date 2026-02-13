@@ -156,6 +156,6 @@ A single genesis commit establishes this identity clearly.
 
 ## References
 
-- [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) - Design philosophy
+- [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) - Design philosophy
 - [docs/GENESIS_COMMIT.md](./GENESIS_COMMIT.md) - Commit message source
 - [docs/GENESIS_RELEASE_CHECKLIST.md](./GENESIS_RELEASE_CHECKLIST.md) - Release verification

@@ -13,10 +13,10 @@ Igor's specification is organized into three layers. Each layer has distinct res
 ### Constitutional Layer
 
 **Documents:**
-- [RUNTIME_CONSTITUTION.md](./RUNTIME_CONSTITUTION.md)
-- [EXECUTION_INVARIANTS.md](./EXECUTION_INVARIANTS.md)
-- [OWNERSHIP_AND_AUTHORITY.md](./OWNERSHIP_AND_AUTHORITY.md)
-- [MIGRATION_CONTINUITY.md](./MIGRATION_CONTINUITY.md)
+- [RUNTIME_CONSTITUTION.md](../constitution/RUNTIME_CONSTITUTION.md)
+- [EXECUTION_INVARIANTS.md](../constitution/EXECUTION_INVARIANTS.md)
+- [OWNERSHIP_AND_AUTHORITY.md](../constitution/OWNERSHIP_AND_AUTHORITY.md)
+- [MIGRATION_CONTINUITY.md](../constitution/MIGRATION_CONTINUITY.md)
 
 **Contains:**
 - Non-negotiable runtime guarantees
@@ -35,8 +35,8 @@ Igor's specification is organized into three layers. Each layer has distinct res
 ### Mechanism Design Layer
 
 **Documents:**
-- [RUNTIME_ENFORCEMENT_INVARIANTS.md](./RUNTIME_ENFORCEMENT_INVARIANTS.md)
-- [INVARIANT_DEPENDENCY_GRAPH.md](./INVARIANT_DEPENDENCY_GRAPH.md)
+- [RUNTIME_ENFORCEMENT_INVARIANTS.md](../constitution/RUNTIME_ENFORCEMENT_INVARIANTS.md)
+- [INVARIANT_DEPENDENCY_GRAPH.md](../constitution/INVARIANT_DEPENDENCY_GRAPH.md)
 
 **Contains:**
 - Enforcement rules implementing constitutional guarantees
@@ -53,11 +53,11 @@ Igor's specification is organized into three layers. Each layer has distinct res
 ### Runtime Implementation Layer
 
 **Documents:**
-- [ARCHITECTURE.md](./ARCHITECTURE.md)
-- [MIGRATION_PROTOCOL.md](./MIGRATION_PROTOCOL.md)
-- [AGENT_LIFECYCLE.md](./AGENT_LIFECYCLE.md)
-- [BUDGET_MODEL.md](./BUDGET_MODEL.md)
-- [SECURITY_MODEL.md](./SECURITY_MODEL.md)
+- [ARCHITECTURE.md](../runtime/ARCHITECTURE.md)
+- [MIGRATION_PROTOCOL.md](../runtime/MIGRATION_PROTOCOL.md)
+- [AGENT_LIFECYCLE.md](../runtime/AGENT_LIFECYCLE.md)
+- [BUDGET_MODEL.md](../runtime/BUDGET_MODEL.md)
+- [SECURITY_MODEL.md](../runtime/SECURITY_MODEL.md)
 - Source code and tests
 
 **Contains:**

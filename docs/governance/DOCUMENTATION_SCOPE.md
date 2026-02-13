@@ -6,46 +6,52 @@ This document defines which documentation belongs in the public repository and w
 
 **Purpose:** Help contributors understand, use, and extend Igor.
 
-**Location:** `/docs` (remains in repository)
+**Location:** `/docs` organized into authority-layer subfolders
 
-### Constitutional Layer
+### Constitutional Layer — `docs/constitution/`
 
 Constitutional documents define non-negotiable runtime guarantees. They MUST remain mechanism-agnostic and field-agnostic. They MUST NOT reference protocol message fields, wire formats, or serialization schemas.
 
-**RUNTIME_CONSTITUTION.md** - Constitutional specification root  
-**EXECUTION_INVARIANTS.md** - Foundational runtime invariants  
-**OWNERSHIP_AND_AUTHORITY.md** - Authority lifecycle model  
-**MIGRATION_CONTINUITY.md** - Migration continuity contracts  
+**constitution/RUNTIME_CONSTITUTION.md** - Constitutional specification root  
+**constitution/EXECUTION_INVARIANTS.md** - Foundational runtime invariants  
+**constitution/OWNERSHIP_AND_AUTHORITY.md** - Authority lifecycle model  
+**constitution/MIGRATION_CONTINUITY.md** - Migration continuity contracts  
+**constitution/RUNTIME_ENFORCEMENT_INVARIANTS.md** - Enforcement rules implementing constitutional guarantees  
+**constitution/INVARIANT_DEPENDENCY_GRAPH.md** - Invariant dependency relationships  
 
-### Mechanism Design Layer
-
-Mechanism design documents describe how constitutional guarantees are enforced. Every enforcement invariant must trace to one or more constitutional invariants. These documents MAY reference implementation-level concepts.
-
-**RUNTIME_ENFORCEMENT_INVARIANTS.md** - Enforcement rules implementing constitutional guarantees  
-**INVARIANT_DEPENDENCY_GRAPH.md** - Invariant dependency relationships  
-
-### Runtime Implementation Layer
+### Runtime Implementation Layer — `docs/runtime/`
 
 Implementation documents describe how the runtime is built. They contain protocol details, code-level guidance, and operational procedures. They MUST comply with all constitutional and enforcement invariants.
 
-**ARCHITECTURE.md** - Runtime implementation details  
-**AGENT_LIFECYCLE.md** - Building and deploying agents  
-**MIGRATION_PROTOCOL.md** - P2P migration mechanics  
-**BUDGET_MODEL.md** - Economic model and metering  
-**SECURITY_MODEL.md** - Threat model and sandbox constraints  
+**runtime/ARCHITECTURE.md** - Runtime implementation details  
+**runtime/AGENT_LIFECYCLE.md** - Building and deploying agents  
+**runtime/MIGRATION_PROTOCOL.md** - P2P migration mechanics  
+**runtime/BUDGET_MODEL.md** - Economic model and metering  
+**runtime/SECURITY_MODEL.md** - Threat model and sandbox constraints  
 
-### Conceptual Documentation
+### Philosophy Layer — `docs/philosophy/`
 
-**OVERVIEW.md** - Introduction to Igor concepts  
-**VISION.md** - Why autonomous software needs survival  
+**philosophy/OVERVIEW.md** - Introduction to Igor concepts  
+**philosophy/VISION.md** - Why autonomous software needs survival  
 
-### Process Documentation
+### Governance Layer — `docs/governance/`
 
-**DEVELOPMENT.md** - Developer setup and workflow  
-**CI_PIPELINE.md** - Continuous integration documentation  
-**RELEASE_PROCESS.md** - Release management  
-**ROADMAP.md** - Future development phases (if technical, not speculative)  
-**SPEC_GOVERNANCE.md** - Specification change control and classification
+**governance/DEVELOPMENT.md** - Developer setup and workflow  
+**governance/CI_PIPELINE.md** - Continuous integration documentation  
+**governance/RELEASE_PROCESS.md** - Release management  
+**governance/ROADMAP.md** - Future development phases (if technical, not speculative)  
+**governance/SPEC_GOVERNANCE.md** - Specification change control and classification  
+**governance/DOCUMENTATION_SCOPE.md** - This document  
+**governance/TOOLCHAIN.md** - Build toolchain and version requirements  
+**governance/DISCOVERY_VALIDATION.md** - Search and discovery validation  
+**governance/KEYWORDS.md** - Keyword governance policy  
+
+### Archive — `docs/archive/`
+
+**archive/GENESIS_COMMIT.md** - Genesis commit message source  
+**archive/GENESIS_TAG_ANNOTATION.md** - Genesis tag annotation content  
+**archive/GENESIS_RELEASE_CHECKLIST.md** - Release verification checklist  
+**archive/HISTORY_REWRITE.md** - History rewrite rationale and process
 
 ### Criteria for Public Documentation
 

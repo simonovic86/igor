@@ -186,5 +186,5 @@ Status: Awaiting public release
 ## References
 
 - [KEYWORDS.md](./KEYWORDS.md) - Keyword governance policy
-- [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) - Core philosophy
-- [README.md](../README.md) - Primary discovery surface
+- [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) - Core philosophy
+- [README.md](../../README.md) - Primary discovery surface

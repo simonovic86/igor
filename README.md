@@ -15,11 +15,11 @@ Igor is a decentralized execution runtime for autonomous software agents. It pro
 **Read first:**
 - [ANNOUNCEMENT.md](./ANNOUNCEMENT.md) - Public project introduction
 - [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Authoritative design specification
-- [docs/VISION.md](./docs/VISION.md) - Why autonomous software needs survival
+- [docs/philosophy/VISION.md](./docs/philosophy/VISION.md) - Why autonomous software needs survival
 
 **Contribute:**
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Guidelines and workflow
-- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) - Developer setup
+- [docs/governance/DEVELOPMENT.md](./docs/governance/DEVELOPMENT.md) - Developer setup
 
 ---
 
@@ -231,20 +231,20 @@ Agent state survives restart via checkpoint.
 
 **Start here:**
 - [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Authoritative design specification
-- [docs/VISION.md](./docs/VISION.md) - Why autonomous agents need survival
-- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) - Implementation details
+- [docs/philosophy/VISION.md](./docs/philosophy/VISION.md) - Why autonomous agents need survival
+- [docs/runtime/ARCHITECTURE.md](./docs/runtime/ARCHITECTURE.md) - Implementation details
 
 **Technical reference:**
-- [docs/AGENT_LIFECYCLE.md](./docs/AGENT_LIFECYCLE.md) - Building agents
-- [docs/MIGRATION_PROTOCOL.md](./docs/MIGRATION_PROTOCOL.md) - P2P migration
-- [docs/BUDGET_MODEL.md](./docs/BUDGET_MODEL.md) - Economic metering
-- [docs/RUNTIME_ENFORCEMENT_INVARIANTS.md](./docs/RUNTIME_ENFORCEMENT_INVARIANTS.md) - System guarantees
-- [docs/SECURITY_MODEL.md](./docs/SECURITY_MODEL.md) - Threat analysis
+- [docs/runtime/AGENT_LIFECYCLE.md](./docs/runtime/AGENT_LIFECYCLE.md) - Building agents
+- [docs/runtime/MIGRATION_PROTOCOL.md](./docs/runtime/MIGRATION_PROTOCOL.md) - P2P migration
+- [docs/runtime/BUDGET_MODEL.md](./docs/runtime/BUDGET_MODEL.md) - Economic metering
+- [docs/constitution/RUNTIME_ENFORCEMENT_INVARIANTS.md](./docs/constitution/RUNTIME_ENFORCEMENT_INVARIANTS.md) - System guarantees
+- [docs/runtime/SECURITY_MODEL.md](./docs/runtime/SECURITY_MODEL.md) - Threat analysis
 
 **Development:**
-- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) - Setup and workflow
+- [docs/governance/DEVELOPMENT.md](./docs/governance/DEVELOPMENT.md) - Setup and workflow
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Contribution guidelines
-- [docs/ROADMAP.md](./docs/ROADMAP.md) - Future phases
+- [docs/governance/ROADMAP.md](./docs/governance/ROADMAP.md) - Future phases
 
 ## Development
 
@@ -267,7 +267,7 @@ make precommit  # alias for check
 
 Pre-commit hooks automatically enforce quality.
 
-See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) for complete guide.
+See [docs/governance/DEVELOPMENT.md](./docs/governance/DEVELOPMENT.md) for complete guide.
 
 ## Technology
 
@@ -281,7 +281,7 @@ See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) for complete guide.
 Contributions welcome. Please read:
 
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Guidelines and workflow
-- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) - Developer setup
+- [docs/governance/DEVELOPMENT.md](./docs/governance/DEVELOPMENT.md) - Developer setup
 - [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Design philosophy
 
 Security issues: [SECURITY.md](./SECURITY.md)
@@ -302,7 +302,7 @@ DeFi automation infrastructure | Oracle network runtime | AI agent execution pla
 **Research Areas:**
 Agent survival primitives | Mobile code execution | Process migration protocols | Runtime accounting systems | Survivable software research | Experimental distributed infrastructure
 
-See [docs/KEYWORDS.md](./docs/KEYWORDS.md) for keyword governance policy.
+See [docs/governance/KEYWORDS.md](./docs/governance/KEYWORDS.md) for keyword governance policy.
 
 ## License
 

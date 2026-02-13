@@ -339,7 +339,7 @@ Track per release:
 
 ## References
 
-- [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution workflow
-- [docs/DEVELOPMENT.md](./DEVELOPMENT.md) - Development setup
-- [TASKS.md](../TASKS.md) - Development roadmap
-- [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) - Design philosophy
+- [CONTRIBUTING.md](../../CONTRIBUTING.md) - Contribution workflow
+- [DEVELOPMENT.md](./DEVELOPMENT.md) - Development setup
+- [TASKS.md](../../TASKS.md) - Development roadmap
+- [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) - Design philosophy

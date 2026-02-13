@@ -129,11 +129,11 @@ go build -o bin/igord ./cmd/igord
 
 ## Further Reading
 
-- [Architecture](./ARCHITECTURE.md) - System structure and components
-- [Agent Lifecycle](./AGENT_LIFECYCLE.md) - How agents execute and survive
-- [Migration Protocol](./MIGRATION_PROTOCOL.md) - How agents move between nodes
-- [Budget Model](./BUDGET_MODEL.md) - How agents pay for execution
-- [Security Model](./SECURITY_MODEL.md) - Sandbox and trust boundaries
-- [Runtime Constitution](./RUNTIME_CONSTITUTION.md) - Constitutional specification root
-- [Runtime Enforcement Invariants](./RUNTIME_ENFORCEMENT_INVARIANTS.md) - System guarantees and enforcement
-- [Roadmap](./ROADMAP.md) - Future development phases
+- [Architecture](../runtime/ARCHITECTURE.md) - System structure and components
+- [Agent Lifecycle](../runtime/AGENT_LIFECYCLE.md) - How agents execute and survive
+- [Migration Protocol](../runtime/MIGRATION_PROTOCOL.md) - How agents move between nodes
+- [Budget Model](../runtime/BUDGET_MODEL.md) - How agents pay for execution
+- [Security Model](../runtime/SECURITY_MODEL.md) - Sandbox and trust boundaries
+- [Runtime Constitution](../constitution/RUNTIME_CONSTITUTION.md) - Constitutional specification root
+- [Runtime Enforcement Invariants](../constitution/RUNTIME_ENFORCEMENT_INVARIANTS.md) - System guarantees and enforcement
+- [Roadmap](../governance/ROADMAP.md) - Future development phases

@@ -267,7 +267,7 @@ Given same state and inputs, tick produces same outputs (agent responsibility).
 **I7: Tick Timeout**  
 Each tick completes within 100ms or is aborted.
 
-See [RUNTIME_ENFORCEMENT_INVARIANTS.md](./RUNTIME_ENFORCEMENT_INVARIANTS.md) for enforcement specifications and [EXECUTION_INVARIANTS.md](./EXECUTION_INVARIANTS.md) for constitutional invariants.
+See [RUNTIME_ENFORCEMENT_INVARIANTS.md](../constitution/RUNTIME_ENFORCEMENT_INVARIANTS.md) for enforcement specifications and [EXECUTION_INVARIANTS.md](../constitution/EXECUTION_INVARIANTS.md) for constitutional invariants.
 
 ## Technology Stack
 
@@ -317,7 +317,7 @@ See [SECURITY_MODEL.md](./SECURITY_MODEL.md) for complete threat model.
 
 ## References
 
-- [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) - Authoritative design specification
+- [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) - Authoritative design specification
 - [AGENT_LIFECYCLE.md](./AGENT_LIFECYCLE.md) - Agent development guide
 - [MIGRATION_PROTOCOL.md](./MIGRATION_PROTOCOL.md) - Protocol details
 - [BUDGET_MODEL.md](./BUDGET_MODEL.md) - Economic model

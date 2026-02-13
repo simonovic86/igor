@@ -64,7 +64,7 @@ This ensures:
 - goimports (latest, locked in go.mod via tools.go)
 - TinyGo 0.40.1+ (optional, for agent development)
 
-See [docs/TOOLCHAIN.md](./docs/TOOLCHAIN.md) for upgrade procedures.
+See [docs/governance/TOOLCHAIN.md](./docs/governance/TOOLCHAIN.md) for upgrade procedures.
 
 ## Development Setup
 
@@ -96,7 +96,7 @@ make test
 make check  # Runs fmt-check, vet, lint
 ```
 
-See [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) for detailed development guide.
+See [docs/governance/DEVELOPMENT.md](./docs/governance/DEVELOPMENT.md) for detailed development guide.
 
 ## Pull Request Guidelines
 
@@ -251,7 +251,7 @@ Performance optimization is secondary to correctness.
 When updating README, repository description, or GitHub metadata:
 
 **Maintain discoverability through technical accuracy:**
-- Use keywords from [docs/KEYWORDS.md](./docs/KEYWORDS.md)
+- Use keywords from [docs/governance/KEYWORDS.md](./docs/governance/KEYWORDS.md)
 - Avoid marketing hype or exaggerated claims
 - Preserve experimental status clarity
 - Keep technical credibility as priority over SEO
@@ -260,7 +260,7 @@ When updating README, repository description, or GitHub metadata:
 - "Runtime for survivable autonomous agents"
 - Do not introduce variations without approval
 
-See [docs/KEYWORDS.md](./docs/KEYWORDS.md) for complete keyword governance.
+See [docs/governance/KEYWORDS.md](./docs/governance/KEYWORDS.md) for complete keyword governance.
 
 ## Code Style
 
@@ -352,8 +352,8 @@ Proposals in these areas will be declined.
 
 ## Getting Help
 
-- Read [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) for setup help
-- Read [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for system understanding
+- Read [docs/governance/DEVELOPMENT.md](./docs/governance/DEVELOPMENT.md) for setup help
+- Read [docs/runtime/ARCHITECTURE.md](./docs/runtime/ARCHITECTURE.md) for system understanding
 - Check existing issues for similar questions
 - Open a new issue if stuck
 

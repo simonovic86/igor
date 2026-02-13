@@ -130,7 +130,7 @@ Each layer derives authority from the layer above. No lower layer may introduce 
 
 ## Constitutional Amendments
 
-Constitutional invariants are subject to specification governance rules defined in [SPEC_GOVERNANCE.md](./SPEC_GOVERNANCE.md). Changes to constitutional documents require formal review and explicit version bumps.
+Constitutional invariants are subject to specification governance rules defined in [SPEC_GOVERNANCE.md](../governance/SPEC_GOVERNANCE.md). Changes to constitutional documents require formal review and explicit version bumps.
 
 ---
 

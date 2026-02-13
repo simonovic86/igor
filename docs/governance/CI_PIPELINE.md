@@ -421,6 +421,6 @@ All CI checks run through Makefile targets, ensuring local/CI parity.
 ## References
 
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - Local development workflow
-- [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution guidelines
-- [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) - Design principles
-- [.github/workflows/ci.yml](../.github/workflows/ci.yml) - CI configuration
+- [CONTRIBUTING.md](../../CONTRIBUTING.md) - Contribution guidelines
+- [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) - Design principles
+- [.github/workflows/ci.yml](../../.github/workflows/ci.yml) - CI configuration
