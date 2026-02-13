@@ -364,17 +364,17 @@ Expected vulnerabilities:
 
 Potential improvements beyond v0:
 
-**Phase 2 (Autonomy):**
+**Phase 3 (Autonomy):**
 - Agent manifest validation
 - Capability enforcement
 - Basic integrity checks
 
-**Phase 3 (Economics):**
+**Phase 4 (Economics):**
 - Payment receipt signing
 - Cryptographic proofs
 - Basic fraud detection
 
-**Phase 4 (Hardening):**
+**Phase 5 (Hardening):**
 - State encryption
 - Checkpoint signing
 - Multi-party verification

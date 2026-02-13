@@ -53,7 +53,7 @@ Examples:
 
 **Annotated tags required:**
 ```bash
-git tag -a v0.1.0 -m "Release v0.1.0: Phase 1 (Survival) complete"
+git tag -a v0.1.0 -m "Release v0.1.0: Phase 2 (Survival) complete"
 ```
 
 ## Release Criteria
@@ -75,13 +75,13 @@ Before tagging a release:
 ### Release Readiness Gates
 
 **v0.1.0 Requirements:**
-- Phase 1 complete
+- Phase 2 complete
 - Core survival capabilities validated
 - Documentation comprehensive
 - Basic stability demonstrated
 
 **v0.2.0 Requirements:**
-- Phase 2 complete
+- Phase 3 complete
 - Agent autonomy implemented
 - Multi-node testing successful
 
@@ -142,7 +142,7 @@ Follow [Keep a Changelog](https://keepachangelog.com/) format.
 
 ```bash
 # Tag release
-git tag -a v0.1.0 -m "Release v0.1.0: Phase 1 (Survival) complete
+git tag -a v0.1.0 -m "Release v0.1.0: Phase 2 (Survival) complete
 
 - WASM sandbox runtime
 - Agent checkpointing and resume
@@ -184,7 +184,7 @@ Create release on GitHub:
 1. Go to Releases page
 2. Click "Draft a new release"
 3. Select tag: `v0.1.0`
-4. Title: `Igor v0.1.0 - Phase 1 (Survival)`
+4. Title: `Igor v0.1.0 - Phase 2 (Survival)`
 5. Description: Copy from CHANGELOG.md
 6. Attach binaries and checksums
 7. Mark as pre-release if v0.x

@@ -2,7 +2,7 @@
 
 ## Project Status
 
-Igor v0 is experimental research software currently in Phase 1 (Survival) development. It is **not production-ready** and has known security limitations by design.
+Igor v0 is experimental research software currently in Phase 2 (Survival) development. It is **not production-ready** and has known security limitations by design.
 
 **Current Status:** Early development, active testing, not suitable for production use.
 
@@ -156,17 +156,17 @@ Igor v0 is suitable only for:
 
 Future phases may address current limitations:
 
-**Phase 2 (Autonomy):**
+**Phase 3 (Autonomy):**
 - Agent manifest validation
 - Capability enforcement
 - Basic integrity checks
 
-**Phase 3 (Economics):**
+**Phase 4 (Economics):**
 - Cryptographic receipts
 - Payment verification
 - Fraud detection
 
-**Phase 4 (Hardening):**
+**Phase 5 (Hardening):**
 - State encryption
 - Checkpoint signing
 - Advanced sandbox hardening
@@ -177,7 +177,7 @@ No timeline or commitment. Listed for context only.
 ## Security Resources
 
 - [docs/SECURITY_MODEL.md](./docs/SECURITY_MODEL.md) - Detailed threat model
-- [docs/INVARIANTS.md](./docs/INVARIANTS.md) - System guarantees
+- [docs/RUNTIME_ENFORCEMENT_INVARIANTS.md](./docs/RUNTIME_ENFORCEMENT_INVARIANTS.md) - System guarantees
 - [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Design philosophy
 
 ## Contact

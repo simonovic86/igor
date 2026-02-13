@@ -1,6 +1,13 @@
 # Igor Development Tasks
 
-## Phase 1 — Survival
+## Phase 1 — Runtime Constitution
+
+[✓] Runtime Invariant Specification
+[✓] Constitutional Spec Consolidation & Governance Hardening
+
+---
+
+## Phase 2 — Survival
 
 [✓] Task 0 — Repository scaffold  
 [✓] Task 1 — P2P bootstrap & ping  
@@ -22,13 +29,7 @@
 
 ---
 
-## Phase 0 — Runtime Specification
-
-[✓] Phase 0 Runtime Invariant Specification
-
----
-
-## Phase 2 — Autonomy
+## Phase 3 — Autonomy
 
 [ ] Task 6 — Agent manifest validation & capability enforcement
 [ ] Task 7 — Migration decision interface (agent → runtime)
@@ -36,14 +37,14 @@
 
 ---
 
-## Phase 3 — Economics
+## Phase 4 — Economics
 
 [ ] Task 9 — Payment receipt signing
 [ ] Task 10 — Node pricing negotiation
 
 ---
 
-## Phase 4 — Hardening
+## Phase 5 — Hardening
 
 [ ] Task 11 — Runtime resource isolation
 [ ] Task 12 — Migration failure recovery

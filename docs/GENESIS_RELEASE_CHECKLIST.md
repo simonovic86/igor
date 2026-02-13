@@ -78,14 +78,14 @@ Pre-release verification checklist for Igor v0.1.0-genesis.
 - [ ] Tag message prepared (see GENESIS_COMMIT.md)
 - [ ] Tag includes:
   - What Igor is
-  - What Phase 1 achieves
+  - What Phase 2 achieves
   - Known limitations
   - Experimental status
 
 ### Release Notes
 
 - [ ] Release notes drafted
-- [ ] Highlights Phase 1 completion
+- [ ] Highlights Phase 2 completion
 - [ ] Lists all 6 success criteria met
 - [ ] Explains known limitations clearly
 - [ ] Links to documentation
@@ -236,7 +236,7 @@ git push origin v0.1.0-genesis
 
 ### 4. Create GitHub Release
 
-- Title: "Igor v0.1.0-genesis - Phase 1 (Survival) Complete"
+- Title: "Igor v0.1.0-genesis - Phase 2 (Survival) Complete"
 - Body: Use release notes from GENESIS_COMMIT.md
 - Mark as pre-release
 - Attach binaries (if built)

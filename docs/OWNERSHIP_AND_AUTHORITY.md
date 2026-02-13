@@ -64,7 +64,7 @@ The current authority holder has begun the process of transferring authority. Th
 
 Authority is in transit. The source node has relinquished active execution but the target node has not yet confirmed assumption of authority.
 
-- No node is ticking the agent.
+- All nodes MUST NOT tick the agent.
 - The agent's last committed checkpoint is durable and consistent.
 - A liveness gap exists — this is acceptable per safety-over-liveness (EI-6).
 
@@ -86,9 +86,9 @@ The runtime cannot determine which node holds authority. This state is entered w
 
 In RECOVERY_REQUIRED state:
 
-- No node may tick the agent.
-- No node may produce new checkpoints.
-- Execution is halted until authority is unambiguously resolved.
+- All nodes MUST NOT tick the agent. All ticking MUST cease immediately.
+- All nodes MUST NOT produce new checkpoints. All checkpoint production MUST cease.
+- Execution MUST remain halted until authority is unambiguously resolved.
 - Resolution requires explicit recovery action.
 
 ### OA-3: State Transition Rules
@@ -190,11 +190,12 @@ This document defines the authority lifecycle that enforces several execution in
 - **EI-5** (singular authority) — at most one ACTIVE_OWNER per identity.
 - **EI-6** (safety over liveness) — RECOVERY_REQUIRED halts execution under ambiguity.
 - **EI-8** (migration single-instance) — transfer serialization prevents concurrent ticking.
+- **EI-11** (divergent lineage detection) — conflicting ownership with divergent checkpoint digests triggers RECOVERY_REQUIRED.
 
 ---
 
 ## Document Status
 
-**Type:** Phase 0 Runtime Specification
+**Type:** Constitutional Specification
 **Scope:** Conceptual contracts only — no wire formats, serialization, or cryptographic mechanisms.
-**Authority:** Normative for all future implementation of agent identity and authority lifecycle behavior.
+**Authority:** Normative for all future implementation of agent identity and authority lifecycle behavior. Part of the constitutional layer defined by [RUNTIME_CONSTITUTION.md](./RUNTIME_CONSTITUTION.md).

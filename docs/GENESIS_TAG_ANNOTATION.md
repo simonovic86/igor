@@ -8,11 +8,11 @@ This document contains the annotation message for the v0.1.0-genesis tag.
 
 ```bash
 git tag -a v0.1.0-genesis -m "$(cat <<'EOF'
-Igor v0.1.0-genesis - Phase 1 (Survival) Complete
+Igor v0.1.0-genesis - Phase 2 (Survival) Complete
 
 Experimental decentralized runtime for survivable autonomous agents.
 
-Phase 1 implements:
+Phase 2 implements:
 - WASM sandbox execution (wazero)
 - Agent checkpointing and resume
 - Peer-to-peer migration (libp2p)
@@ -40,7 +40,7 @@ EOF
 ## Short Tag Description
 
 ```
-Igor v0.1.0-genesis - Phase 1 (Survival) Complete
+Igor v0.1.0-genesis - Phase 2 (Survival) Complete
 ```
 
 ---
@@ -48,11 +48,11 @@ Igor v0.1.0-genesis - Phase 1 (Survival) Complete
 ## Tag Annotation Message
 
 ```
-Igor v0.1.0-genesis - Phase 1 (Survival) Complete
+Igor v0.1.0-genesis - Phase 2 (Survival) Complete
 
 Experimental decentralized runtime for survivable autonomous agents.
 
-Phase 1 implements:
+Phase 2 implements:
 - WASM sandbox execution (wazero)
 - Agent checkpointing and resume
 - Peer-to-peer migration (libp2p)
@@ -102,7 +102,7 @@ git push origin v0.1.0-genesis
 
 For GitHub release, use:
 
-**Title:** Igor v0.1.0-genesis - Phase 1 (Survival) Complete
+**Title:** Igor v0.1.0-genesis - Phase 2 (Survival) Complete
 
 **Body:** Combine content from:
 - ANNOUNCEMENT.md (introduction)

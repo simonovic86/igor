@@ -1,99 +1,22 @@
-# System Invariants
+# Runtime Enforcement Invariants
 
 ## Overview
 
-Igor v0 maintains strict invariants to ensure correct agent survival and migration. The system is designed to **fail loudly** when invariants are violated.
+This document defines runtime enforcement rules that implement the constitutional guarantees specified in the [Runtime Constitution](./RUNTIME_CONSTITUTION.md) and its referenced specification documents.
 
-## Critical Invariants
+These invariants describe **how the runtime upholds constitutional guarantees** through concrete enforcement mechanisms. They are derived from, and subordinate to, the constitutional invariants defined in [EXECUTION_INVARIANTS.md](./EXECUTION_INVARIANTS.md), [OWNERSHIP_AND_AUTHORITY.md](./OWNERSHIP_AND_AUTHORITY.md), and [MIGRATION_CONTINUITY.md](./MIGRATION_CONTINUITY.md).
 
-### I1: Single Active Instance
-
-**Invariant:** At most one active instance of any agent exists at any time.
-
-**Why:**
-- Prevents split-brain scenarios
-- Ensures state consistency
-- Avoids budget double-spending
-
-**Enforcement:**
-- Source waits for target confirmation before terminating
-- Target starts before sending confirmation
-- Atomic checkpoint operations
-- Migration is synchronous
-
-**Violation consequences:**
-- Multiple instances could diverge
-- Budget could be spent twice
-- State could fork
-
-**Detected by:**
-- Log analysis (two nodes reporting same agent)
-- Budget tracking (spending exceeds available)
-
-**Status:** ✅ Enforced
+The system is designed to **fail loudly** when enforcement invariants are violated.
 
 ---
 
-### I2: Budget Conservation
+## Checkpoint Enforcement
 
-**Invariant:** Budget is never created or destroyed, only transferred.
-
-**Why:**
-- Prevents inflation
-- Ensures fair payment
-- Enables economic model
-
-**Enforcement:**
-- Budget loaded from checkpoint
-- Budget transferred in AgentPackage
-- Budget saved in checkpoint
-- No refunds or credits
-
-**Violation consequences:**
-- Economic model breaks
-- Unlimited execution
-- Unfair node compensation
-
-**Detected by:**
-- Sum of all agent budgets remains constant
-- Budget cannot increase except via external funding
-
-**Status:** ✅ Enforced
-
----
-
-### I3: State Persistence
-
-**Invariant:** Agent state survives any shutdown or migration.
-
-**Why:**
-- Agents must survive infrastructure churn
-- Execution must be resumable
-- No data loss
-
-**Enforcement:**
-- Checkpoint before shutdown
-- Checkpoint before migration
-- Atomic checkpoint writes
-- Resume from checkpoint on restart
-
-**Violation consequences:**
-- Agent loses progress
-- State corruption
-- Execution cannot resume
-
-**Detected by:**
-- Missing checkpoints after shutdown
-- Resume failures
-- State inconsistencies
-
-**Status:** ✅ Enforced
-
----
-
-### I4: Atomic Checkpoints
+### RE-1: Atomic Checkpoints
 
 **Invariant:** Checkpoints are never partial. They are fully written or not at all.
+
+**Derives from:** EI-2 (checkpoint boundary resumption), EI-3 (checkpoint lineage integrity)
 
 **Why:**
 - Prevents state corruption
@@ -120,63 +43,74 @@ Igor v0 maintains strict invariants to ensure correct agent survival and migrati
 
 ---
 
-### I5: Tick Determinism
+### RE-2: State Persistence
 
-**Invariant:** Given same state and input, tick produces same output.
+**Invariant:** Agent state survives any shutdown or migration.
 
-**Why:**
-- Predictable behavior
-- Reproducible execution
-- Debugging and testing
-
-**Enforcement:**
-- Agent responsibility (not enforced by runtime)
-- No random without seeded RNG
-- No external dependencies
-
-**Violation consequences:**
-- Non-reproducible bugs
-- Migration inconsistencies
-- Difficult debugging
-
-**Detected by:**
-- Manual testing
-- Comparing execution across runs
-
-**Status:** ⚠️ Not enforced (agent contract)
-
----
-
-### I6: Tick Short Duration
-
-**Invariant:** Each tick completes within 100ms.
+**Derives from:** EI-2 (checkpoint boundary resumption), EI-10 (migration checkpoint continuity)
 
 **Why:**
-- Responsive system
-- Fair scheduling (future: multiple agents)
-- Migration responsiveness
+- Agents must survive infrastructure churn
+- Execution must be resumable
+- No data loss
 
 **Enforcement:**
-- Context timeout on tick
-- Error if exceeded
-- Agent terminated on timeout
+- Checkpoint before shutdown
+- Checkpoint before migration
+- Atomic checkpoint writes
+- Resume from checkpoint on restart
 
 **Violation consequences:**
-- Slow agent execution
-- Poor migration experience
-- Resource hogging
+- Agent loses progress
+- State corruption
+- Execution cannot resume
 
 **Detected by:**
-- Timeout errors
-- Agent termination logs
+- Missing checkpoints after shutdown
+- Resume failures
+- State inconsistencies
 
 **Status:** ✅ Enforced
 
 ---
 
-### I7: Budget Monotonicity
+## Budget Enforcement
+
+### RE-3: Budget Conservation
+
+**Invariant:** Budget is never created or destroyed, only transferred.
+
+**Derives from:** EI-3 (checkpoint lineage integrity)
+
+**Why:**
+- Prevents inflation
+- Ensures fair payment
+- Enables economic model
+
+**Enforcement:**
+- Budget loaded from checkpoint
+- Budget transferred in AgentPackage
+- Budget saved in checkpoint
+- No refunds or credits
+
+**Violation consequences:**
+- Economic model breaks
+- Unlimited execution
+- Unfair node compensation
+
+**Detected by:**
+- Sum of all agent budgets remains constant
+- Budget cannot increase except via external funding
+
+**Status:** ✅ Enforced
+
+---
+
+### RE-4: Budget Monotonicity
 
 **Invariant:** Agent budget never increases during execution.
+
+**Derives from:** EI-3 (checkpoint lineage integrity)
 
 **Why:**
 - Reflects resource consumption
@@ -201,9 +135,73 @@ Igor v0 maintains strict invariants to ensure correct agent survival and migrati
 
 ---
 
-### I8: Storage Isolation
+## Tick Enforcement
+
+### RE-5: Tick Duration Limit
+
+**Invariant:** Each tick completes within 100ms.
+
+**Derives from:** EI-1 (single active instance — responsiveness supports migration handoff)
+
+**Why:**
+- Responsive system
+- Fair scheduling (future: multiple agents)
+- Migration responsiveness
+
+**Enforcement:**
+- Context timeout on tick
+- Error if exceeded
+- Agent terminated on timeout
+
+**Violation consequences:**
+- Slow agent execution
+- Poor migration experience
+- Resource hogging
+
+**Detected by:**
+- Timeout errors
+- Agent termination logs
+
+**Status:** ✅ Enforced
+
+---
+
+### RE-6: Tick Determinism
+
+**Invariant:** Given same state and input, tick produces same output.
+
+**Derives from:** EI-3 (checkpoint lineage integrity — determinism supports lineage verification)
+
+**Why:**
+- Predictable behavior
+- Reproducible execution
+- Debugging and testing
+
+**Enforcement:**
+- Agent responsibility (not enforced by runtime)
+- No random without seeded RNG
+- No external dependencies
+
+**Violation consequences:**
+- Non-reproducible bugs
+- Migration inconsistencies
+- Difficult debugging
+
+**Detected by:**
+- Manual testing
+- Comparing execution across runs
+
+**Status:** ⚠️ Not enforced (agent contract)
+
+---
+
+## Sandbox and Resource Isolation
+
+### RE-7: Storage Isolation
 
 **Invariant:** Agents cannot access each other's checkpoints.
+
+**Derives from:** EI-4 (authority and durability separation), OA-1 (canonical logical identity)
 
 **Why:**
 - Privacy
@@ -228,13 +226,17 @@ Igor v0 maintains strict invariants to ensure correct agent survival and migrati
 
 ---
 
-### I9: Lifecycle Order
+## Lifecycle Enforcement
+
+### RE-8: Lifecycle Order
 
 **Invariant:** Lifecycle functions called in strict order:
 
 ```
 init → [tick* → checkpoint*] → resume (optional)
 ```
+
+**Derives from:** EI-2 (checkpoint boundary resumption), OA-2 (authority lifecycle states)
 
 **Why:**
 - Predictable execution
@@ -261,32 +263,18 @@ init → [tick* → checkpoint*] → resume (optional)
 
 ---
 
-### I10: Migration Atomicity
+## Enforcement Summary
 
-**Invariant:** Migration either fully succeeds or fully fails. No partial state.
-
-**Why:**
-- No agent loss
-- No duplicate instances
-- Clean error recovery
-
-**Enforcement:**
-- Synchronous migration
-- Confirmation required
-- Source waits for target
-- Checkpoint atomic
-
-**Violation consequences:**
-- Lost agent
-- Duplicate agent
-- Split state
-
-**Detected by:**
-- Migration timeout
-- No confirmation received
-- Agent missing
-
-**Status:** ✅ Enforced
+| ID | Invariant | Category | Derives From |
+|----|-----------|----------|-------------|
+| RE-1 | Checkpoints are atomic (fully written or not at all) | Checkpoint | EI-2, EI-3 |
+| RE-2 | Agent state survives shutdown and migration | Checkpoint | EI-2, EI-10 |
+| RE-3 | Budget is conserved (never created or destroyed) | Budget | EI-3 |
+| RE-4 | Budget never increases during execution | Budget | EI-3 |
+| RE-5 | Tick completes within 100ms | Tick | EI-1 |
+| RE-6 | Tick is deterministic given same state | Tick | EI-3 |
+| RE-7 | Agents cannot access each other's checkpoints | Sandbox | EI-4, OA-1 |
+| RE-8 | Lifecycle functions called in strict order | Lifecycle | EI-2, OA-2 |
 
 ---
 
@@ -299,18 +287,20 @@ init → [tick* → checkpoint*] → resume (optional)
 3. **Memory limited to 64MB**
 4. **Budget decreases monotonically**
 5. **Checkpoints are atomic**
-6. **At most one instance exists**
+6. **At most one instance exists** (constitutional — see [EI-1](./EXECUTION_INVARIANTS.md))
 7. **State persists through restart**
 8. **Migration preserves budget**
 
 ### What Igor Does NOT Guarantee
 
-1. **Node honesty** - Nodes can cheat
-2. **Network reliability** - Connections can fail
-3. **Data privacy** - Nodes see plaintext state
-4. **Execution speed** - No performance SLA
-5. **Migration success** - Target can refuse
-6. **Budget security** - No cryptographic proofs
+1. **Node honesty** — Nodes can cheat
+2. **Network reliability** — Connections can fail
+3. **Data privacy** — Nodes see plaintext state
+4. **Execution speed** — No performance SLA
+5. **Migration success** — Target can refuse
+6. **Budget security** — No cryptographic proofs
+
+---
 
 ## Failure Modes
 
@@ -329,11 +319,13 @@ These failures preserve invariants:
 These violate invariants (should never happen):
 
 1. **Partial checkpoint write** → State corruption
-2. **Double instance** → Split-brain
+2. **Double instance** → Split-brain (constitutional violation — see [EI-1](./EXECUTION_INVARIANTS.md))
 3. **Budget increase** → Economic model broken
 4. **Sandbox escape** → Host compromise
 
 **Detection:** Loud failures with error logs
+
+---
 
 ## Audit Trail
 
@@ -379,24 +371,26 @@ grep "budget_remaining" logs.txt | awk '{print $NF}'
 grep "budget exhausted" logs.txt
 ```
 
+---
+
 ## Invariant Violations
 
 ### How to Detect
 
-1. **Monitor logs** - Check for error patterns
-2. **Verify checkpoints** - Ensure format valid
-3. **Track budgets** - Sum should be constant
-4. **Count instances** - Should be ≤ 1 per agent
+1. **Monitor logs** — Check for error patterns
+2. **Verify checkpoints** — Ensure format valid
+3. **Track budgets** — Sum should be constant
+4. **Count instances** — Should be ≤ 1 per agent
 
 ### How to Respond
 
 If invariant violated:
 
-1. **Stop affected agent** - Prevent further damage
-2. **Inspect logs** - Understand root cause
-3. **Check checkpoint** - Verify integrity
-4. **Restore from backup** - If state corrupted
-5. **Report bug** - Invariant violation is always a bug
+1. **Stop affected agent** — Prevent further damage
+2. **Inspect logs** — Understand root cause
+3. **Check checkpoint** — Verify integrity
+4. **Restore from backup** — If state corrupted
+5. **Report bug** — Invariant violation is always a bug
 
 ### Example Violation
 
@@ -416,6 +410,8 @@ Tick completed agent_id=agent-123 counter=10
 2. Determine which checkpoint is authoritative
 3. Migrate to single node
 4. Investigate how split occurred
+
+---
 
 ## Verification Tools
 
@@ -440,17 +436,17 @@ Create test script:
 #!/bin/bash
 # verify-invariants.sh
 
-# I1: Single instance
+# RE-7: Storage isolation
 COUNT=$(pgrep -f "run-agent.*agent-123" | wc -l)
 if [ $COUNT -gt 1 ]; then
     echo "VIOLATION: Multiple instances detected"
     exit 1
 fi
 
-# I2: Budget conservation
+# RE-3: Budget conservation
 # (requires tracking across migrations)
 
-# I4: Atomic checkpoints
+# RE-1: Atomic checkpoints
 for f in checkpoints/*.checkpoint; do
     if [ $(stat -f%z "$f") -lt 16 ]; then
         echo "VIOLATION: Partial checkpoint $f"
@@ -459,7 +455,9 @@ for f in checkpoints/*.checkpoint; do
 done
 ```
 
-## Design Principles for Invariants
+---
+
+## Design Principles for Enforcement
 
 ### 1. Fail Loudly
 
@@ -485,6 +483,8 @@ When invariant violated:
 - Straightforward invariants
 - Easy to verify
 - Easy to maintain
+
+---
 
 ## Testing Invariants
 
@@ -527,15 +527,24 @@ Test invariants under failure:
 
 **Expected:** All invariants still hold.
 
-## Invariant Documentation
+---
 
-Each invariant should have:
+## Enforcement Invariant Documentation
 
-1. **Statement** - What must be true
-2. **Why** - Reason for invariant
-3. **Enforcement** - How it's maintained
-4. **Consequences** - What breaks if violated
-5. **Detection** - How to verify
-6. **Status** - Enforced or documented
+Each enforcement invariant should have:
 
-This document serves as the authoritative invariant specification for Igor v0.
+1. **Statement** — What must be true
+2. **Derives from** — Which constitutional invariant(s) justify this enforcement rule
+3. **Why** — Reason for invariant
+4. **Enforcement** — How it's maintained
+5. **Consequences** — What breaks if violated
+6. **Detection** — How to verify
+7. **Status** — Enforced or documented
+
+---
+
+## Document Status
+
+**Type:** Runtime Enforcement Specification
+**Scope:** Enforcement rules implementing constitutional guarantees — includes implementation-level detail.
+**Authority:** Subordinate to [RUNTIME_CONSTITUTION.md](./RUNTIME_CONSTITUTION.md) and its referenced constitutional specifications.

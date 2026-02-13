@@ -17,7 +17,7 @@ The Igor repository history was rewritten to create a single canonical genesis c
 **After rewrite:**
 - 1 commit: `feat: Igor v0.1.0-genesis - Runtime for Autonomous Economic Agents`
 - Clean baseline for public release
-- All Phase 1 functionality intact
+- All Phase 2 functionality intact
 - Documentation finalized
 
 ---
@@ -121,7 +121,7 @@ git diff legacy-history genesis-main --stat
 **Working tree:**
 - 46 files
 - 8,489 lines of code + documentation
-- All Phase 1 functionality complete
+- All Phase 2 functionality complete
 
 ---
 

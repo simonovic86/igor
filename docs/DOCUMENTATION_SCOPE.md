@@ -8,14 +8,31 @@ This document defines which documentation belongs in the public repository and w
 
 **Location:** `/docs` (remains in repository)
 
-### Technical Documentation
+### Constitutional Layer
+
+Constitutional documents define non-negotiable runtime guarantees. They MUST remain mechanism-agnostic and field-agnostic. They MUST NOT reference protocol message fields, wire formats, or serialization schemas.
+
+**RUNTIME_CONSTITUTION.md** - Constitutional specification root  
+**EXECUTION_INVARIANTS.md** - Foundational runtime invariants  
+**OWNERSHIP_AND_AUTHORITY.md** - Authority lifecycle model  
+**MIGRATION_CONTINUITY.md** - Migration continuity contracts  
+
+### Mechanism Design Layer
+
+Mechanism design documents describe how constitutional guarantees are enforced. Every enforcement invariant must trace to one or more constitutional invariants. These documents MAY reference implementation-level concepts.
+
+**RUNTIME_ENFORCEMENT_INVARIANTS.md** - Enforcement rules implementing constitutional guarantees  
+**INVARIANT_DEPENDENCY_GRAPH.md** - Invariant dependency relationships  
+
+### Runtime Implementation Layer
+
+Implementation documents describe how the runtime is built. They contain protocol details, code-level guidance, and operational procedures. They MUST comply with all constitutional and enforcement invariants.
 
 **ARCHITECTURE.md** - Runtime implementation details  
 **AGENT_LIFECYCLE.md** - Building and deploying agents  
 **MIGRATION_PROTOCOL.md** - P2P migration mechanics  
 **BUDGET_MODEL.md** - Economic model and metering  
 **SECURITY_MODEL.md** - Threat model and sandbox constraints  
-**INVARIANTS.md** - System guarantees and verification  
 
 ### Conceptual Documentation
 
@@ -27,7 +44,8 @@ This document defines which documentation belongs in the public repository and w
 **DEVELOPMENT.md** - Developer setup and workflow  
 **CI_PIPELINE.md** - Continuous integration documentation  
 **RELEASE_PROCESS.md** - Release management  
-**ROADMAP.md** - Future development phases (if technical, not speculative)
+**ROADMAP.md** - Future development phases (if technical, not speculative)  
+**SPEC_GOVERNANCE.md** - Specification change control and classification
 
 ### Criteria for Public Documentation
 
@@ -84,6 +102,39 @@ Documents that duplicate content better covered elsewhere:
 
 ---
 
+## Specification Layer Boundaries
+
+### What Belongs in the Constitutional Layer
+
+- Non-negotiable runtime guarantees (invariants)
+- Authority lifecycle state definitions
+- Migration safety contracts
+- Failure safety invariant outcomes
+- Shared terminology definitions
+
+Constitutional documents MUST remain mechanism-agnostic and field-agnostic. They define *what* must be true, never *how* it is achieved.
+
+### What Belongs in the Mechanism Design Layer
+
+- Enforcement rules that implement constitutional invariants
+- Invariant derivation chains and dependency graphs
+- Detection and verification mechanisms
+- Operational failure modes
+
+Mechanism design documents MUST trace every rule to constitutional justification.
+
+### What Belongs in the Runtime Implementation Layer
+
+- Protocol message formats and wire encoding
+- Code architecture and module structure
+- Serialization schemas and byte layouts
+- Operational procedures and deployment guidance
+- Performance characteristics and resource limits
+
+Implementation documents MUST comply with higher layers but are otherwise unconstrained in technical detail.
+
+---
+
 ## Documentation Maintenance Rules
 
 ### Adding New Documentation
@@ -95,6 +146,7 @@ New documentation must:
 3. **Avoid redundancy** - Does not duplicate existing docs
 4. **Follow naming convention** - UPPERCASE.md in /docs
 5. **Use technical tone** - Infrastructure documentation, not marketing
+6. **Respect layer boundaries** - Content must be placed in the correct specification layer
 
 ### Removing Documentation
 

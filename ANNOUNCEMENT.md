@@ -33,7 +33,7 @@ Igor v0 is implemented in Go using proven components:
 
 The implementation is minimal: ~3,000 lines of runtime code, ~200 lines for the example agent. This validates that survival primitives can be realized without architectural complexity.
 
-## Current Capabilities (Phase 1)
+## Current Capabilities (Phase 2)
 
 Igor v0 demonstrates:
 
@@ -44,7 +44,7 @@ Igor v0 demonstrates:
 - Agents terminate gracefully when budget exhausts
 - Nodes coordinate peer-to-peer without centralized authority
 
-All 6 success criteria from the design specification are met. Phase 1 proves that autonomous agent survival is feasible.
+All 6 success criteria from the design specification are met. Phase 2 proves that autonomous agent survival is feasible.
 
 ## Project Maturity: Experimental
 
@@ -103,7 +103,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
 ## What Happens Next
 
-Igor v0 completes Phase 1 (Survival). Immediate priorities:
+Igor v0 completes Phase 2 (Survival). Immediate priorities:
 
 - Extended stability testing
 - Community feedback integration
@@ -111,9 +111,9 @@ Igor v0 completes Phase 1 (Survival). Immediate priorities:
 - Performance characterization
 
 Future phases (not committed):
-- Phase 2: Agent autonomy (capability enforcement, migration decisions)
-- Phase 3: Economic verification (payment receipts, cryptographic proofs)
-- Phase 4: Production hardening (security audit, failure recovery)
+- Phase 3: Agent autonomy (capability enforcement, migration decisions)
+- Phase 4: Economic verification (payment receipts, cryptographic proofs)
+- Phase 5: Production hardening (security audit, failure recovery)
 
 Development remains minimal and iterative. Features are added only when validated as necessary.
 

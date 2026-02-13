@@ -1,10 +1,10 @@
 # Igor v0 Roadmap
 
-## Current Status: Phase 1 Complete ✅
+## Current Status: Phase 2 Complete ✅
 
-Igor v0 has completed **Phase 1 (Survival)**, implementing all core functionality needed for autonomous mobile agents.
+Igor v0 has completed **Phase 2 (Survival)**, implementing all core functionality needed for autonomous mobile agents.
 
-### Completed Tasks (Phase 1)
+### Completed Tasks (Phase 2)
 
 - ✅ **Task 0** - Repository scaffold
 - ✅ **Task 1** - P2P bootstrap & ping
@@ -17,7 +17,7 @@ Igor v0 has completed **Phase 1 (Survival)**, implementing all core functionalit
 
 ---
 
-## Phase 2: Autonomy
+## Phase 3: Autonomy
 
 **Goal:** Enable agents to make autonomous decisions about where to run.
 
@@ -77,7 +77,7 @@ Igor v0 has completed **Phase 1 (Survival)**, implementing all core functionalit
 
 ---
 
-## Phase 3: Economics
+## Phase 4: Economics
 
 **Goal:** Implement cryptographic payment proofs and pricing mechanisms.
 
@@ -119,7 +119,7 @@ Igor v0 has completed **Phase 1 (Survival)**, implementing all core functionalit
 
 ---
 
-## Phase 4: Hardening
+## Phase 5: Hardening
 
 **Goal:** Production-grade reliability and security.
 
@@ -179,7 +179,7 @@ Igor v0 has completed **Phase 1 (Survival)**, implementing all core functionalit
 
 ---
 
-## Beyond Phase 4
+## Beyond Phase 5
 
 Potential future directions (not committed):
 
@@ -254,7 +254,7 @@ Igor v0 is **not ready for production** and may never be.
 
 ### Breaking Changes
 
-Phase 1 → Phase 2 may break:
+Phase 2 → Phase 3 may break:
 - Checkpoint format (add manifest)
 - Protocol messages (add capabilities)
 - CLI flags (restructure)
@@ -273,7 +273,7 @@ None. v0 is experimental. Things may be:
 
 ## Success Metrics
 
-### Phase 1 (Complete)
+### Phase 2 (Complete)
 
 - ✅ Agent runs on Node A
 - ✅ Agent checkpoints state
@@ -284,21 +284,21 @@ None. v0 is experimental. Things may be:
 
 **All 6 success criteria met.**
 
-### Phase 2 Goals
+### Phase 3 Goals
 
 - Agent autonomously chooses node
 - Agent evaluates node pricing
 - Agent migrates without human intervention
 - Multi-hop migration works reliably
 
-### Phase 3 Goals
+### Phase 4 Goals
 
 - Cryptographic payment receipts
 - Auditable execution costs
 - Competitive pricing market
 - Economic incentives aligned
 
-### Phase 4 Goals
+### Phase 5 Goals
 
 - Production-ready reliability
 - Security hardening complete
@@ -316,7 +316,7 @@ Igor development follows "done when it's done" philosophy:
 - Correctness over features
 - Learning over shipping
 
-Phase 2 begins when Phase 1 is validated through extended testing.
+Phase 3 begins when Phase 2 is validated through extended testing.
 
 ---
 
@@ -335,7 +335,7 @@ Igor v0 is experimental research software.
 - Performance optimizations (premature)
 - Production deployments (not ready)
 
-Focus: Validate Phase 1 before expanding scope.
+Focus: Validate Phase 2 before expanding scope.
 
 ---
 
@@ -343,21 +343,21 @@ Focus: Validate Phase 1 before expanding scope.
 
 ### Year 1: Proof of Concept
 
-- Complete Phases 1-2
+- Complete Phases 2-3
 - Validate autonomous migration
 - Run in research environments
 - Publish findings
 
 ### Year 2: Economics
 
-- Complete Phase 3
+- Complete Phase 4
 - Add payment infrastructure
 - Test with real economic incentives
 - Build small ecosystem
 
 ### Year 3: Hardening
 
-- Complete Phase 4
+- Complete Phase 5
 - Security audit
 - Production-grade reliability
 - Consider v1.0
@@ -411,9 +411,9 @@ Answers will inform future phases.
 
 ## Success Criteria for v0
 
-Igor v0 is **complete** when all Phase 1 tasks are done and validated.
+Igor v0 is **complete** when all Phase 2 tasks are done and validated.
 
-Phase 1 is **validated** when:
+Phase 2 is **validated** when:
 
 - Agents run for days without issues
 - Migration works reliably (>95% success)
@@ -421,18 +421,18 @@ Phase 1 is **validated** when:
 - No critical bugs remain
 - Documentation is comprehensive
 
-**Status: Phase 1 implemented, validation ongoing.**
+**Status: Phase 2 implemented, validation ongoing.**
 
 ---
 
 ## Next Immediate Steps
 
-With Phase 1 complete, the immediate focus is:
+With Phase 2 complete, the immediate focus is:
 
 1. **Extended testing** - Run agents for hours/days
 2. **Bug fixing** - Address issues found in testing
 3. **Documentation review** - Ensure accuracy
 4. **Community feedback** - Gather early user input
-5. **Phase 2 planning** - Design agent autonomy features
+5. **Phase 3 planning** - Design agent autonomy features
 
-**No new features until Phase 1 is validated.**
+**No new features until Phase 2 is validated.**

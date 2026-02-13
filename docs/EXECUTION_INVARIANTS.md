@@ -124,6 +124,36 @@ The target node resumes from the same committed checkpoint that the source node 
 
 ---
 
+## Normative Statements
+
+### Checkpoint Lineage as State Identity
+
+Checkpoint lineage defines canonical state identity.
+
+The ordered chain of committed checkpoints — from initial state through every subsequent checkpoint — constitutes the canonical history of an agent. Two execution histories with divergent checkpoint lineage are, by definition, different state identities. There is no mechanism to reconcile divergent lineage.
+
+### Ownership as Authority to Advance Lineage
+
+Ownership defines authority to advance checkpoint lineage.
+
+The right to produce new checkpoints — and thereby extend an agent's state identity — is held by exactly one node at any time. This right flows through the ownership lifecycle defined in [OWNERSHIP_AND_AUTHORITY.md](./OWNERSHIP_AND_AUTHORITY.md). No node may advance lineage without holding authority.
+
+### EI-11: Divergent Lineage Detection
+
+Conflicting ownership claims referencing divergent checkpoint digests for the same epoch MUST transition to RECOVERY_REQUIRED.
+
+If the runtime detects or infers that two nodes claim authority for the same agent identity and their claimed checkpoint states are not identical, this constitutes evidence of a lineage fork. The agent MUST immediately enter RECOVERY_REQUIRED state. No node may tick the agent until the fork is resolved and singular authority is re-established.
+
+**Rationale:** Divergent checkpoint digests under concurrent ownership claims are conclusive evidence that EI-1 (single active instance) or EI-3 (checkpoint lineage integrity) has been violated. The only safe response is to halt execution and require explicit recovery.
+
+---
+
+## Relationship to Specification Hierarchy
+
+This document is part of the constitutional specification layer defined by the [Runtime Constitution](./RUNTIME_CONSTITUTION.md). Constitutional invariants defined here are implemented by enforcement rules in [RUNTIME_ENFORCEMENT_INVARIANTS.md](./RUNTIME_ENFORCEMENT_INVARIANTS.md).
+
+---
+
 ## Invariant Summary
 
 | ID | Invariant | Category |
@@ -138,22 +168,12 @@ The target node resumes from the same committed checkpoint that the source node 
 | EI-8 | Migration must not produce concurrent ticking | Migration |
 | EI-9 | Migration may temporarily pause execution | Migration |
 | EI-10 | Migration must preserve checkpoint lineage | Migration |
-
----
-
-## Relationship to Existing Invariants
-
-This document formalizes execution-level invariants as conceptual contracts. The existing [INVARIANTS.md](./INVARIANTS.md) defines operational invariants (I1–I10) with enforcement status and detection mechanisms. The two documents are complementary:
-
-- **INVARIANTS.md** — operational invariants with implementation-level enforcement detail.
-- **EXECUTION_INVARIANTS.md** — formal specification of runtime identity, authority, and migration contracts.
-
-The invariants in this document are consistent with and extend the guarantees described in INVARIANTS.md. No conflicts exist between the two specifications.
+| EI-11 | Divergent lineage under conflicting ownership triggers RECOVERY_REQUIRED | Safety |
 
 ---
 
 ## Document Status
 
-**Type:** Phase 0 Runtime Specification
+**Type:** Constitutional Specification
 **Scope:** Conceptual contracts only — no wire formats, serialization, or cryptographic mechanisms.
-**Authority:** Normative for all future implementation of execution identity, authority, and migration behavior.
+**Authority:** Normative for all future implementation of execution identity, authority, and migration behavior. Part of the constitutional layer defined by [RUNTIME_CONSTITUTION.md](./RUNTIME_CONSTITUTION.md).

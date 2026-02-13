@@ -117,6 +117,24 @@ The source node MAY:
 
 ---
 
+## Lineage Fork Detection
+
+### MC-9: Divergent Checkpoint Detection During Migration
+
+Two ownership claims referencing divergent checkpoint digests for the same epoch MUST trigger RECOVERY_REQUIRED.
+
+If during migration — or at any point where authority state is being evaluated — the runtime observes that two nodes reference different checkpoint states for the same agent identity at the same logical point in the checkpoint chain, this constitutes evidence of a lineage fork. The agent MUST immediately enter RECOVERY_REQUIRED state.
+
+This rule applies regardless of migration phase:
+
+- During HANDOFF_INITIATED: if the source and target disagree on checkpoint state, migration MUST be aborted and the agent enters RECOVERY_REQUIRED.
+- During HANDOFF_PENDING: if the target's received checkpoint does not match the source's committed checkpoint, migration MUST be aborted and the agent enters RECOVERY_REQUIRED.
+- Post-migration: if a stale node claims authority with a divergent checkpoint, RECOVERY_REQUIRED is triggered per FS-4.
+
+**Rationale:** Checkpoint divergence is conclusive evidence that the single-instance or checkpoint lineage invariant has been violated. Migration must explicitly preserve checkpoint lineage (MC-3), authority uniqueness (MC-5), and the single-ticker guarantee (EI-1). Divergent digests indicate one or more of these has failed.
+
+---
+
 ## Failure Safety Matrix
 
 The following matrix defines invariant outcomes for migration failure scenarios. Each scenario specifies what MUST be true regardless of implementation, not how the failure is handled.
@@ -199,6 +217,6 @@ The failure safety matrix provides invariant outcomes for scenarios that exercis
 
 ## Document Status
 
-**Type:** Phase 0 Runtime Specification
+**Type:** Constitutional Specification
 **Scope:** Conceptual contracts only — no wire formats, serialization, or cryptographic mechanisms.
-**Authority:** Normative for all future implementation of agent migration behavior and failure recovery.
+**Authority:** Normative for all future implementation of agent migration behavior and failure recovery. Part of the constitutional layer defined by [RUNTIME_CONSTITUTION.md](./RUNTIME_CONSTITUTION.md).

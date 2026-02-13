@@ -417,4 +417,4 @@ tinygo build -o agent.wasm -target=wasi -no-debug .
 5. **Budget monotonically decreases** (no refunds in runtime)
 6. **State persists** through checkpoint/resume cycle
 
-See [INVARIANTS.md](./INVARIANTS.md) for complete list.
+See [RUNTIME_ENFORCEMENT_INVARIANTS.md](./RUNTIME_ENFORCEMENT_INVARIANTS.md) for enforcement invariants and [EXECUTION_INVARIANTS.md](./EXECUTION_INVARIANTS.md) for constitutional invariants.

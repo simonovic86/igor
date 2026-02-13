@@ -68,9 +68,9 @@ Igor v0 explicitly does **not** implement:
 
 These are out of scope by design.
 
-## Current Status (Phase 1 Complete)
+## Current Status (Phase 2 Complete)
 
-Igor v0 Phase 1 implements:
+Igor v0 Phase 2 implements:
 
 ✅ P2P networking with libp2p  
 ✅ WASM agent sandbox execution  
@@ -79,7 +79,7 @@ Igor v0 Phase 1 implements:
 ✅ Runtime rent metering and budget enforcement  
 ✅ Checkpoint storage abstraction  
 
-Phase 1 proves that **agents can survive and migrate autonomously**.
+Phase 2 proves that **agents can survive and migrate autonomously**.
 
 ## Technology Stack
 
@@ -134,5 +134,6 @@ go build -o bin/igord ./cmd/igord
 - [Migration Protocol](./MIGRATION_PROTOCOL.md) - How agents move between nodes
 - [Budget Model](./BUDGET_MODEL.md) - How agents pay for execution
 - [Security Model](./SECURITY_MODEL.md) - Sandbox and trust boundaries
-- [Invariants](./INVARIANTS.md) - System guarantees and constraints
+- [Runtime Constitution](./RUNTIME_CONSTITUTION.md) - Constitutional specification root
+- [Runtime Enforcement Invariants](./RUNTIME_ENFORCEMENT_INVARIANTS.md) - System guarantees and enforcement
 - [Roadmap](./ROADMAP.md) - Future development phases
