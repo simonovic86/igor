@@ -22,6 +22,12 @@
 
 ---
 
+## Phase 0 — Runtime Specification
+
+[✓] Phase 0 Runtime Invariant Specification
+
+---
+
 ## Phase 2 — Autonomy
 
 [ ] Task 6 — Agent manifest validation & capability enforcement
