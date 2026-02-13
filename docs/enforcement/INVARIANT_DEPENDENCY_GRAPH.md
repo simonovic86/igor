@@ -173,6 +173,74 @@ Every enforcement invariant (RE-*) traces to at least one constitutional invaria
 
 ---
 
+## Authority Lifecycle Expression
+
+The [Authority State Machine](../constitution/AUTHORITY_STATE_MACHINE.md) provides a formal operational model that expresses how the constitutional invariants are maintained through state transitions and operational constraints.
+
+### Operationalization of Constitutional Invariants
+
+The authority state machine operationalizes the following foundational constitutional invariants:
+
+#### Single Active Ticker Law (EI-1)
+
+The state machine enforces EI-1 through:
+
+- **State singularity:** Exactly one node may occupy ACTIVE_OWNER state per agent identity at any time
+- **Tick permission restriction:** Only ACTIVE_OWNER permits tick execution; all other states forbid ticking
+- **Transition serialization:** Authority transfer progresses through HANDOFF_INITIATED → HANDOFF_PENDING → ACTIVE_OWNER (target), ensuring no overlap
+
+The tick permission matrix in the state machine codifies that ACTIVE_OWNER is the sole state allowing tick execution, directly implementing the at-most-one ticking instance guarantee.
+
+#### Authority Uniqueness per Epoch (EI-5, OA-2)
+
+The state machine enforces singular authority through:
+
+- **Explicit state definitions:** Five distinct states with clear authority semantics
+- **Forbidden transitions:** Multiple concurrent ACTIVE_OWNER states for the same identity are explicitly prohibited
+- **Recovery fencing:** ANY → RECOVERY_REQUIRED transition when authority ambiguity is detected
+
+The normative transition table ensures that authority flows through a single ordered progression, preventing concurrent authority claims.
+
+#### Safety-Over-Liveness Rule (EI-6)
+
+The state machine enforces safety-over-liveness through:
+
+- **HANDOFF_PENDING state:** A deliberate liveness gap where no node ticks, ensuring serialization
+- **RECOVERY_REQUIRED state:** A safety fence that halts all execution when authority cannot be determined
+- **Forbidden transition enforcement:** Invalid transitions trigger RECOVERY_REQUIRED rather than proceeding unsafely
+
+The state machine makes explicit that execution pauses (HANDOFF_PENDING, RECOVERY_REQUIRED) are acceptable when necessary to preserve invariants.
+
+#### Migration Ordering Constraints (MC-5, MC-6, MC-7, MC-8, OA-5)
+
+The state machine enforces migration serialization through:
+
+- **HANDOFF_INITIATED:** Source stops ticking but retains authority (MC-8)
+- **HANDOFF_PENDING:** Neither source nor target may tick (MC-7 prohibited activities)
+- **Sequential transitions:** Source relinquishes before target assumes (OA-5 transfer serialization)
+- **Tick permission matrix:** Explicitly forbids tick execution during preparation and handoff
+
+The forbidden transitions section explicitly prohibits skipping HANDOFF_PENDING, ensuring the serialization gap is preserved.
+
+### Relationship to Existing Documents
+
+The authority state machine does NOT introduce new invariants. It is a **formal expression** of constraints already defined in:
+
+- **[EXECUTION_INVARIANTS.md](../constitution/EXECUTION_INVARIANTS.md):** EI-1 (single active instance), EI-5 (singular authority), EI-6 (safety over liveness), EI-8 (migration single-instance preservation)
+- **[OWNERSHIP_AND_AUTHORITY.md](../constitution/OWNERSHIP_AND_AUTHORITY.md):** OA-2 (authority states), OA-3 (state transition rules), OA-5 (transfer serialization), OA-7 (conflicting authority resolution)
+- **[MIGRATION_CONTINUITY.md](../constitution/MIGRATION_CONTINUITY.md):** MC-5 (single-authority guarantee), MC-6/MC-7 (overlap constraints), MC-8 (source constraints)
+
+The state machine provides:
+
+- **Normative transition table:** Explicit enumeration of permitted transitions with preconditions and postconditions
+- **Forbidden transitions:** Explicit enumeration of prohibited transitions and their constitutional justifications
+- **Tick permission matrix:** Tabular representation of operational permissions per state
+- **ASCII state diagram:** Visual representation consistent with transition table
+
+This formalization improves specification clarity, traceability, and implementability without changing any invariant semantics.
+
+---
+
 ## Cross-Document Traceability
 
 ### Root Constitutional Invariants

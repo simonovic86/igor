@@ -2,6 +2,13 @@
 
 > **Specification cross-references:** [Spec Index](../SPEC_INDEX.md) | [Invariant Dependency Graph](../enforcement/INVARIANT_DEPENDENCY_GRAPH.md) | [Runtime Constitution](./RUNTIME_CONSTITUTION.md)
 
+**Spec Layer:** Constitutional (Phase 1)  
+**Stability:** High  
+**Breaking Changes Require:** RFC + spec version bump  
+**Related:** [SPEC_INDEX.md](../SPEC_INDEX.md), [INVARIANT_DEPENDENCY_GRAPH.md](../enforcement/INVARIANT_DEPENDENCY_GRAPH.md)
+
+---
+
 ## Purpose
 
 This document defines the foundational runtime invariants governing Igor agent execution. These are conceptual contracts specifying what the runtime MUST guarantee regardless of implementation strategy.

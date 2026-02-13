@@ -1,5 +1,12 @@
 # Runtime Constitution
 
+**Spec Layer:** Constitutional (Phase 1)  
+**Stability:** High  
+**Breaking Changes Require:** RFC + spec version bump  
+**Related:** [SPEC_INDEX.md](../SPEC_INDEX.md), [INVARIANT_DEPENDENCY_GRAPH.md](../enforcement/INVARIANT_DEPENDENCY_GRAPH.md)
+
+---
+
 ## Purpose
 
 This document is the constitutional specification root for the Igor runtime. It declares the non-negotiable guarantees that define Igor as a continuity-preserving execution substrate for autonomous agents.

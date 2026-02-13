@@ -2,6 +2,13 @@
 
 > **Specification cross-references:** [Spec Index](../SPEC_INDEX.md) | [Invariant Dependency Graph](../enforcement/INVARIANT_DEPENDENCY_GRAPH.md) | [Runtime Constitution](./RUNTIME_CONSTITUTION.md)
 
+**Spec Layer:** Constitutional (Phase 1)  
+**Stability:** High  
+**Breaking Changes Require:** RFC + spec version bump  
+**Related:** [SPEC_INDEX.md](../SPEC_INDEX.md), [INVARIANT_DEPENDENCY_GRAPH.md](../enforcement/INVARIANT_DEPENDENCY_GRAPH.md)
+
+---
+
 ## Purpose
 
 This document defines the authority lifecycle model governing Igor agent execution identity. It formalizes agent identity, authority states, authority transfer rules, and conflict resolution semantics.
