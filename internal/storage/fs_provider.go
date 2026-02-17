@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 )
 
 // FSProvider implements Provider using the local filesystem.
@@ -13,6 +14,8 @@ type FSProvider struct {
 	baseDir string
 	logger  *slog.Logger
 }
+
+var validAgentIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 // NewFSProvider creates a new filesystem-based storage provider.
 // The baseDir will be created if it doesn't exist.
@@ -37,7 +40,10 @@ func (p *FSProvider) SaveCheckpoint(
 	agentID string,
 	state []byte,
 ) error {
-	checkpointPath := p.checkpointPath(agentID)
+	checkpointPath, pathErr := p.checkpointPath(agentID)
+	if pathErr != nil {
+		return pathErr
+	}
 	tempPath := checkpointPath + ".tmp"
 
 	// Write to temporary file
@@ -89,7 +95,10 @@ func (p *FSProvider) LoadCheckpoint(
 	ctx context.Context,
 	agentID string,
 ) ([]byte, error) {
-	checkpointPath := p.checkpointPath(agentID)
+	checkpointPath, pathErr := p.checkpointPath(agentID)
+	if pathErr != nil {
+		return nil, pathErr
+	}
 
 	data, err := os.ReadFile(checkpointPath)
 	if err != nil {
@@ -113,7 +122,10 @@ func (p *FSProvider) DeleteCheckpoint(
 	ctx context.Context,
 	agentID string,
 ) error {
-	checkpointPath := p.checkpointPath(agentID)
+	checkpointPath, pathErr := p.checkpointPath(agentID)
+	if pathErr != nil {
+		return pathErr
+	}
 
 	err := os.Remove(checkpointPath)
 	if err != nil && !os.IsNotExist(err) {
@@ -124,7 +136,18 @@ func (p *FSProvider) DeleteCheckpoint(
 	return nil
 }
 
+func validateAgentID(agentID string) error {
+	if !validAgentIDPattern.MatchString(agentID) {
+		return fmt.Errorf("invalid agent_id %q", agentID)
+	}
+	return nil
+}
+
 // checkpointPath returns the filesystem path for an agent's checkpoint.
-func (p *FSProvider) checkpointPath(agentID string) string {
-	return filepath.Join(p.baseDir, agentID+".checkpoint")
+func (p *FSProvider) checkpointPath(agentID string) (string, error) {
+	if err := validateAgentID(agentID); err != nil {
+		return "", err
+	}
+
+	return filepath.Join(p.baseDir, agentID+".checkpoint"), nil
 }
