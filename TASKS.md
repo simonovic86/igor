@@ -1,5 +1,11 @@
 # Igor Development Tasks
 
+## Phase 0 — Threat Model Formalization
+
+[✓] Phase 0 Threat Model Formalization
+
+---
+
 ## Phase 1 — Runtime Constitution
 
 [✓] Runtime Invariant Specification

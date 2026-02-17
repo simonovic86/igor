@@ -2,49 +2,59 @@
 
 ## Overview
 
-Igor v0 implements a **minimal viable security model** focused on sandbox isolation and basic trust boundaries. Perfect security is explicitly not required in v0.
+Igor v0 implements a **minimal viable security model** focused on sandbox isolation, runtime resource bounding, and explicit limitation disclosure. Perfect security is explicitly not required in v0.
 
-## Threat Model
+## Canonical Threat Assumptions
 
-### What Igor Protects Against
+See [THREAT_MODEL.md](./THREAT_MODEL.md) for canonical threat assumptions, including:
 
-1. **Malicious Agents**
-   - Cannot escape WASM sandbox
-   - Cannot access host filesystem
-   - Cannot make network calls
-   - Cannot consume unlimited resources
+- system model and failure classes
+- adversary classes (A1-A4)
+- network assumptions
+- trust assumptions
+- security goals and non-goals
 
-2. **Resource Exhaustion**
-   - Memory capped at 64MB per agent
-   - Execution timeout at 100ms per tick
-   - Budget enforcement prevents infinite execution
+This document focuses on **current mechanisms** and **current limitations** under those assumptions.
 
-### What Igor Does NOT Protect Against
+## Current Protection Scope
 
-1. **Malicious Nodes**
-   - Nodes can lie about execution time
-   - Nodes can steal agent state
-   - Nodes can refuse to forward migrations
-   - Nodes can ignore budget limits
+### What Igor v0 Actively Enforces
 
-2. **Network Attacks**
-   - No authentication between peers
-   - No transport encryption (relies on libp2p)
-   - No DoS protection
-   - No rate limiting
+1. **Agent containment**
+   - WASM sandbox isolation via wazero
+   - No direct host filesystem/network capability in guest code
 
-3. **Data Integrity**
-   - No cryptographic verification of checkpoints
-   - No proof of execution
-   - No tamper detection
+2. **Resource bounding**
+   - Memory capped per agent
+   - Tick timeout enforced
+   - Budget-gated execution
 
-**Assumption:** Igor v0 operates in semi-trusted environments (development, research, friendly networks).
+3. **Operational fail-fast behavior**
+   - Runtime surfaces errors directly
+   - Agent termination on unrecoverable execution failures
+
+### What Igor v0 Does Not Defend Against
+
+1. **Malicious node resistance**
+   - Nodes may lie about metering
+   - Nodes may inspect/tamper with plaintext state they host
+   - Nodes may refuse migration cooperation
+
+2. **Strong economic integrity**
+   - No fraud-proof metering
+   - No cryptographic payment verification
+   - No dispute resolution rails
+
+3. **Hostile-public-network hardening**
+   - No robust DoS/rate-limit framework
+   - No reputation- or policy-based peer exclusion framework
+   - No application-layer authorization model beyond current protocol checks
 
 ## Sandbox Boundaries
 
 ### WASM Sandbox (wazero)
 
-**Enforced by runtime:**
+**Runtime constraints in v0:**
 
 ```go
 config := wazero.NewRuntimeConfig().
@@ -52,348 +62,200 @@ config := wazero.NewRuntimeConfig().
     WithCloseOnContextDone(true)
 ```
 
-**Capabilities disabled:**
-- Filesystem access (read/write)
-- Network sockets
-- System calls beyond WASI
-- Raw memory access outside linear memory
+**Guest capabilities effectively unavailable by default runtime integration:**
+- Host filesystem access
+- Arbitrary host networking
+- Host process memory access
 
-**Capabilities enabled:**
-- Linear memory (64MB max)
-- Stack operations
-- Local variables
-- Stdout/stderr (logged)
+**Guest capabilities used:**
+- WASM linear memory
+- Lifecycle export invocation
+- Stdout/stderr output (captured by runtime logging)
 
-### Execution Limits
+## Execution Limits
 
-**Tick Timeout:**
+### Tick Timeout
+
 ```go
 tickCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 defer cancel()
 ```
 
-**Result:**
-- Agent tick must complete in 100ms
-- Context cancellation if exceeded
-- Prevents infinite loops
-- Prevents CPU hogging
+### Memory Limit
 
-**Memory Limit:**
 ```
 1024 pages × 64KB/page = 64MB
 ```
 
-**Result:**
-- Agent cannot allocate beyond 64MB
-- Out-of-memory panics caught by runtime
-- Prevents memory exhaustion
+### Budget Gate
+
+Execution is bounded by budget exhaustion behavior at runtime.
 
 ## Trust Boundaries
 
-### Agents Trust Nodes For:
+### Local Trust Domain
 
-- Executing code correctly
-- Metering honestly
-- Facilitating migration
-- Preserving checkpoints temporarily
+Locally, the runtime assumes:
+- node process control flow is not actively subverted
+- local operator controls deployment/configuration
+- local persistence behaves according to local failure classes
 
-**Mitigation (future):**
-- Cryptographic receipts
-- Redundant execution
-- Checkpoint verification
+### Untrusted Domain
 
-### Nodes Trust Agents For:
-
-- Paying for execution (budget enforcement)
-- Not attacking runtime (sandbox enforcement)
-- Cooperating with migration (lifecycle compliance)
-
-**Mitigation (current):**
-- WASM sandbox isolation
-- Resource limits
-- Timeout enforcement
-
-### Peers Do Not Trust Each Other
-
-- No peer authentication (relies on libp2p peer ID)
-- No transport-level encryption (libp2p provides this)
-- No reputation system
-- No coordination requirements
+The runtime does **not** assume trust in:
+- remote peers
+- remote authority claims
+- remote metering claims
+- remote checkpoint custody
+- network timing/order behavior
 
 ## Isolation Mechanisms
 
 ### Process Isolation
 
-Each Igor node runs in its own process:
-- Separate memory space
-- Separate filesystem namespace
-- No shared state between nodes
+Each node runs as a separate process with its own local resources.
 
 ### Agent Isolation
 
-Agents are isolated from:
-- Host filesystem
-- Host network
-- Other agents
-- Node internals
-
-Agents communicate only through:
-- WASM exports (lifecycle functions)
-- Stdout/stderr (logged)
+Each agent executes in isolated WASM module context with bounded resources.
 
 ### State Isolation
 
-Each agent has:
-- Private WASM linear memory
-- Private checkpoint storage
-- Private budget accounting
-- No shared state
+Checkpoint files are separated by agent ID pathing at storage layer.
 
-## Attack Vectors
+## Attack Surface and Current Limits
 
-### Agent → Node Attacks
+### Agent -> Node
 
-**Possible:**
-- CPU consumption (mitigated: 100ms timeout)
-- Memory exhaustion (mitigated: 64MB limit)
-- Budget depletion (intended behavior)
+**Mitigated in v0:**
+- unbounded CPU loop behavior (timeout)
+- unbounded guest memory growth (memory cap)
+- direct host capability use (sandbox boundary)
 
-**Not possible:**
-- Filesystem access (disabled)
-- Network access (disabled)
-- Escape sandbox (WASM isolation)
-- Affect other agents (process isolation)
+**Residual risk:**
+- high churn workload patterns that remain within configured bounds
 
-### Node → Agent Attacks
+### Node -> Agent
 
-**Possible:**
-- Steal agent state (node has full access)
-- Lie about metering (no verification)
-- Refuse migration (no enforcement)
-- Corrupt checkpoint (no integrity check)
+**Not mitigated in v0:**
+- state inspection by host
+- dishonest metering
+- refusal to cooperate in migration
+- local checkpoint tampering
 
-**Mitigation (v0):**
-- Choose trusted nodes
-- Verify migration manually
-- Check logs
+### Peer -> Peer
 
-**Mitigation (future):**
-- Cryptographic receipts
-- State encryption
-- Multi-node verification
+**Partially handled in v0:**
+- malformed payload rejection in handlers
 
-### Peer → Peer Attacks
-
-**Possible:**
-- Send malformed messages (gracefully rejected)
-- Flood with connections (no rate limiting)
-- Refuse cooperation (no penalties)
-
-**Mitigation (v0):**
-- Robust error handling
-- Close malformed streams
-- Continue operation
-
-**Mitigation (future):**
-- Peer reputation
-- Rate limiting
-- Connection throttling
+**Not robustly handled in v0:**
+- flooding/spam/resource pressure
+- strategic liveness griefing
 
 ## Checkpoint Security
 
-### Current Implementation
+### Current State
 
-Checkpoints are **not secured**:
+Checkpoints are plaintext and host-visible:
 
-- Stored in plaintext
-- No encryption
-- No integrity verification
-- No authentication
+- no encryption
+- no cryptographic integrity proof
+- no authenticated origin proof
 
-**Format:**
-```
-[budget:8][price:8][state:N]
-```
+This means host-level actors can read/alter/delete local checkpoint files.
 
-Anyone with filesystem access can:
-- Read agent state
-- Modify budget
-- Tamper with state
-- Delete checkpoints
+### Directional Future Work
 
-### Future Improvements
-
-Potential enhancements:
-
-1. **Encryption**
-   - Encrypt state with agent's key
-   - Only agent can decrypt
-   - Nodes cannot read state
-
-2. **Integrity**
-   - Hash or sign checkpoint
-   - Verify on load
-   - Detect tampering
-
-3. **Authentication**
-   - Agent signs checkpoint
-   - Node verifies signature
-   - Prevents checkpoint injection
-
-**Not implemented in v0.**
+Potential directions (not committed by this document):
+- state encryption
+- checkpoint integrity signing
+- authenticated checkpoint provenance
 
 ## Budget Security
 
-### Current Model
+### Current State
 
-Budget is **trusted accounting**:
+Budget accounting is trusted runtime accounting:
 
-- Nodes meter honestly (assumed)
-- No cryptographic proofs
-- No external verification
-- No audit trail
+- no cryptographic receipts in v0
+- no independent verification
+- no built-in fraud proofing
 
-**Vulnerabilities:**
-- Node can overcharge
-- Node can undercharge
-- No proof of consumption
-- No dispute resolution
+### Directional Future Work
 
-### Future Improvements
-
-1. **Cryptographic Receipts**
-   - Node signs execution time
-   - Agent verifies signature
-   - Third-party auditable
-
-2. **Payment Channels**
-   - Off-chain micropayments
-   - Periodic settlement
-   - Fraud proofs
-
-3. **Multi-Node Verification**
-   - Multiple nodes execute same agent
-   - Compare results
-   - Detect dishonest metering
-
-**Not implemented in v0.**
+Potential directions (not committed by this document):
+- signed execution receipts
+- verifiable accounting proofs
+- external settlement/dispute integration
 
 ## Identity and Authentication
 
-### Current Implementation
+### Current State
 
-**Node Identity:**
-- libp2p peer ID (cryptographic)
-- Derived from keypair
-- Not persistent across restarts
+**Node identity:**
+- libp2p peer identity primitives are used by transport layer
 
-**Agent Identity:**
-- String AgentID only
-- No cryptographic identity
-- No signatures
-- No access control
-
-### What's Missing
-
-Agents do not have:
-- Cryptographic keypair
-- Signing capability
-- Identity verification
-- Access control lists
-
-This is a known limitation of v0.
+**Agent identity:**
+- runtime agent IDs are string identifiers in current implementation
+- no full cryptographic identity lifecycle enforcement in v0
 
 ## Network Security
 
-### libp2p Security
+### Transport Baseline
 
-Igor inherits libp2p's security properties:
+Igor relies on libp2p transport defaults for channel security properties provided by that stack.
 
-- **Transport encryption** - Noise protocol by default
-- **Peer authentication** - Peer IDs are cryptographic
-- **Protocol negotiation** - Multistream-select
+### Remaining Gaps
 
-### What's NOT Protected
+v0 does not provide a complete application-layer security policy framework for:
+- authorization
+- anti-DoS controls
+- anti-replay economics
 
-- **No authorization** - Any peer can migrate agents
-- **No rate limiting** - Peers can flood requests
-- **No DoS protection** - Resource exhaustion possible
+## Operational Security Guidance
 
-## Operational Security
+### Appropriate Environments
 
-### Running Igor v0 Safely
+- local development
+- research/test networks
+- trusted operator environments
 
-**Development/Testing:**
-- Run on isolated networks
-- Use trusted peers only
-- Monitor resource consumption
-- Check logs frequently
+### Not Recommended
 
-**Not Recommended:**
-- Public internet deployment
-- Production workloads
-- Financial transactions
-- Sensitive data processing
-
-### Security Checklist
-
-Before deploying Igor v0:
-
-- [ ] Trusted network environment?
-- [ ] Known peer nodes?
-- [ ] Non-sensitive agent state?
-- [ ] Acceptable data loss risk?
-- [ ] Monitoring in place?
-
-If any answer is "No", **do not deploy**.
+- hostile public internet operation
+- production-critical workloads
+- sensitive data handling
+- value-critical financial operations
 
 ## Vulnerability Disclosure
 
-Igor v0 is **experimental software** with known security limitations.
+Igor v0 is experimental software with known limitations. Security reports should follow the repository security policy in [SECURITY.md](../../SECURITY.md).
 
-Expected vulnerabilities:
-- Budget manipulation
-- State tampering
-- Checkpoint corruption
-- Resource exhaustion
-- Network flooding
+## Future Security Roadmap (Directional)
 
-**This is acceptable for v0.** The goal is to prove autonomous agent survival, not to build a production system.
+### Phase 3 (Autonomy)
+- manifest/capability policy surfaces
 
-## Future Security Roadmap
+### Phase 4 (Economics)
+- receipt/signing-oriented economics controls
 
-Potential improvements beyond v0:
+### Phase 5 (Hardening)
+- stronger isolation
+- failure-recovery hardening
+- agent integrity/identity verification
 
-**Phase 3 (Autonomy):**
-- Agent manifest validation
-- Capability enforcement
-- Basic integrity checks
-
-**Phase 4 (Economics):**
-- Payment receipt signing
-- Cryptographic proofs
-- Basic fraud detection
-
-**Phase 5 (Hardening):**
-- State encryption
-- Checkpoint signing
-- Multi-party verification
-- Advanced sandbox hardening
-
-**Not committed.** Listed only as possibilities.
+These are roadmap directions, not guarantees.
 
 ## Security Philosophy
 
-Igor v0 follows a **pragmatic security approach**:
+Igor v0 prioritizes:
 
-1. **Sandbox first** - Prevent agent escape
-2. **Isolate resources** - Limit damage from bugs
-3. **Fail safely** - Errors terminate agents, not nodes
-4. **Log everything** - Auditable behavior
-5. **Accept limitations** - Don't pretend v0 is production-ready
+1. containment over complexity
+2. explicit limits over implied guarantees
+3. fail-stop safety behavior over optimistic liveness
+4. honest disclosure over production claims
 
-**Quote from PROJECT_CONTEXT.md:**
+From [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md):
 
 > "Perfect security is NOT required in v0."
 
-The focus is on proving the autonomous agent model works, not on production-grade security.

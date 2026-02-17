@@ -39,7 +39,8 @@ Runtime documents describe **HOW** Igor operates — implementation details, pro
 | [AGENT_LIFECYCLE.md](./runtime/AGENT_LIFECYCLE.md) | Agent development guide: lifecycle functions, building and deploying agents. | [RUNTIME_ENFORCEMENT_INVARIANTS](./enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md), [EXECUTION_INVARIANTS](./constitution/EXECUTION_INVARIANTS.md) |
 | [MIGRATION_PROTOCOL.md](./runtime/MIGRATION_PROTOCOL.md) | P2P migration protocol mechanics and message flows. | [MIGRATION_CONTINUITY](./constitution/MIGRATION_CONTINUITY.md) |
 | [BUDGET_MODEL.md](./runtime/BUDGET_MODEL.md) | Economic model, execution metering, and budget enforcement. | [RUNTIME_ENFORCEMENT_INVARIANTS](./enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md) |
-| [SECURITY_MODEL.md](./runtime/SECURITY_MODEL.md) | Threat model, sandbox constraints, and trust boundaries. | — |
+| [THREAT_MODEL.md](./runtime/THREAT_MODEL.md) | Canonical runtime threat assumptions: system/failure model, adversary classes, network assumptions, and trust boundaries. | [SECURITY_MODEL](./runtime/SECURITY_MODEL.md), [EXECUTION_INVARIANTS](./constitution/EXECUTION_INVARIANTS.md), [MIGRATION_CONTINUITY](./constitution/MIGRATION_CONTINUITY.md) |
+| [SECURITY_MODEL.md](./runtime/SECURITY_MODEL.md) | Current security mechanisms and explicit limitations under the threat assumptions. | [THREAT_MODEL](./runtime/THREAT_MODEL.md) |
 
 ---
 
