@@ -13,6 +13,7 @@
 [✓] Documentation authority-layer reorganization
 [✓] Documentation enforcement layer separation and specification traceability index
 [✓] Authority state machine and constitutional lifecycle formalization
+[ ] Single Active Authority — Formal Property Definition
 
 ---
 

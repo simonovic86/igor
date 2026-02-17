@@ -79,9 +79,11 @@ The agent identity on the target node is identical to the agent identity on the 
 
 ### MC-5: Single-Authority Guarantee
 
-Migration MUST maintain the single-authority guarantee at all times.
+Migration MUST maintain the single-authority guarantee as defined by the **Single Active Authority — Formal Property** in [RUNTIME_CONSTITUTION.md](./RUNTIME_CONSTITUTION.md).
 
-At no point during migration may two nodes simultaneously hold execution authority for the same agent identity. Authority transfer is serialized: the source relinquishes before the target assumes.
+For honest nodes, at no point during migration may two nodes simultaneously hold execution authority for the same agent identity and epoch. Authority transfer is serialized: the source relinquishes before the target assumes.
+
+Under partition or Byzantine behavior, Igor's safety posture remains fail-stop on ambiguity; this specification does not imply guaranteed global uniqueness under permanent communication loss or malicious duplicate execution.
 
 **Relationship:** Enforces EI-1 (single active instance), EI-5 (singular authority), and OA-5 (transfer serialization).
 
@@ -154,7 +156,7 @@ The following matrix defines invariant outcomes for migration failure scenarios.
 
 **Invariant outcomes:**
 
-- At most one node may tick the agent after recovery.
+- At most one honest node may tick the agent after recovery.
 - The last committed checkpoint from the verified authority chain is the recovery anchor.
 - If the source crashed after relinquishing authority but the target did not confirm assumption, the agent enters RECOVERY_REQUIRED state.
 - If the source crashed before relinquishing authority, the source retains authority upon restart and may resume from its last committed checkpoint.
@@ -170,7 +172,7 @@ The following matrix defines invariant outcomes for migration failure scenarios.
 - Neither node may assume the transfer completed unless it received explicit confirmation.
 - If the source cannot confirm target assumption, the agent enters RECOVERY_REQUIRED state.
 - If the target cannot confirm source retirement, the target MUST NOT begin ticking until authority is unambiguously resolved.
-- A partition MUST NOT cause both nodes to independently resume ticking.
+- A partition MUST NOT cause both honest nodes to independently resume ticking.
 - The last committed checkpoint remains the recovery anchor.
 - Liveness may be lost for the duration of the partition — this is acceptable per safety-over-liveness (EI-6).
 
@@ -180,7 +182,7 @@ The following matrix defines invariant outcomes for migration failure scenarios.
 
 **Invariant outcomes:**
 
-- At most one migration may proceed for a given agent identity at any time.
+- At most one migration may proceed in the honest authority chain for a given agent identity at any time.
 - Concurrent migration attempts MUST be serialized or rejected.
 - A second migration request while the agent is in HANDOFF_INITIATED or HANDOFF_PENDING state MUST be refused.
 - No migration attempt may bypass the authority lifecycle.
@@ -219,6 +221,7 @@ This document operationalizes migration-specific guarantees defined in:
 
 - **[EXECUTION_INVARIANTS.md](./EXECUTION_INVARIANTS.md)** — EI-1 (single instance), EI-6 (safety over liveness), EI-8 through EI-10 (migration invariants).
 - **[OWNERSHIP_AND_AUTHORITY.md](./OWNERSHIP_AND_AUTHORITY.md)** — Authority lifecycle states and transfer serialization rules.
+- **[RUNTIME_CONSTITUTION.md](./RUNTIME_CONSTITUTION.md)** — Single Active Authority formal property and adversary-qualified authority scope.
 
 The failure safety matrix provides invariant outcomes for scenarios that exercise these contracts under adverse conditions.
 

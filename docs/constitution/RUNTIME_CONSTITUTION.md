@@ -52,6 +52,92 @@ These two concepts are independent:
 
 ---
 
+## Single Active Authority — Formal Property
+
+This section clarifies the constitutional "single active authority" property under explicit adversary and failure assumptions from [THREAT_MODEL.md](../runtime/THREAT_MODEL.md). It does not change migration ordering, checkpoint semantics, epoch advancement semantics, or cryptographic assumptions.
+
+### 1. Definitions
+
+**Authority Instance**
+
+A node currently permitted to execute agent code under a valid ownership envelope and epoch.
+
+**Active Execution**
+
+A runtime state in which:
+
+- Agent code is being executed.
+- The node considers itself authoritative.
+- The node may advance state or epoch.
+
+**Authority Epoch**
+
+A strictly monotonic logical version of ownership as defined by envelope supersession rules.
+
+### 2. Property Statement — Adversary Qualified
+
+#### Under A1 (Crash-Only, Honest Nodes)
+
+At most one Authority Instance exists globally at any time for a given Authority Epoch.
+
+If crashes occur:
+
+- No two honest nodes will concurrently execute the same epoch.
+- Restarted nodes must respect persisted envelope and epoch monotonicity rules.
+
+#### Under F4 (Network Partition)
+
+Igor guarantees:
+
+- No two honest nodes may both legally claim authoritative execution of the same epoch without violating envelope monotonicity.
+
+Igor does NOT guarantee:
+
+- Global uniqueness under permanent partition.
+- Immediate visibility of authority changes during communication loss.
+
+Temporary split-brain visibility may occur. Convergence requires network communication.
+
+#### Under F5 (Message Delay / Duplication / Reordering)
+
+Igor guarantees:
+
+- Honest nodes treat stale, delayed, duplicated, or reordered ownership envelopes as non-authoritative when they are superseded by higher valid epochs.
+- Honest nodes do not regress accepted epoch because of delayed or duplicate delivery.
+
+Igor does NOT guarantee:
+
+- Bounded propagation delay for authority changes.
+- Immediate global agreement after message disturbances.
+
+#### Under A2 (Byzantine Node)
+
+Igor does NOT guarantee prevention of malicious duplicate execution by a Byzantine node.
+
+Igor guarantees only:
+
+- Honest nodes will not accept conflicting authority envelopes if epoch monotonicity and supersession rules are respected.
+- Byzantine behavior cannot force honest nodes to regress epoch.
+
+### 3. Fork Classification
+
+| Fork Type | Definition | Prevented | Detectable | Out of Scope |
+|----------|------------|:---------:|:----------:|:------------:|
+| **Illegal Fork** | Two honest nodes executing the same epoch under valid envelopes. | Yes (under A1 assumptions) | Yes | No |
+| **Byzantine Fork** | A malicious node executing despite revocation or supersession. | No | Partially (through conflicting claims and lineage evidence) | Malicious prevention is out of scope in v0 |
+| **Partition Fork** | Concurrent execution caused by temporary communication loss. | Not globally preventable under F4 | Yes, after communication restores | Permanent-partition global uniqueness is out of scope |
+
+### 4. Convergence Property
+
+If the network eventually reconnects and no Byzantine node controls all reachable peers:
+
+- Honest nodes must converge to the highest valid epoch envelope.
+- Lower epoch envelopes must be considered superseded.
+
+This statement defines a constitutional property expectation only. It does not define a consensus algorithm.
+
+---
+
 ## Constitutional Specification Documents
 
 The constitutional invariants are defined across three normative specification documents. Together with this document, they form the constitutional layer of the Igor specification.
