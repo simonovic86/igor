@@ -37,10 +37,10 @@ Run the node manually:
 ### Execution model
 Agents export 5 WASM functions: `agent_init`, `agent_tick`, `agent_checkpoint`, `agent_checkpoint_ptr`, `agent_resume`. TinyGo agents provide `malloc` automatically. The runtime drives a 1 Hz tick loop. Each tick is budgeted: `cost = elapsed_seconds × price_per_second`. Checkpoints save every 5 seconds. Tick timeout: 100ms.
 
-### Checkpoint format v1 (binary, little-endian)
-`[version: 1 byte (0x01)][budget: 8 bytes int64 microcents][pricePerSecond: 8 bytes int64 microcents][agent state: N bytes]`
+### Checkpoint format v2 (binary, little-endian)
+`[version: 1 byte (0x02)][budget: 8 bytes int64 microcents][pricePerSecond: 8 bytes int64 microcents][tickNumber: 8 bytes uint64][agent state: N bytes]`
 
-Header is 17 bytes. Budget uses int64 microcents (1 currency unit = 1,000,000 microcents).
+Header is 25 bytes. Budget uses int64 microcents (1 currency unit = 1,000,000 microcents). v1 checkpoints (17-byte header, no tickNumber) are still loadable for backward compatibility.
 
 Atomic writes via temp file → fsync → rename.
 

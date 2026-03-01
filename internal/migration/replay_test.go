@@ -235,3 +235,78 @@ func TestExtractAgentState_WrongVersion(t *testing.T) {
 		t.Error("expected error for wrong version")
 	}
 }
+
+func TestExtractAgentState_V2(t *testing.T) {
+	state := []byte{0xDE, 0xAD, 0xBE, 0xEF}
+	// v2: [0x02][budget:8][price:8][tickNumber:8][state:4]
+	checkpoint := make([]byte, 25+len(state))
+	checkpoint[0] = 0x02
+	binary.LittleEndian.PutUint64(checkpoint[1:9], 500000)
+	binary.LittleEndian.PutUint64(checkpoint[9:17], 1000)
+	binary.LittleEndian.PutUint64(checkpoint[17:25], 42) // tickNumber=42
+	copy(checkpoint[25:], state)
+
+	extracted, err := agent.ExtractAgentState(checkpoint)
+	if err != nil {
+		t.Fatalf("ExtractAgentState v2: %v", err)
+	}
+	if len(extracted) != 4 {
+		t.Errorf("extracted length: got %d, want 4", len(extracted))
+	}
+	if extracted[0] != 0xDE || extracted[3] != 0xEF {
+		t.Errorf("extracted data mismatch")
+	}
+}
+
+func TestParseCheckpointHeader_V1(t *testing.T) {
+	state := []byte{0x01, 0x02}
+	checkpoint := make([]byte, 17+len(state))
+	checkpoint[0] = 0x01
+	binary.LittleEndian.PutUint64(checkpoint[1:9], 5000000)
+	binary.LittleEndian.PutUint64(checkpoint[9:17], 10000)
+	copy(checkpoint[17:], state)
+
+	budgetVal, price, tick, s, err := agent.ParseCheckpointHeader(checkpoint)
+	if err != nil {
+		t.Fatalf("ParseCheckpointHeader v1: %v", err)
+	}
+	if budgetVal != 5000000 {
+		t.Errorf("budget: got %d, want 5000000", budgetVal)
+	}
+	if price != 10000 {
+		t.Errorf("price: got %d, want 10000", price)
+	}
+	if tick != 0 {
+		t.Errorf("tick: got %d, want 0 (v1 default)", tick)
+	}
+	if len(s) != 2 || s[0] != 0x01 || s[1] != 0x02 {
+		t.Errorf("state mismatch: got %v", s)
+	}
+}
+
+func TestParseCheckpointHeader_V2(t *testing.T) {
+	state := []byte{0xAA, 0xBB}
+	checkpoint := make([]byte, 25+len(state))
+	checkpoint[0] = 0x02
+	binary.LittleEndian.PutUint64(checkpoint[1:9], 7000000)
+	binary.LittleEndian.PutUint64(checkpoint[9:17], 20000)
+	binary.LittleEndian.PutUint64(checkpoint[17:25], 99)
+	copy(checkpoint[25:], state)
+
+	budgetVal, price, tick, s, err := agent.ParseCheckpointHeader(checkpoint)
+	if err != nil {
+		t.Fatalf("ParseCheckpointHeader v2: %v", err)
+	}
+	if budgetVal != 7000000 {
+		t.Errorf("budget: got %d, want 7000000", budgetVal)
+	}
+	if price != 20000 {
+		t.Errorf("price: got %d, want 20000", price)
+	}
+	if tick != 99 {
+		t.Errorf("tick: got %d, want 99", tick)
+	}
+	if len(s) != 2 || s[0] != 0xAA || s[1] != 0xBB {
+		t.Errorf("state mismatch: got %v", s)
+	}
+}

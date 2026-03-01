@@ -326,16 +326,17 @@ func TestCheckpointAndResume(t *testing.T) {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 
-	// Verify checkpoint v1 format: [version:1][budget:8][pricePerSecond:8][state:...]
-	if len(rawCheckpoint) < 17 {
+	// Verify checkpoint v2 format: [version:1][budget:8][pricePerSecond:8][tickNumber:8][state:...]
+	if len(rawCheckpoint) < 25 {
 		t.Fatalf("checkpoint too short: %d bytes", len(rawCheckpoint))
 	}
-	if rawCheckpoint[0] != 0x01 {
-		t.Fatalf("checkpoint version: got %d, want 1", rawCheckpoint[0])
+	if rawCheckpoint[0] != 0x02 {
+		t.Fatalf("checkpoint version: got %d, want 2", rawCheckpoint[0])
 	}
 
 	storedBudget := int64(binary.LittleEndian.Uint64(rawCheckpoint[1:9]))
 	storedPrice := int64(binary.LittleEndian.Uint64(rawCheckpoint[9:17]))
+	storedTick := binary.LittleEndian.Uint64(rawCheckpoint[17:25])
 
 	if storedBudget != savedBudget {
 		t.Errorf("stored budget: got %d, want %d", storedBudget, savedBudget)
@@ -343,9 +344,12 @@ func TestCheckpointAndResume(t *testing.T) {
 	if storedPrice != priceMicrocents {
 		t.Errorf("stored price: got %d, want %d", storedPrice, priceMicrocents)
 	}
+	if storedTick != 3 {
+		t.Errorf("stored tick number: got %d, want 3", storedTick)
+	}
 
 	// State portion should be 8 bytes (uint64 counter)
-	state := rawCheckpoint[17:]
+	state := rawCheckpoint[25:]
 	if len(state) != 8 {
 		t.Errorf("state size: got %d, want 8", len(state))
 	}
@@ -353,6 +357,60 @@ func TestCheckpointAndResume(t *testing.T) {
 	counter := binary.LittleEndian.Uint64(state)
 	if counter != 3 {
 		t.Errorf("counter in checkpoint: got %d, want 3", counter)
+	}
+}
+
+func TestLoadCheckpointFromStorage_V1Backward(t *testing.T) {
+	wasmPath := buildTestAgent(t)
+	ctx := context.Background()
+	logger := newTestLogger()
+
+	engine, err := runtime.NewEngine(ctx, logger)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+	defer engine.Close(ctx)
+
+	storageProvider, err := storage.NewFSProvider(t.TempDir(), logger)
+	if err != nil {
+		t.Fatalf("NewFSProvider: %v", err)
+	}
+
+	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-v1-compat", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, logger)
+	if err != nil {
+		t.Fatalf("LoadAgent: %v", err)
+	}
+	defer instance.Close(ctx)
+
+	if err := instance.Init(ctx); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	// Build a v1 checkpoint manually: [0x01][budget:8][price:8][state:8]
+	agentState := make([]byte, 8)
+	binary.LittleEndian.PutUint64(agentState, 5) // counter=5
+	v1checkpoint := make([]byte, 17+len(agentState))
+	v1checkpoint[0] = 0x01
+	binary.LittleEndian.PutUint64(v1checkpoint[1:9], uint64(budget.FromFloat(5.0)))
+	binary.LittleEndian.PutUint64(v1checkpoint[9:17], uint64(budget.FromFloat(0.01)))
+	copy(v1checkpoint[17:], agentState)
+
+	// Save the raw v1 checkpoint directly to storage
+	if err := storageProvider.SaveCheckpoint(ctx, "test-v1-compat", v1checkpoint); err != nil {
+		t.Fatalf("SaveCheckpoint: %v", err)
+	}
+
+	// Load v1 checkpoint — must succeed and TickNumber must default to 0
+	if err := instance.LoadCheckpointFromStorage(ctx); err != nil {
+		t.Fatalf("LoadCheckpointFromStorage v1: %v", err)
+	}
+
+	if instance.TickNumber != 0 {
+		t.Errorf("v1 backward compat: TickNumber should be 0, got %d", instance.TickNumber)
+	}
+	if instance.Budget != budget.FromFloat(5.0) {
+		t.Errorf("v1 backward compat: budget got %d, want %d", instance.Budget, budget.FromFloat(5.0))
 	}
 }
 
