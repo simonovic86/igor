@@ -19,9 +19,11 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/simonovic86/igor/internal/agent"
+	"github.com/simonovic86/igor/internal/replay"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
 	"github.com/simonovic86/igor/pkg/budget"
+	"github.com/simonovic86/igor/pkg/manifest"
 	protomsg "github.com/simonovic86/igor/pkg/protocol"
 )
 
@@ -33,6 +35,7 @@ type Service struct {
 	host            host.Host
 	runtimeEngine   *runtime.Engine
 	storageProvider storage.Provider
+	replayEngine    *replay.Engine
 	logger          *slog.Logger
 
 	// Active agents running on this node.
@@ -52,6 +55,7 @@ func NewService(
 		host:            h,
 		runtimeEngine:   engine,
 		storageProvider: storage,
+		replayEngine:    replay.NewEngine(logger),
 		logger:          logger,
 		activeAgents:    make(map[string]*agent.Instance),
 	}
@@ -139,6 +143,27 @@ func (s *Service) MigrateAgent(
 		ManifestData:   manifestData,
 		Budget:         budgetVal,
 		PricePerSecond: pricePerSecond,
+	}
+
+	// Include replay verification data from the active instance (if available).
+	// The staleness guard in replayDataFromInstance ensures the replay data
+	// corresponds to the checkpoint we're sending.
+	s.mu.RLock()
+	instance, hasInstance := s.activeAgents[agentID]
+	s.mu.RUnlock()
+	if hasInstance {
+		pkg.ReplayData = replayDataFromInstance(instance, checkpoint)
+		if pkg.ReplayData != nil {
+			s.logger.Info("Replay data included in migration package",
+				"agent_id", agentID,
+				"tick", pkg.ReplayData.TickNumber,
+				"entries", len(pkg.ReplayData.Entries),
+			)
+		} else {
+			s.logger.Info("No replay data available for migration package",
+				"agent_id", agentID,
+			)
+		}
 	}
 
 	transfer := protomsg.AgentTransfer{
@@ -229,6 +254,17 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		"price_per_second", budget.Format(pkg.PricePerSecond),
 	)
 
+	// Replay verification: verify checkpoint integrity before accepting (CM-4)
+	if pkg.ReplayData != nil {
+		if reject := s.verifyMigrationReplay(ctx, stream, &pkg); reject {
+			return
+		}
+	} else {
+		s.logger.Info("No replay data in package, skipping verification",
+			"agent_id", pkg.AgentID,
+		)
+	}
+
 	// Save checkpoint to storage
 	if err := s.storageProvider.SaveCheckpoint(ctx, pkg.AgentID, pkg.Checkpoint); err != nil {
 		s.logger.Error("Failed to save checkpoint", "error", err)
@@ -310,6 +346,81 @@ func (s *Service) sendStartConfirmation(
 	if err := encoder.Encode(started); err != nil {
 		s.logger.Error("Failed to send confirmation", "error", err)
 	}
+}
+
+// verifyMigrationReplay replays the last tick from the migration package and
+// verifies the result matches the checkpoint. Returns true if migration should
+// be rejected (verification failed or errored).
+func (s *Service) verifyMigrationReplay(
+	ctx context.Context,
+	stream io.Writer,
+	pkg *protomsg.AgentPackage,
+) bool {
+	s.logger.Info("Performing replay verification",
+		"agent_id", pkg.AgentID,
+		"tick", pkg.ReplayData.TickNumber,
+		"entries", len(pkg.ReplayData.Entries),
+	)
+
+	// Parse manifest for replay engine
+	capManifest, err := manifest.ParseCapabilityManifest(pkg.ManifestData)
+	if err != nil {
+		s.logger.Error("Failed to parse manifest for replay", "error", err)
+		s.sendStartConfirmation(stream, pkg.AgentID, false,
+			fmt.Sprintf("replay verification failed: invalid manifest: %v", err))
+		return true
+	}
+
+	// Extract post-tick state from checkpoint
+	postTickState, err := agent.ExtractAgentState(pkg.Checkpoint)
+	if err != nil {
+		s.logger.Error("Invalid checkpoint for replay verification", "error", err)
+		s.sendStartConfirmation(stream, pkg.AgentID, false,
+			fmt.Sprintf("replay verification failed: %v", err))
+		return true
+	}
+
+	// Convert protocol replay data to eventlog types
+	tickLog := toTickLog(pkg.ReplayData)
+
+	// Execute replay
+	result := s.replayEngine.ReplayTick(
+		ctx,
+		pkg.WASMBinary,
+		capManifest,
+		pkg.ReplayData.PreTickState,
+		tickLog,
+		postTickState,
+	)
+
+	if result.Error != nil {
+		s.logger.Error("Replay verification error — rejecting migration",
+			"agent_id", pkg.AgentID,
+			"tick", result.TickNumber,
+			"error", result.Error,
+		)
+		s.sendStartConfirmation(stream, pkg.AgentID, false,
+			fmt.Sprintf("replay verification failed: %v", result.Error))
+		return true
+	}
+
+	if !result.Verified {
+		s.logger.Error("Replay divergence — rejecting migration",
+			"agent_id", pkg.AgentID,
+			"tick", result.TickNumber,
+			"first_diff_byte", result.FirstDiffByte,
+		)
+		s.sendStartConfirmation(stream, pkg.AgentID, false,
+			fmt.Sprintf("replay divergence at tick %d, first diff byte %d",
+				result.TickNumber, result.FirstDiffByte))
+		return true
+	}
+
+	s.logger.Info("Replay verification passed",
+		"agent_id", pkg.AgentID,
+		"tick", result.TickNumber,
+	)
+	return false
 }
 
 // RegisterAgent registers an actively running agent with the migration service.

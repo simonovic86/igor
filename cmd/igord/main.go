@@ -15,6 +15,7 @@ import (
 	"github.com/simonovic86/igor/internal/logging"
 	"github.com/simonovic86/igor/internal/migration"
 	"github.com/simonovic86/igor/internal/p2p"
+	"github.com/simonovic86/igor/internal/replay"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
 	"github.com/simonovic86/igor/pkg/budget"
@@ -199,6 +200,9 @@ func runLocalAgent(
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	// Create replay engine for CM-4 verification
+	replayEngine := replay.NewEngine(logger)
+
 	// Tick loop
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -256,6 +260,54 @@ func runLocalAgent(
 			if err := instance.SaveCheckpointToStorage(ctx); err != nil {
 				logger.Error("Failed to save checkpoint", "error", err)
 			}
+
+			// Replay-verify the last tick (CM-4: Observation Determinism)
+			verifyLastTick(ctx, instance, replayEngine, logger)
 		}
 	}
+}
+
+// verifyLastTick replays the most recent tick and logs whether it verified.
+// Replay failures are logged but do not halt execution (EI-6: Safety Over Liveness).
+func verifyLastTick(
+	ctx context.Context,
+	instance *agent.Instance,
+	replayEngine *replay.Engine,
+	logger *slog.Logger,
+) {
+	if instance.LastTickLog == nil {
+		return
+	}
+
+	result := replayEngine.ReplayTick(
+		ctx,
+		instance.WASMBytes,
+		instance.Manifest,
+		instance.PreTickState,
+		instance.LastTickLog,
+		instance.PostTickState,
+	)
+
+	if result.Error != nil {
+		logger.Error("Replay verification failed",
+			"tick", result.TickNumber,
+			"error", result.Error,
+		)
+		return
+	}
+
+	if !result.Verified {
+		logger.Error("Replay divergence detected",
+			"tick", result.TickNumber,
+			"first_diff_byte", result.FirstDiffByte,
+			"replayed_len", len(result.ReplayedState),
+			"expected_len", len(result.ExpectedState),
+		)
+		return
+	}
+
+	logger.Info("Replay verified",
+		"tick", result.TickNumber,
+		"state_bytes", len(result.ReplayedState),
+	)
 }

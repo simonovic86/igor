@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/simonovic86/igor/internal/eventlog"
@@ -25,6 +26,7 @@ const (
 // Instance represents a running agent instance.
 type Instance struct {
 	AgentID        string
+	WASMBytes      []byte // Raw WASM binary (retained for replay verification)
 	Compiled       wazero.CompiledModule
 	Module         api.Module
 	Engine         *runtime.Engine
@@ -36,6 +38,11 @@ type Instance struct {
 	EventLog       *eventlog.EventLog
 	TickNumber     uint64
 	logger         *slog.Logger
+
+	// Replay verification state (captured each tick for CM-4 verification)
+	PreTickState  []byte            // Agent state before the last tick
+	PostTickState []byte            // Agent state after the last tick
+	LastTickLog   *eventlog.TickLog // Sealed event log from the last tick
 }
 
 // LoadAgent loads and compiles a WASM agent from a file.
@@ -78,10 +85,15 @@ func LoadAgent(
 		return nil, fmt.Errorf("failed to register host module: %w", err)
 	}
 
-	// Compile WASM module
-	compiled, err := engine.LoadWASM(ctx, wasmPath)
+	// Read and compile WASM module (bytes retained for replay verification)
+	wasmBytes, err := os.ReadFile(wasmPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load WASM: %w", err)
+		return nil, fmt.Errorf("failed to read WASM file: %w", err)
+	}
+
+	compiled, err := engine.CompileWASMBytes(ctx, wasmBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compile WASM: %w", err)
 	}
 
 	// Instantiate module — if the agent imports from "igor" but the capability
@@ -105,6 +117,7 @@ func LoadAgent(
 
 	instance := &Instance{
 		AgentID:        agentID,
+		WASMBytes:      wasmBytes,
 		Compiled:       compiled,
 		Module:         module,
 		Engine:         engine,
@@ -159,10 +172,17 @@ func (i *Instance) Init(ctx context.Context) error {
 
 // Tick executes one tick of the agent with a timeout and meters execution cost.
 // Per CE-3, the event log records all observation hostcall return values.
+// Pre-tick and post-tick state are captured for replay verification (CM-4).
 func (i *Instance) Tick(ctx context.Context) error {
 	// Check budget before execution
 	if i.Budget <= 0 {
 		return fmt.Errorf("budget exhausted: %s", budget.Format(i.Budget))
+	}
+
+	// Capture pre-tick state for replay verification
+	preState, err := i.captureState(ctx)
+	if err != nil {
+		return fmt.Errorf("pre-tick checkpoint failed: %w", err)
 	}
 
 	// Advance tick counter and begin event log recording
@@ -179,15 +199,26 @@ func (i *Instance) Tick(ctx context.Context) error {
 	}
 
 	start := time.Now()
-	_, err := fn.Call(tickCtx)
+	_, tickErr := fn.Call(tickCtx)
 	elapsed := time.Since(start)
 
 	// Seal the event log regardless of tick success/failure
 	sealed := i.EventLog.SealTick()
 
-	if err != nil {
-		return fmt.Errorf("agent_tick failed: %w", err)
+	if tickErr != nil {
+		return fmt.Errorf("agent_tick failed: %w", tickErr)
 	}
+
+	// Capture post-tick state for replay verification
+	postState, err := i.captureState(ctx)
+	if err != nil {
+		return fmt.Errorf("post-tick checkpoint failed: %w", err)
+	}
+
+	// Store replay verification data
+	i.PreTickState = preState
+	i.PostTickState = postState
+	i.LastTickLog = sealed
 
 	// Calculate and deduct execution cost (integer arithmetic, no float precision loss)
 	costMicrocents := elapsed.Microseconds() * i.PricePerSecond / budget.MicrocentScale
@@ -208,6 +239,35 @@ func (i *Instance) Tick(ctx context.Context) error {
 	)
 
 	return nil
+}
+
+// captureState extracts the agent's current state via checkpoint exports.
+func (i *Instance) captureState(ctx context.Context) ([]byte, error) {
+	fnSize := i.Module.ExportedFunction("agent_checkpoint")
+	sizeResults, err := fnSize.Call(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("agent_checkpoint: %w", err)
+	}
+	size := uint32(sizeResults[0])
+	if size == 0 {
+		return []byte{}, nil
+	}
+
+	fnPtr := i.Module.ExportedFunction("agent_checkpoint_ptr")
+	ptrResults, err := fnPtr.Call(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("agent_checkpoint_ptr: %w", err)
+	}
+	ptr := uint32(ptrResults[0])
+
+	data, ok := i.Module.Memory().Read(ptr, size)
+	if !ok {
+		return nil, fmt.Errorf("failed to read state from WASM memory")
+	}
+
+	out := make([]byte, len(data))
+	copy(out, data)
+	return out, nil
 }
 
 // Checkpoint saves the agent's state.
@@ -378,6 +438,17 @@ func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// ExtractAgentState extracts the agent state portion from a v1 checkpoint.
+func ExtractAgentState(checkpoint []byte) ([]byte, error) {
+	if len(checkpoint) < checkpointHeaderLen {
+		return nil, fmt.Errorf("checkpoint too short: %d bytes", len(checkpoint))
+	}
+	if checkpoint[0] != checkpointVersion {
+		return nil, fmt.Errorf("unsupported checkpoint version: %d", checkpoint[0])
+	}
+	return checkpoint[checkpointHeaderLen:], nil
 }
 
 // Close releases agent resources.
