@@ -15,6 +15,7 @@ import (
 	"github.com/simonovic86/igor/internal/logging"
 	"github.com/simonovic86/igor/internal/migration"
 	"github.com/simonovic86/igor/internal/p2p"
+	"github.com/simonovic86/igor/internal/replay"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
 	"github.com/simonovic86/igor/pkg/budget"
@@ -28,6 +29,8 @@ func main() {
 	migrateAgent := flag.String("migrate-agent", "", "Agent ID to migrate")
 	targetPeer := flag.String("to", "", "Target peer multiaddr for migration")
 	wasmPath := flag.String("wasm", "", "WASM binary path for migration")
+	replayWindow := flag.Int("replay-window", 0, "Number of recent tick snapshots to retain for verification (0 = use config default)")
+	verifyInterval := flag.Int("verify-interval", 0, "Ticks between self-verification passes (0 = use config default)")
 	flag.Parse()
 
 	// Create context
@@ -39,6 +42,14 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Apply CLI overrides
+	if *replayWindow > 0 {
+		cfg.ReplayWindowSize = *replayWindow
+	}
+	if *verifyInterval > 0 {
+		cfg.VerifyInterval = *verifyInterval
 	}
 
 	// Initialize logging
@@ -176,6 +187,9 @@ func runLocalAgent(
 	}
 	defer instance.Close(ctx)
 
+	// Configure replay window size
+	instance.SetReplayWindowSize(cfg.ReplayWindowSize)
+
 	// Register agent with migration service
 	migrationSvc.RegisterAgent("local-agent", instance)
 
@@ -199,6 +213,9 @@ func runLocalAgent(
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	// Create replay engine for CM-4 verification
+	replayEngine := replay.NewEngine(logger)
+
 	// Tick loop
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -206,7 +223,14 @@ func runLocalAgent(
 	checkpointTicker := time.NewTicker(5 * time.Second)
 	defer checkpointTicker.Stop()
 
-	logger.Info("Starting agent tick loop")
+	// Self-verification state (CM-4: Observation Determinism)
+	var ticksSinceVerify int
+	var lastVerifiedTick uint64
+
+	logger.Info("Starting agent tick loop",
+		"replay_window", cfg.ReplayWindowSize,
+		"verify_interval", cfg.VerifyInterval,
+	)
 
 	for {
 		select {
@@ -223,16 +247,7 @@ func runLocalAgent(
 			return nil
 
 		case <-ticker.C:
-			// Execute tick with panic recovery (EI-6: Safety Over Liveness).
-			// A WASM trap or runtime bug must not crash the node.
-			tickErr := func() (err error) {
-				defer func() {
-					if r := recover(); r != nil {
-						err = fmt.Errorf("tick panicked: %v", r)
-					}
-				}()
-				return instance.Tick(ctx)
-			}()
+			tickErr := safeTick(ctx, instance)
 			if tickErr != nil {
 				if instance.Budget <= 0 {
 					logger.Info("Agent budget exhausted, terminating",
@@ -251,6 +266,13 @@ func runLocalAgent(
 				return tickErr
 			}
 
+			// Periodic self-verification from the replay window
+			ticksSinceVerify++
+			if cfg.VerifyInterval > 0 && ticksSinceVerify >= cfg.VerifyInterval {
+				ticksSinceVerify = 0
+				lastVerifiedTick = verifyNextTick(ctx, instance, replayEngine, lastVerifiedTick, logger)
+			}
+
 		case <-checkpointTicker.C:
 			// Periodic checkpoint
 			if err := instance.SaveCheckpointToStorage(ctx); err != nil {
@@ -258,4 +280,70 @@ func runLocalAgent(
 			}
 		}
 	}
+}
+
+// safeTick executes one tick with panic recovery (EI-6: Safety Over Liveness).
+// A WASM trap or runtime bug must not crash the node.
+func safeTick(ctx context.Context, instance *agent.Instance) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("tick panicked: %v", r)
+		}
+	}()
+	return instance.Tick(ctx)
+}
+
+// verifyNextTick replays the oldest unverified tick in the replay window.
+// Returns the tick number of the verified tick (for tracking), or lastVerified
+// if nothing was verified.
+// Replay failures are logged but do not halt execution (EI-6: Safety Over Liveness).
+func verifyNextTick(
+	ctx context.Context,
+	instance *agent.Instance,
+	replayEngine *replay.Engine,
+	lastVerified uint64,
+	logger *slog.Logger,
+) uint64 {
+	for _, snap := range instance.ReplayWindow {
+		if snap.TickNumber <= lastVerified {
+			continue
+		}
+		if snap.TickLog == nil {
+			continue
+		}
+
+		result := replayEngine.ReplayTick(
+			ctx,
+			instance.WASMBytes,
+			instance.Manifest,
+			snap.PreState,
+			snap.TickLog,
+			snap.PostState,
+		)
+
+		if result.Error != nil {
+			logger.Error("Replay verification failed",
+				"tick", result.TickNumber,
+				"error", result.Error,
+			)
+			return snap.TickNumber
+		}
+
+		if !result.Verified {
+			logger.Error("Replay divergence detected",
+				"tick", result.TickNumber,
+				"first_diff_byte", result.FirstDiffByte,
+				"replayed_len", len(result.ReplayedState),
+				"expected_len", len(result.ExpectedState),
+			)
+			return snap.TickNumber
+		}
+
+		logger.Info("Replay verified",
+			"tick", result.TickNumber,
+			"state_bytes", len(result.ReplayedState),
+		)
+		return snap.TickNumber
+	}
+	return lastVerified
 }

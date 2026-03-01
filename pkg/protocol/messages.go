@@ -32,6 +32,23 @@ type AgentPackage struct {
 	ManifestData   []byte
 	Budget         int64
 	PricePerSecond int64
+	ReplayData     *ReplayData `json:",omitempty"` // nil when no tick has been executed (backward compatible)
+}
+
+// ReplayData contains replay verification data for a single tick.
+// Included in migration packages so the target node can verify checkpoint
+// integrity by re-executing the last tick and comparing results (CM-4).
+type ReplayData struct {
+	PreTickState []byte
+	TickNumber   uint64
+	Entries      []ReplayEntry
+}
+
+// ReplayEntry is a single observation recorded during a tick.
+// Protocol-level mirror of eventlog.Entry to keep pkg/protocol dependency-free.
+type ReplayEntry struct {
+	HostcallID uint16
+	Payload    []byte
 }
 
 // AgentTransfer represents the payload of an agent being transferred

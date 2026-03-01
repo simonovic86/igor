@@ -59,6 +59,11 @@ func (e *Engine) LoadWASM(ctx context.Context, wasmPath string) (wazero.Compiled
 		"size_bytes", len(wasmBytes),
 	)
 
+	return e.CompileWASMBytes(ctx, wasmBytes)
+}
+
+// CompileWASMBytes compiles a WASM binary from raw bytes.
+func (e *Engine) CompileWASMBytes(ctx context.Context, wasmBytes []byte) (wazero.CompiledModule, error) {
 	compiled, err := e.runtime.CompileModule(ctx, wasmBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compile WASM module: %w", err)
