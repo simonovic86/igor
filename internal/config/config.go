@@ -13,8 +13,9 @@ type Config struct {
 	// ListenAddress is the multiaddr for the P2P listener.
 	ListenAddress string
 
-	// PricePerSecond is the cost in arbitrary units per second of runtime.
-	PricePerSecond float64
+	// PricePerSecond is the cost in microcents per second of runtime.
+	// 1 currency unit = 1,000,000 microcents.
+	PricePerSecond int64
 
 	// BootstrapPeers is a list of multiaddrs to connect to on startup.
 	BootstrapPeers []string
@@ -28,7 +29,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		NodeID:         generateNodeID(),
 		ListenAddress:  "/ip4/0.0.0.0/tcp/4001",
-		PricePerSecond: 0.001,
+		PricePerSecond: 1000, // 0.001 currency units = 1000 microcents
 		BootstrapPeers: []string{},
 		CheckpointDir:  "./checkpoints",
 	}

@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"os"
+	"sync"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -21,6 +21,7 @@ import (
 	"github.com/simonovic86/igor/internal/agent"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
+	"github.com/simonovic86/igor/pkg/budget"
 	protomsg "github.com/simonovic86/igor/pkg/protocol"
 )
 
@@ -34,7 +35,9 @@ type Service struct {
 	storageProvider storage.Provider
 	logger          *slog.Logger
 
-	// Active agents running on this node
+	// Active agents running on this node.
+	// Protected by mu — accessed from main goroutine and libp2p stream handlers.
+	mu           sync.RWMutex
 	activeAgents map[string]*agent.Instance
 }
 
@@ -117,14 +120,14 @@ func (s *Service) MigrateAgent(
 	)
 
 	// Extract budget metadata from checkpoint for package visibility
-	// Checkpoint format: [budget:8][pricePerSecond:8][state:...]
-	var budget, pricePerSecond float64
-	if len(checkpoint) >= 16 {
-		budget = math.Float64frombits(binary.LittleEndian.Uint64(checkpoint[0:8]))
-		pricePerSecond = math.Float64frombits(binary.LittleEndian.Uint64(checkpoint[8:16]))
+	// Checkpoint v1 format: [version:1][budget:8][pricePerSecond:8][state:...]
+	var budgetVal, pricePerSecond int64
+	if len(checkpoint) >= 17 && checkpoint[0] == 0x01 {
+		budgetVal = int64(binary.LittleEndian.Uint64(checkpoint[1:9]))
+		pricePerSecond = int64(binary.LittleEndian.Uint64(checkpoint[9:17]))
 		s.logger.Info("Budget metadata extracted",
-			"budget", fmt.Sprintf("%.6f", budget),
-			"price_per_second", fmt.Sprintf("%.6f", pricePerSecond),
+			"budget", budget.Format(budgetVal),
+			"price_per_second", budget.Format(pricePerSecond),
 		)
 	}
 
@@ -134,7 +137,7 @@ func (s *Service) MigrateAgent(
 		WASMBinary:     wasmBinary,
 		Checkpoint:     checkpoint,
 		ManifestData:   manifestData,
-		Budget:         budget,
+		Budget:         budgetVal,
 		PricePerSecond: pricePerSecond,
 	}
 
@@ -175,11 +178,16 @@ func (s *Service) MigrateAgent(
 	)
 
 	// Terminate local instance if exists
-	if instance, exists := s.activeAgents[agentID]; exists {
+	s.mu.Lock()
+	instance, exists := s.activeAgents[agentID]
+	if exists {
+		delete(s.activeAgents, agentID)
+	}
+	s.mu.Unlock()
+	if exists {
 		if err := instance.Close(ctx); err != nil {
 			s.logger.Error("Failed to close local instance", "error", err)
 		}
-		delete(s.activeAgents, agentID)
 		s.logger.Info("Local agent instance terminated", "agent_id", agentID)
 	}
 
@@ -217,8 +225,8 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		"agent_id", pkg.AgentID,
 		"wasm_size", len(pkg.WASMBinary),
 		"checkpoint_size", len(pkg.Checkpoint),
-		"budget", fmt.Sprintf("%.6f", pkg.Budget),
-		"price_per_second", fmt.Sprintf("%.6f", pkg.PricePerSecond),
+		"budget", budget.Format(pkg.Budget),
+		"price_per_second", budget.Format(pkg.PricePerSecond),
 	)
 
 	// Save checkpoint to storage
@@ -271,7 +279,9 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 	}
 
 	// Store as active agent
+	s.mu.Lock()
 	s.activeAgents[pkg.AgentID] = instance
+	s.mu.Unlock()
 
 	s.logger.Info("Agent migration accepted and started",
 		"agent_id", pkg.AgentID,
@@ -304,12 +314,16 @@ func (s *Service) sendStartConfirmation(
 
 // RegisterAgent registers an actively running agent with the migration service.
 func (s *Service) RegisterAgent(agentID string, instance *agent.Instance) {
+	s.mu.Lock()
 	s.activeAgents[agentID] = instance
+	s.mu.Unlock()
 	s.logger.Info("Agent registered with migration service", "agent_id", agentID)
 }
 
 // GetActiveAgents returns the list of active agent IDs.
 func (s *Service) GetActiveAgents() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	agents := make([]string, 0, len(s.activeAgents))
 	for id := range s.activeAgents {
 		agents = append(agents, id)

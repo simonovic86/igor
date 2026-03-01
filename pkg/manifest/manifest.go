@@ -58,8 +58,8 @@ type MigrationPolicy struct {
 	// Enabled indicates whether migration is allowed.
 	Enabled bool
 
-	// MaxPricePerSecond is the maximum price the agent is willing to pay.
-	MaxPricePerSecond float64
+	// MaxPricePerSecond is the maximum price the agent is willing to pay (microcents).
+	MaxPricePerSecond int64
 
 	// PreferredRegions is a list of geographic preferences (optional).
 	PreferredRegions []string

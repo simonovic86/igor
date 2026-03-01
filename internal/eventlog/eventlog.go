@@ -26,17 +26,23 @@ type TickLog struct {
 	Entries    []Entry
 }
 
+// DefaultMaxTicks is the maximum number of sealed tick logs retained in history.
+// At 1 Hz tick rate this covers ~17 minutes. Use 0 for unbounded (tests only).
+const DefaultMaxTicks = 1024
+
 // EventLog records observation hostcall return values per tick.
 // It is created once per agent instance and reused across ticks.
 type EventLog struct {
-	mu      sync.Mutex
-	current *TickLog
-	history []*TickLog
+	mu       sync.Mutex
+	current  *TickLog
+	history  []*TickLog
+	maxTicks int
 }
 
-// NewEventLog creates a new event log.
-func NewEventLog() *EventLog {
-	return &EventLog{}
+// NewEventLog creates a new event log. maxTicks bounds the retained history;
+// 0 means unbounded (useful for tests).
+func NewEventLog(maxTicks int) *EventLog {
+	return &EventLog{maxTicks: maxTicks}
 }
 
 // BeginTick starts recording for a new tick. Must be called before any
@@ -80,6 +86,12 @@ func (l *EventLog) SealTick() *TickLog {
 	sealed := l.current
 	l.history = append(l.history, sealed)
 	l.current = nil
+
+	// Evict oldest ticks when history exceeds maxTicks bound
+	if l.maxTicks > 0 && len(l.history) > l.maxTicks {
+		l.history = l.history[len(l.history)-l.maxTicks:]
+	}
+
 	return sealed
 }
 

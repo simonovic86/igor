@@ -108,12 +108,15 @@ Igor is a minimal survival runtime. It implements checkpointing, migration, and 
 
 ### Agents
 
-WASM executables implementing four lifecycle functions:
+WASM executables implementing five lifecycle functions:
 
 - `agent_init()` - Initialize state
 - `agent_tick()` - Execute one step (~1 Hz)
-- `agent_checkpoint()` - Serialize state
+- `agent_checkpoint()` - Return checkpoint size
+- `agent_checkpoint_ptr()` - Return pointer to checkpoint data
 - `agent_resume(ptr, len)` - Restore from state
+
+Agents interact with the runtime through the `igor` host module (clock, rand, log hostcalls), mediated by a capability manifest declared at load time.
 
 Agents carry budgets. Cost calculated per tick: `duration_seconds × price_per_second`
 

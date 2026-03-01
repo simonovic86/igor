@@ -13,7 +13,7 @@ import (
 
 func newTestRegistry(t *testing.T) *Registry {
 	t.Helper()
-	el := eventlog.NewEventLog()
+	el := eventlog.NewEventLog(0)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	return NewRegistry(logger, el)
 }

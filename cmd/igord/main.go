@@ -17,12 +17,13 @@ import (
 	"github.com/simonovic86/igor/internal/p2p"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
+	"github.com/simonovic86/igor/pkg/budget"
 )
 
 func main() {
 	// Parse CLI flags
 	runAgent := flag.String("run-agent", "", "Path to WASM agent to run locally")
-	budget := flag.Float64("budget", 1.0, "Initial budget for agent execution")
+	budgetFlag := flag.Float64("budget", 1.0, "Initial budget for agent execution")
 	manifestPath := flag.String("manifest", "", "Path to capability manifest JSON (default: <agent>.manifest.json)")
 	migrateAgent := flag.String("migrate-agent", "", "Agent ID to migrate")
 	targetPeer := flag.String("to", "", "Target peer multiaddr for migration")
@@ -100,7 +101,8 @@ func main() {
 
 	// If --run-agent flag is provided, run agent locally
 	if *runAgent != "" {
-		if err := runLocalAgent(ctx, cfg, *runAgent, *budget, *manifestPath, migrationSvc, logger); err != nil {
+		budgetMicrocents := budget.FromFloat(*budgetFlag)
+		if err := runLocalAgent(ctx, cfg, *runAgent, budgetMicrocents, *manifestPath, migrationSvc, logger); err != nil {
 			logging.Error(logger, "Failed to run agent", "error", err)
 			os.Exit(1)
 		}
@@ -122,7 +124,7 @@ func runLocalAgent(
 	ctx context.Context,
 	cfg *config.Config,
 	wasmPath string,
-	budget float64,
+	budgetMicrocents int64,
 	manifestPathFlag string,
 	migrationSvc *migration.Service,
 	logger *slog.Logger,
@@ -164,7 +166,7 @@ func runLocalAgent(
 		wasmPath,
 		"local-agent",
 		storageProvider,
-		budget,
+		budgetMicrocents,
 		cfg.PricePerSecond,
 		manifestData,
 		logger,
@@ -178,8 +180,8 @@ func runLocalAgent(
 	migrationSvc.RegisterAgent("local-agent", instance)
 
 	logger.Info("Agent loaded with budget",
-		"budget", fmt.Sprintf("%.6f", budget),
-		"price_per_second", fmt.Sprintf("%.6f", cfg.PricePerSecond),
+		"budget", budget.Format(budgetMicrocents),
+		"price_per_second", budget.Format(cfg.PricePerSecond),
 	)
 
 	// Initialize agent
@@ -221,25 +223,32 @@ func runLocalAgent(
 			return nil
 
 		case <-ticker.C:
-			// Execute tick
-			if err := instance.Tick(ctx); err != nil {
-				// Check if budget exhausted
+			// Execute tick with panic recovery (EI-6: Safety Over Liveness).
+			// A WASM trap or runtime bug must not crash the node.
+			tickErr := func() (err error) {
+				defer func() {
+					if r := recover(); r != nil {
+						err = fmt.Errorf("tick panicked: %v", r)
+					}
+				}()
+				return instance.Tick(ctx)
+			}()
+			if tickErr != nil {
 				if instance.Budget <= 0 {
 					logger.Info("Agent budget exhausted, terminating",
 						"agent_id", "local-agent",
 						"reason", "budget_exhausted",
 					)
-
-					// Final checkpoint
-					if err := instance.SaveCheckpointToStorage(ctx); err != nil {
-						logger.Error("Failed to save checkpoint on termination", "error", err)
-					}
-
-					return fmt.Errorf("agent terminated: budget exhausted")
+				} else {
+					logger.Error("Tick failed", "error", tickErr)
 				}
 
-				logger.Error("Tick failed", "error", err)
-				return err
+				// Checkpoint before terminating
+				if err := instance.SaveCheckpointToStorage(ctx); err != nil {
+					logger.Error("Failed to save checkpoint on termination", "error", err)
+				}
+
+				return tickErr
 			}
 
 		case <-checkpointTicker.C:

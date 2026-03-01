@@ -105,7 +105,7 @@ func setupTestModule(t *testing.T) (wazero.Runtime, api.Module, *eventlog.EventL
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	el := eventlog.NewEventLog()
+	el := eventlog.NewEventLog(0)
 	rt := wazero.NewRuntime(ctx)
 
 	wasi_snapshot_preview1.MustInstantiate(ctx, rt)
@@ -229,7 +229,7 @@ func TestIntegration_DenyByDefault(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
-	el := eventlog.NewEventLog()
+	el := eventlog.NewEventLog(0)
 
 	rt := wazero.NewRuntime(ctx)
 	defer rt.Close(ctx)

@@ -5,16 +5,21 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log/slog"
-	"math"
 	"time"
 
 	"github.com/simonovic86/igor/internal/eventlog"
 	"github.com/simonovic86/igor/internal/hostcall"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
+	"github.com/simonovic86/igor/pkg/budget"
 	"github.com/simonovic86/igor/pkg/manifest"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
+)
+
+const (
+	checkpointVersion   byte = 0x01
+	checkpointHeaderLen int  = 17 // 1 (version) + 8 (budget) + 8 (pricePerSecond)
 )
 
 // Instance represents a running agent instance.
@@ -25,8 +30,8 @@ type Instance struct {
 	Engine         *runtime.Engine
 	Storage        storage.Provider
 	State          []byte
-	Budget         float64 // Remaining budget in arbitrary currency units
-	PricePerSecond float64 // Cost per second of execution
+	Budget         int64 // Remaining budget in microcents (1 currency unit = 1,000,000 microcents)
+	PricePerSecond int64 // Cost per second in microcents
 	Manifest       *manifest.CapabilityManifest
 	EventLog       *eventlog.EventLog
 	TickNumber     uint64
@@ -41,8 +46,8 @@ func LoadAgent(
 	wasmPath string,
 	agentID string,
 	storageProvider storage.Provider,
-	budget float64,
-	pricePerSecond float64,
+	budget int64,
+	pricePerSecond int64,
 	manifestData []byte,
 	logger *slog.Logger,
 ) (*Instance, error) {
@@ -65,7 +70,7 @@ func LoadAgent(
 	)
 
 	// Create event log for observation recording
-	el := eventlog.NewEventLog()
+	el := eventlog.NewEventLog(eventlog.DefaultMaxTicks)
 
 	// Register igor host module with declared capabilities (CE-1, CE-2)
 	registry := hostcall.NewRegistry(logger, el)
@@ -157,7 +162,7 @@ func (i *Instance) Init(ctx context.Context) error {
 func (i *Instance) Tick(ctx context.Context) error {
 	// Check budget before execution
 	if i.Budget <= 0 {
-		return fmt.Errorf("budget exhausted: %.6f", i.Budget)
+		return fmt.Errorf("budget exhausted: %s", budget.Format(i.Budget))
 	}
 
 	// Advance tick counter and begin event log recording
@@ -184,10 +189,9 @@ func (i *Instance) Tick(ctx context.Context) error {
 		return fmt.Errorf("agent_tick failed: %w", err)
 	}
 
-	// Calculate and deduct execution cost
-	durationSeconds := elapsed.Seconds()
-	cost := durationSeconds * i.PricePerSecond
-	i.Budget -= cost
+	// Calculate and deduct execution cost (integer arithmetic, no float precision loss)
+	costMicrocents := elapsed.Microseconds() * i.PricePerSecond / budget.MicrocentScale
+	i.Budget -= costMicrocents
 
 	observationCount := 0
 	if sealed != nil {
@@ -198,8 +202,8 @@ func (i *Instance) Tick(ctx context.Context) error {
 		"agent_id", i.AgentID,
 		"tick", i.TickNumber,
 		"duration_ms", elapsed.Milliseconds(),
-		"cost", fmt.Sprintf("%.6f", cost),
-		"budget_remaining", fmt.Sprintf("%.6f", i.Budget),
+		"cost", budget.Format(costMicrocents),
+		"budget_remaining", budget.Format(i.Budget),
 		"observations", observationCount,
 	)
 
@@ -315,12 +319,13 @@ func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 		return fmt.Errorf("failed to checkpoint agent: %w", err)
 	}
 
-	// Create checkpoint with budget metadata
-	// Format: [budget:8][pricePerSecond:8][state:...]
-	checkpoint := make([]byte, 16+len(state))
-	binary.LittleEndian.PutUint64(checkpoint[0:8], math.Float64bits(i.Budget))
-	binary.LittleEndian.PutUint64(checkpoint[8:16], math.Float64bits(i.PricePerSecond))
-	copy(checkpoint[16:], state)
+	// Create checkpoint with budget metadata (v1 format)
+	// Format: [version:1][budget:8][pricePerSecond:8][state:...]
+	checkpoint := make([]byte, checkpointHeaderLen+len(state))
+	checkpoint[0] = checkpointVersion
+	binary.LittleEndian.PutUint64(checkpoint[1:9], uint64(i.Budget))
+	binary.LittleEndian.PutUint64(checkpoint[9:17], uint64(i.PricePerSecond))
+	copy(checkpoint[17:], state)
 
 	// Save to storage provider
 	if err := i.Storage.SaveCheckpoint(ctx, i.AgentID, checkpoint); err != nil {
@@ -344,24 +349,27 @@ func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 		return fmt.Errorf("failed to load checkpoint: %w", err)
 	}
 
-	// Parse checkpoint format: [budget:8][pricePerSecond:8][state:...]
-	if len(checkpoint) < 16 {
+	// Parse checkpoint v1 format: [version:1][budget:8][pricePerSecond:8][state:...]
+	if len(checkpoint) < checkpointHeaderLen {
 		return fmt.Errorf("invalid checkpoint format: too short")
 	}
+	if checkpoint[0] != checkpointVersion {
+		return fmt.Errorf("unsupported checkpoint version: %d", checkpoint[0])
+	}
 
-	// Extract budget metadata
-	budget := math.Float64frombits(binary.LittleEndian.Uint64(checkpoint[0:8]))
-	pricePerSecond := math.Float64frombits(binary.LittleEndian.Uint64(checkpoint[8:16]))
-	state := checkpoint[16:]
+	// Extract budget metadata (int64 microcents)
+	restoredBudget := int64(binary.LittleEndian.Uint64(checkpoint[1:9]))
+	restoredPrice := int64(binary.LittleEndian.Uint64(checkpoint[9:17]))
+	state := checkpoint[17:]
 
 	// Update instance budget
-	i.Budget = budget
-	i.PricePerSecond = pricePerSecond
+	i.Budget = restoredBudget
+	i.PricePerSecond = restoredPrice
 
 	i.logger.Info("Budget restored from checkpoint",
 		"agent_id", i.AgentID,
-		"budget", fmt.Sprintf("%.6f", budget),
-		"price_per_second", fmt.Sprintf("%.6f", pricePerSecond),
+		"budget", budget.Format(restoredBudget),
+		"price_per_second", budget.Format(restoredPrice),
 	)
 
 	// Resume agent from state

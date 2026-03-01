@@ -5,13 +5,13 @@ package protocol
 type MigrationRequest struct {
 	AgentID              string
 	RequiredCapabilities []string
-	Budget               float64
+	Budget               int64
 }
 
 // MigrationOffer represents a node offering to host an agent.
 type MigrationOffer struct {
 	NodeID         string
-	PricePerSecond float64
+	PricePerSecond int64
 	AvailableUntil int64
 }
 
@@ -19,7 +19,7 @@ type MigrationOffer struct {
 type MigrationAccept struct {
 	AgentID       string
 	TargetNodeID  string
-	AcceptedPrice float64
+	AcceptedPrice int64
 	Success       bool
 	ErrorMessage  string
 }
@@ -30,8 +30,8 @@ type AgentPackage struct {
 	WASMBinary     []byte
 	Checkpoint     []byte
 	ManifestData   []byte
-	Budget         float64
-	PricePerSecond float64
+	Budget         int64
+	PricePerSecond int64
 }
 
 // AgentTransfer represents the payload of an agent being transferred
