@@ -40,7 +40,7 @@ These invariants describe **how the runtime upholds capability membrane guarante
 - WASM link errors (expected behavior for denied capabilities)
 - Audit of registered host module functions
 
-**Status:** ⏳ Not yet implemented
+**Status:** Implemented — `internal/hostcall/registry.go` registers only declared capabilities; wazero link error enforces deny-by-default at instantiation. Covered by `TestLoadAgent_EmptyManifest`.
 
 ---
 
@@ -70,7 +70,7 @@ These invariants describe **how the runtime upholds capability membrane guarante
 - Load-time validation errors
 - Agent crash during tick due to missing hostcall
 
-**Status:** ⏳ Not yet implemented
+**Status:** Implemented — `agent.LoadAgent()` calls `manifest.ParseCapabilityManifest()` and `manifest.ValidateAgainstNode()` before WASM compilation. Agents declaring unavailable capabilities are rejected at load time.
 
 ---
 
@@ -103,7 +103,7 @@ These invariants describe **how the runtime upholds capability membrane guarante
 - Missing entries in observation log
 - Event log format validation errors
 
-**Status:** ⏳ Not yet implemented
+**Status:** Partially implemented — all observation hostcalls record to the per-tick EventLog; `BeginTick`/`SealTick` bound each tick; the replay engine consumes the log deterministically. NOT YET: tick logs are not persisted to disk and only the most recent tick's replay data is transferred during migration.
 
 ---
 
@@ -134,7 +134,7 @@ These invariants describe **how the runtime upholds capability membrane guarante
 - Side-effect hostcall succeeding outside ACTIVE_OWNER
 - Audit log showing effects without authority
 
-**Status:** ⏳ Not yet implemented
+**Status:** Not implemented — no authority state machine exists in the runtime. `AUTHORITY_STATE_MACHINE.md` is specified but the `ACTIVE_OWNER` check in hostcalls has not been built.
 
 ---
 
@@ -166,7 +166,7 @@ These invariants describe **how the runtime upholds capability membrane guarante
 - Post-migration tick failures
 - Capability mismatch in migration logs
 
-**Status:** ⏳ Not yet implemented
+**Status:** Not implemented — target performs CE-2 validation at `agent.LoadAgent()` time (after checkpoint is already stored), but there is no pre-handshake capability negotiation. The source cannot verify target capability compatibility before initiating the transfer.
 
 ---
 
@@ -197,7 +197,7 @@ These invariants describe **how the runtime upholds capability membrane guarante
 - Tick cost lower than expected given hostcall activity
 - Budget discrepancies across migrations
 
-**Status:** ⏳ Not yet implemented (hostcall time currently included in tick duration by design)
+**Status:** Effectively implemented — tick duration is measured across the full `fn.Call()` invocation which executes all hostcalls synchronously, so hostcall execution time is included in tick cost by design.
 
 ---
 

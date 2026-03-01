@@ -19,8 +19,11 @@ import (
 )
 
 const (
-	checkpointVersion   byte = 0x01
-	checkpointHeaderLen int  = 17 // 1 (version) + 8 (budget) + 8 (pricePerSecond)
+	checkpointVersionV1   byte = 0x01
+	checkpointHeaderLenV1 int  = 17 // 1 (version) + 8 (budget) + 8 (pricePerSecond)
+
+	checkpointVersionV2   byte = 0x02
+	checkpointHeaderLenV2 int  = 25 // 1 (version) + 8 (budget) + 8 (pricePerSecond) + 8 (tickNumber)
 
 	// DefaultReplayWindowSize is the number of recent tick snapshots retained
 	// for sliding replay verification (CM-4).
@@ -393,7 +396,7 @@ func (i *Instance) Resume(ctx context.Context, state []byte) error {
 }
 
 // SaveCheckpointToStorage checkpoints the agent and saves to storage provider.
-// The checkpoint includes budget metadata and agent state.
+// The checkpoint includes budget metadata, tick number, and agent state.
 func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 	// Checkpoint agent state
 	state, err := i.Checkpoint(ctx)
@@ -401,13 +404,14 @@ func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 		return fmt.Errorf("failed to checkpoint agent: %w", err)
 	}
 
-	// Create checkpoint with budget metadata (v1 format)
-	// Format: [version:1][budget:8][pricePerSecond:8][state:...]
-	checkpoint := make([]byte, checkpointHeaderLen+len(state))
-	checkpoint[0] = checkpointVersion
+	// Create checkpoint with budget metadata and tick number (v2 format)
+	// Format: [version:1 (0x02)][budget:8][pricePerSecond:8][tickNumber:8][state:N]
+	checkpoint := make([]byte, checkpointHeaderLenV2+len(state))
+	checkpoint[0] = checkpointVersionV2
 	binary.LittleEndian.PutUint64(checkpoint[1:9], uint64(i.Budget))
 	binary.LittleEndian.PutUint64(checkpoint[9:17], uint64(i.PricePerSecond))
-	copy(checkpoint[17:], state)
+	binary.LittleEndian.PutUint64(checkpoint[17:25], i.TickNumber)
+	copy(checkpoint[25:], state)
 
 	// Save to storage provider
 	if err := i.Storage.SaveCheckpoint(ctx, i.AgentID, checkpoint); err != nil {
@@ -418,7 +422,8 @@ func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 }
 
 // LoadCheckpointFromStorage loads checkpoint from storage and resumes agent.
-// The checkpoint includes budget metadata and agent state.
+// The checkpoint includes budget metadata, tick number, and agent state.
+// Supports both v1 (no tick number) and v2 (with tick number) checkpoint formats.
 func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 	// Load from storage provider
 	checkpoint, err := i.Storage.LoadCheckpoint(ctx, i.AgentID)
@@ -431,27 +436,22 @@ func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 		return fmt.Errorf("failed to load checkpoint: %w", err)
 	}
 
-	// Parse checkpoint v1 format: [version:1][budget:8][pricePerSecond:8][state:...]
-	if len(checkpoint) < checkpointHeaderLen {
-		return fmt.Errorf("invalid checkpoint format: too short")
-	}
-	if checkpoint[0] != checkpointVersion {
-		return fmt.Errorf("unsupported checkpoint version: %d", checkpoint[0])
+	// Parse checkpoint header (v1 or v2)
+	restoredBudget, restoredPrice, restoredTick, state, err := ParseCheckpointHeader(checkpoint)
+	if err != nil {
+		return fmt.Errorf("invalid checkpoint: %w", err)
 	}
 
-	// Extract budget metadata (int64 microcents)
-	restoredBudget := int64(binary.LittleEndian.Uint64(checkpoint[1:9]))
-	restoredPrice := int64(binary.LittleEndian.Uint64(checkpoint[9:17]))
-	state := checkpoint[17:]
-
-	// Update instance budget
+	// Update instance state
 	i.Budget = restoredBudget
 	i.PricePerSecond = restoredPrice
+	i.TickNumber = restoredTick
 
-	i.logger.Info("Budget restored from checkpoint",
+	i.logger.Info("Checkpoint restored",
 		"agent_id", i.AgentID,
 		"budget", budget.Format(restoredBudget),
 		"price_per_second", budget.Format(restoredPrice),
+		"tick_number", restoredTick,
 	)
 
 	// Resume agent from state
@@ -462,15 +462,38 @@ func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 	return nil
 }
 
-// ExtractAgentState extracts the agent state portion from a v1 checkpoint.
+// ParseCheckpointHeader parses a v1 or v2 checkpoint header.
+// Returns budget, pricePerSecond, tickNumber, agentState, and any error.
+// For v1 checkpoints, tickNumber is returned as 0.
+func ParseCheckpointHeader(checkpoint []byte) (budgetVal int64, price int64, tick uint64, state []byte, err error) {
+	if len(checkpoint) < checkpointHeaderLenV1 {
+		return 0, 0, 0, nil, fmt.Errorf("checkpoint too short: %d bytes", len(checkpoint))
+	}
+	switch checkpoint[0] {
+	case checkpointVersionV1:
+		return int64(binary.LittleEndian.Uint64(checkpoint[1:9])),
+			int64(binary.LittleEndian.Uint64(checkpoint[9:17])),
+			0,
+			checkpoint[checkpointHeaderLenV1:],
+			nil
+	case checkpointVersionV2:
+		if len(checkpoint) < checkpointHeaderLenV2 {
+			return 0, 0, 0, nil, fmt.Errorf("v2 checkpoint too short: %d bytes", len(checkpoint))
+		}
+		return int64(binary.LittleEndian.Uint64(checkpoint[1:9])),
+			int64(binary.LittleEndian.Uint64(checkpoint[9:17])),
+			binary.LittleEndian.Uint64(checkpoint[17:25]),
+			checkpoint[checkpointHeaderLenV2:],
+			nil
+	default:
+		return 0, 0, 0, nil, fmt.Errorf("unsupported checkpoint version: %d", checkpoint[0])
+	}
+}
+
+// ExtractAgentState extracts the agent state portion from a v1 or v2 checkpoint.
 func ExtractAgentState(checkpoint []byte) ([]byte, error) {
-	if len(checkpoint) < checkpointHeaderLen {
-		return nil, fmt.Errorf("checkpoint too short: %d bytes", len(checkpoint))
-	}
-	if checkpoint[0] != checkpointVersion {
-		return nil, fmt.Errorf("unsupported checkpoint version: %d", checkpoint[0])
-	}
-	return checkpoint[checkpointHeaderLen:], nil
+	_, _, _, state, err := ParseCheckpointHeader(checkpoint)
+	return state, err
 }
 
 // SetReplayWindowSize configures the maximum number of tick snapshots retained

@@ -5,7 +5,6 @@ package migration
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -124,14 +123,18 @@ func (s *Service) MigrateAgent(
 	)
 
 	// Extract budget metadata from checkpoint for package visibility
-	// Checkpoint v1 format: [version:1][budget:8][pricePerSecond:8][state:...]
 	var budgetVal, pricePerSecond int64
-	if len(checkpoint) >= 17 && checkpoint[0] == 0x01 {
-		budgetVal = int64(binary.LittleEndian.Uint64(checkpoint[1:9]))
-		pricePerSecond = int64(binary.LittleEndian.Uint64(checkpoint[9:17]))
+	if parsedBudget, parsedPrice, _, _, err := agent.ParseCheckpointHeader(checkpoint); err == nil {
+		budgetVal = parsedBudget
+		pricePerSecond = parsedPrice
 		s.logger.Info("Budget metadata extracted",
 			"budget", budget.Format(budgetVal),
 			"price_per_second", budget.Format(pricePerSecond),
+		)
+	} else {
+		s.logger.Warn("Could not parse checkpoint header for budget extraction",
+			"agent_id", agentID,
+			"error", err,
 		)
 	}
 
