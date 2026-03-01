@@ -12,17 +12,20 @@ This document defines which documentation belongs in the public repository and w
 
 Constitutional documents define non-negotiable runtime guarantees. They MUST remain mechanism-agnostic and field-agnostic. They MUST NOT reference protocol message fields, wire formats, or serialization schemas.
 
-**constitution/RUNTIME_CONSTITUTION.md** - Constitutional specification root  
-**constitution/EXECUTION_INVARIANTS.md** - Foundational runtime invariants  
-**constitution/OWNERSHIP_AND_AUTHORITY.md** - Authority lifecycle model  
-**constitution/MIGRATION_CONTINUITY.md** - Migration continuity contracts  
+**constitution/RUNTIME_CONSTITUTION.md** - Constitutional specification root
+**constitution/EXECUTION_INVARIANTS.md** - Foundational runtime invariants
+**constitution/OWNERSHIP_AND_AUTHORITY.md** - Authority lifecycle model
+**constitution/MIGRATION_CONTINUITY.md** - Migration continuity contracts
+**constitution/AUTHORITY_STATE_MACHINE.md** - Formal authority lifecycle state machine
+**constitution/CAPABILITY_MEMBRANE.md** - Capability membrane invariants
 
 ### Enforcement Layer — `docs/enforcement/`
 
 Enforcement documents define how constitutional guarantees are upheld through runtime enforcement rules and invariant derivation mappings. Every enforcement invariant derives from one or more constitutional invariants.
 
-**enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md** - Enforcement rules implementing constitutional guarantees  
-**enforcement/INVARIANT_DEPENDENCY_GRAPH.md** - Invariant dependency relationships and cross-document traceability  
+**enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md** - Enforcement rules implementing constitutional guarantees
+**enforcement/INVARIANT_DEPENDENCY_GRAPH.md** - Invariant dependency relationships and cross-document traceability
+**enforcement/CAPABILITY_ENFORCEMENT.md** - Capability enforcement rules
 
 ### Runtime Implementation Layer — `docs/runtime/`
 
@@ -32,7 +35,11 @@ Implementation documents describe how the runtime is built. They contain protoco
 **runtime/AGENT_LIFECYCLE.md** - Building and deploying agents  
 **runtime/MIGRATION_PROTOCOL.md** - P2P migration mechanics  
 **runtime/BUDGET_MODEL.md** - Economic model and metering  
-**runtime/SECURITY_MODEL.md** - Threat model and sandbox constraints  
+**runtime/SECURITY_MODEL.md** - Threat model and sandbox constraints
+**runtime/THREAT_MODEL.md** - Canonical threat assumptions and adversary classes
+**runtime/HOSTCALL_ABI.md** - Hostcall interface design
+**runtime/REPLAY_ENGINE.md** - Replay engine design (draft)
+**runtime/LEASE_EPOCH.md** - Lease-based authority epochs design (draft)
 
 ### Philosophy Layer — `docs/philosophy/`
 

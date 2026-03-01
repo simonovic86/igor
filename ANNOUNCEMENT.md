@@ -121,7 +121,7 @@ Development remains minimal and iterative. Features are added only when validate
 
 **GitHub:** https://github.com/simonovic86/igor  
 **Documentation:** [docs/](./docs/)  
-**Specification:** [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md)
+**Specification:** [docs/philosophy/OVERVIEW.md](./docs/philosophy/OVERVIEW.md)
 
 ---
 

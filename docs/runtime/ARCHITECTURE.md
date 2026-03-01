@@ -30,9 +30,10 @@ Igor v0 is a decentralized runtime for autonomous mobile agents. This document d
 Agents execute in isolated WASM instances using wazero:
 
 - **Memory limit:** 64MB (1024 pages × 64KB)
-- **Filesystem access:** Disabled
-- **Network access:** Disabled
+- **Filesystem access:** Disabled (via WASI restrictions)
+- **Network access:** Disabled (via WASI restrictions)
 - **Tick timeout:** 100ms enforced via context cancellation
+- **Agent I/O:** Through `igor` hostcall module (see [HOSTCALL_ABI.md](./HOSTCALL_ABI.md)); raw WASI filesystem/network remain disabled
 
 Compilation and instantiation:
 ```
@@ -69,6 +70,25 @@ Agents must export:
 **`agent_resume(ptr, len)`** - Restores from state
 
 The runtime calls these functions at appropriate times. Agents do not control their own lifecycle directly.
+
+## Capability Layer
+
+Agents interact with the outside world exclusively through runtime-provided hostcalls registered under the `igor` WASM module namespace. This is the **capability membrane** — a constitutional guarantee (CM-1 through CM-7) that all agent I/O is mediated, auditable, and replayable.
+
+### Capability Namespaces
+
+| Namespace | Type | Purpose | Phase |
+|-----------|------|---------|-------|
+| `clock` | Observation | Wall-clock time | 3 |
+| `rand` | Observation | Cryptographic randomness | 3 |
+| `kv` | Mixed | Per-agent key-value storage | 3 |
+| `log` | Observation | Structured logging | 3 |
+| `net` | Side effect | Network requests | 3+ |
+| `wallet` | Mixed | Budget introspection, transfers | 4+ |
+
+Agents declare required capabilities in a manifest. The runtime grants only declared capabilities (deny by default, CM-3). All observation hostcalls are recorded in an event log for deterministic replay (CM-4, CE-3).
+
+See [HOSTCALL_ABI.md](./HOSTCALL_ABI.md) for function signatures and [CAPABILITY_MEMBRANE.md](../constitution/CAPABILITY_MEMBRANE.md) for constitutional invariants.
 
 ## Migration Layer
 
@@ -271,11 +291,19 @@ See [RUNTIME_ENFORCEMENT_INVARIANTS.md](../enforcement/RUNTIME_ENFORCEMENT_INVAR
 
 ## Technology Stack
 
-- **Runtime:** Go 1.22+
+- **Runtime:** Go 1.25+
 - **WASM Engine:** wazero (pure Go, no CGO)
 - **P2P Transport:** libp2p-go
 - **Agent Compilation:** TinyGo → WASM
 - **Serialization:** Binary protocols, JSON for P2P messages
+
+### Design Decisions
+
+**wazero over Wasmtime:** wazero is a pure-Go WASM runtime with zero CGo dependencies. This keeps the build toolchain simple (`go build` just works), avoids C library linking issues across platforms, and aligns with the Go-native stack (libp2p-go, TinyGo). Wasmtime would provide WASI-P2 and component model support, but adds CGo complexity and a C toolchain dependency for marginal v0 benefit. If WASI-P2 becomes necessary, the `internal/runtime` package isolates the engine choice.
+
+**JSON over Protobuf for P2P messages:** P2P protocol messages and capability manifests use JSON encoding. Protobuf would add schema compilation, codegen dependencies, and versioning complexity. At v0 message volumes (migration is rare, manifests are small), JSON's readability and debuggability outweigh Protobuf's size/speed advantages. The binary checkpoint format remains hand-packed for performance where it matters.
+
+**Go over Rust:** Go provides garbage collection, fast compilation, and a rich standard library. The libp2p-go and wazero ecosystems are mature. Rust would provide memory safety guarantees and potentially better performance, but at the cost of longer compilation times, steeper learning curve, and losing the pure-Go toolchain simplicity. For a research-stage project, Go's iteration speed matters more than Rust's safety guarantees.
 
 ## Architectural Constraints
 
@@ -317,7 +345,7 @@ See [SECURITY_MODEL.md](./SECURITY_MODEL.md) for complete threat model.
 
 ## References
 
-- [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) - Authoritative design specification
+- [docs/philosophy/OVERVIEW.md](../philosophy/OVERVIEW.md) - Project overview and design philosophy
 - [AGENT_LIFECYCLE.md](./AGENT_LIFECYCLE.md) - Agent development guide
 - [MIGRATION_PROTOCOL.md](./MIGRATION_PROTOCOL.md) - Protocol details
 - [BUDGET_MODEL.md](./BUDGET_MODEL.md) - Economic model

@@ -27,6 +27,8 @@ Constitutional documents:
 | [EXECUTION_INVARIANTS.md](./EXECUTION_INVARIANTS.md) | Foundational runtime invariants (EI-1 through EI-11) |
 | [OWNERSHIP_AND_AUTHORITY.md](./OWNERSHIP_AND_AUTHORITY.md) | Authority lifecycle model (OA-1 through OA-7) |
 | [MIGRATION_CONTINUITY.md](./MIGRATION_CONTINUITY.md) | Migration continuity contracts (MC-1 through MC-9, FS-1 through FS-4) |
+| [AUTHORITY_STATE_MACHINE.md](./AUTHORITY_STATE_MACHINE.md) | Formal authority lifecycle state machine and tick permission matrix |
+| [CAPABILITY_MEMBRANE.md](./CAPABILITY_MEMBRANE.md) | Capability membrane invariants (CM-1 through CM-7) |
 
 ## Related Layers
 

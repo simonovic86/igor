@@ -83,7 +83,7 @@ make build
 - [README.md](./README.md) - Overview and quick start
 - [docs/runtime/ARCHITECTURE.md](./docs/runtime/ARCHITECTURE.md) - Technical details
 - [docs/philosophy/VISION.md](./docs/philosophy/VISION.md) - Why Igor exists
-- [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Design specification
+- [docs/philosophy/OVERVIEW.md](./docs/philosophy/OVERVIEW.md) - Design philosophy
 
 ## Contributing
 

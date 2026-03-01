@@ -14,7 +14,7 @@ Igor is a decentralized execution runtime for autonomous software agents. It pro
 
 **Read first:**
 - [ANNOUNCEMENT.md](./ANNOUNCEMENT.md) - Public project introduction
-- [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Authoritative design specification
+- [docs/philosophy/OVERVIEW.md](./docs/philosophy/OVERVIEW.md) - Introduction to Igor concepts and status
 - [docs/philosophy/VISION.md](./docs/philosophy/VISION.md) - Why autonomous software needs survival
 
 **Contribute:**
@@ -242,7 +242,7 @@ Igor's specification is organized into layered authority domains. See the full [
 ## Documentation
 
 **Start here:**
-- [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Authoritative design specification
+- [docs/philosophy/OVERVIEW.md](./docs/philosophy/OVERVIEW.md) - Introduction to Igor concepts and status
 - [docs/philosophy/VISION.md](./docs/philosophy/VISION.md) - Why autonomous agents need survival
 - [docs/runtime/ARCHITECTURE.md](./docs/runtime/ARCHITECTURE.md) - Implementation details
 
@@ -294,7 +294,7 @@ Contributions welcome. Please read:
 
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Guidelines and workflow
 - [docs/governance/DEVELOPMENT.md](./docs/governance/DEVELOPMENT.md) - Developer setup
-- [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Design philosophy
+- [docs/philosophy/OVERVIEW.md](./docs/philosophy/OVERVIEW.md) - Design philosophy
 
 Security issues: [SECURITY.md](./SECURITY.md)
 

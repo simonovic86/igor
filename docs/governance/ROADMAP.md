@@ -21,59 +21,65 @@ Igor v0 has completed **Phase 2 (Survival)**, implementing all core functionalit
 
 **Goal:** Enable agents to make autonomous decisions about where to run.
 
-### Task 6: Agent Manifest Validation & Capability Enforcement
+### Task 6: Capability Membrane & Hostcall ABI
 
-**Objective:** Implement agent manifests that declare capabilities and resource requirements.
+**Objective:** Implement the capability membrane — all agent I/O through runtime-mediated hostcalls.
 
 **Scope:**
-- Define manifest schema (`pkg/manifest`)
-- Validate manifest on agent load
-- Enforce capability matching
-- Reject incompatible agents
+- `igor` WASM host module with capability namespaces (clock, rand, kv, log)
+- Capability manifest schema and validation at load time (CE-1, CE-2)
+- Observation event log recording for deterministic replay (CE-3)
+- Side-effect gating on ACTIVE_OWNER state (CE-4)
+- Pre-migration capability verification (CE-5)
 
 **Components:**
-- Manifest parser and validator
+- Host module builder (wazero `NewHostModuleBuilder`)
+- Manifest parser and validator (`pkg/manifest`)
+- Event log writer (per-tick observation recording)
 - Capability registry per node
-- Resource requirement checking
-- Rejection protocol
 
-**Outcome:** Nodes can verify they can host an agent before accepting migration.
+**Specs:** [CAPABILITY_MEMBRANE.md](../constitution/CAPABILITY_MEMBRANE.md), [CAPABILITY_ENFORCEMENT.md](../enforcement/CAPABILITY_ENFORCEMENT.md), [HOSTCALL_ABI.md](../runtime/HOSTCALL_ABI.md)
 
-### Task 7: Migration Decision Interface (Agent → Runtime)
+**Outcome:** Agents interact through structured, auditable, replayable hostcalls. Foundation for replay engine and permissionless operation.
 
-**Objective:** Allow agents to request migration autonomously.
+### Task 7: Replay Engine (Basic)
 
-**Scope:**
-- WASM host function for migration request
-- Agent can query available nodes
-- Agent can evaluate pricing
-- Agent can trigger migration
-
-**Components:**
-- `request_migration()` host function
-- Peer discovery from WASM
-- Price comparison logic
-- Autonomous decision making
-
-**Outcome:** Agents can migrate without human intervention.
-
-### Task 8: Multi-Node Agent Mobility Testing
-
-**Objective:** Verify agents can hop between multiple nodes successfully.
+**Objective:** Implement single-tick replay verification using the observation event log.
 
 **Scope:**
-- Test agent migrating A → B → C → A
-- Verify state preservation
+- Replay sandbox that feeds recorded observations instead of live data
+- Single-tick replay: checkpoint_N + event_log → verify checkpoint_N+1
+- Divergence detection and reporting
+- Local self-verification mode
+
+**Specs:** [REPLAY_ENGINE.md](../runtime/REPLAY_ENGINE.md)
+
+**Outcome:** Runtime can verify tick execution correctness post-hoc.
+
+### Task 8: Agent SDK & Developer Experience
+
+**Objective:** Make agent authoring accessible with SDK and tooling.
+
+**Scope:**
+- Agent SDK (Go/TinyGo first) wrapping hostcall interface
+- Local simulator (single-process deterministic replay)
+- Capability mocks for testing
+- Agent template / starter project
+- Checkpoint inspector
+
+**Outcome:** Developers can build agents without manually managing WASM exports, memory, and hostcall signatures.
+
+### Task 9: Multi-Node Mobility Testing
+
+**Objective:** Verify agents can hop between multiple nodes with capability-aware migration.
+
+**Scope:**
+- Test agent migrating A → B → C → A with capability verification
+- Verify state + capability preservation across hops
 - Verify budget conservation
 - Stress test migration frequency
 
-**Components:**
-- Multi-node test harness
-- Migration orchestration tests
-- State verification tools
-- Budget tracking across hops
-
-**Outcome:** Confidence in agent mobility at scale.
+**Outcome:** Confidence in capability-aware agent mobility at scale.
 
 ---
 
@@ -81,41 +87,41 @@ Igor v0 has completed **Phase 2 (Survival)**, implementing all core functionalit
 
 **Goal:** Implement cryptographic payment proofs and pricing mechanisms.
 
-### Task 9: Payment Receipt Signing
+### Task 10: Payment Receipt Signing
 
 **Objective:** Nodes provide cryptographic proof of execution.
 
 **Scope:**
 - Node signs receipts with peer key
-- Receipt includes execution time + cost
-- Agent verifies receipts
-- Store receipts for audit
+- Receipt includes execution time, cost, and epoch
+- Agent verifies receipts via wallet hostcalls
+- Store receipts for audit trail
 
 **Components:**
-- Receipt data structure
+- Receipt data structure tied to checkpoints/epochs
 - Signing with libp2p identity
-- Verification logic
+- `wallet.*` hostcall implementation
 - Receipt storage
 
-**Outcome:** Auditable payment trail.
+**Outcome:** Auditable payment trail with hostcall-mediated access.
 
-### Task 10: Node Pricing Negotiation
+### Task 11: Node Pricing & Economic Settlement
 
-**Objective:** Agents and nodes negotiate execution price.
+**Objective:** Implement economic settlement interface with external payment rails.
 
 **Scope:**
-- Nodes advertise pricing
-- Agents query prices from peers
-- Negotiation protocol
-- Dynamic price adjustment
+- Nodes advertise pricing via libp2p gossip
+- Agents query prices through hostcalls
+- Budget adapter interface (mock + real EVM settlement)
+- Runtime tick gating on budget validity
 
 **Components:**
 - Price advertisement protocol
-- Agent price comparison
-- Negotiation messages
-- Market discovery
+- Budget adapter (pluggable: mock, EVM L2/stablecoin)
+- Settlement interface
+- Economic receipt infrastructure
 
-**Outcome:** Competitive pricing market for execution.
+**Outcome:** Agents can survive/die economically with real payment rails.
 
 ---
 
@@ -123,59 +129,55 @@ Igor v0 has completed **Phase 2 (Survival)**, implementing all core functionalit
 
 **Goal:** Production-grade reliability and security.
 
-### Task 11: Runtime Resource Isolation
+### Task 12: Lease-Based Authority Epochs
 
-**Objective:** Enhance sandbox with additional protections.
-
-**Scope:**
-- CPU usage limits
-- I/O bandwidth limits
-- System call filtering
-- Enhanced WASM validation
-
-**Components:**
-- Resource accounting
-- cgroup integration (Linux)
-- Syscall filtering
-- Performance monitoring
-
-**Outcome:** Safer execution environment.
-
-### Task 12: Migration Failure Recovery
-
-**Objective:** Handle migration failures gracefully.
+**Objective:** Time-bound execution authority with leases for automated failure detection.
 
 **Scope:**
-- Retry failed migrations
+- Lease grant/renewal/expiry integrated with authority state machine
+- Epoch advancement (major version on transfer, lease generation on renewal)
+- Anti-clone enforcement: expired leases cannot resume ticking
+- Lease metadata in checkpoint
+
+**Specs:** [LEASE_EPOCH.md](../runtime/LEASE_EPOCH.md)
+
+**Outcome:** Automated detection of unresponsive nodes; liveness guarantee on top of existing safety.
+
+### Task 13: Signed Checkpoint Lineage
+
+**Objective:** Cryptographic identity for agents and signed checkpoint chains.
+
+**Scope:**
+- Ed25519 agent keypairs
+- Signed checkpoint lineage (each checkpoint signed by agent identity)
+- WASM binary hash verification
+- Checkpoint content-addressed storage (IPFS/CID compatible)
+
+**Outcome:** Verifiable checkpoint lineage; foundation for trustless operation.
+
+### Task 14: Migration Failure Recovery
+
+**Objective:** Handle migration failures gracefully with lease-aware recovery.
+
+**Scope:**
+- Retry failed migrations with exponential backoff
+- Lease-aware recovery: expired lease triggers re-election
 - Fallback to alternative nodes
-- Rollback on target failure
-- Timeout handling
-
-**Components:**
-- Retry logic with exponential backoff
-- Peer ranking/reputation
-- Transaction rollback
-- Health monitoring
+- Cross-node replay verification for migrated checkpoints
 
 **Outcome:** Robust migration under adverse conditions.
 
-### Task 13: Agent Integrity Verification
+### Task 15: Permissionless Hardening
 
-**Objective:** Verify agent identity and code integrity.
+**Objective:** Security and incentive mechanisms for untrusted networks.
 
 **Scope:**
-- Agent cryptographic identity
-- WASM binary signing
-- Checkpoint signing
-- Identity verification
+- Sybil resistance (stake/reputation/cost-to-advertise)
+- Host attestation options
+- Anti-withholding incentives
+- Full replay verification (cross-node)
 
-**Components:**
-- Public key infrastructure
-- Signature generation/verification
-- Trust chain
-- Revocation mechanism
-
-**Outcome:** Trustworthy agent identity.
+**Outcome:** Foundation for permissionless deployment.
 
 ---
 
@@ -202,11 +204,11 @@ Potential future directions (not committed):
 
 ### Ecosystem Tools
 
-- **Agent SDK** - Libraries for common patterns
 - **Node operator tools** - Monitoring dashboards
-- **Agent debugger** - Inspect state and execution
+- **Agent debugger** - Inspect state and execution via replay
 - **Migration visualizer** - Track agent movement
 - **Economic analytics** - Budget and pricing insights
+- **Checkpoint inspector** - Browse lineage, verify signatures
 
 **Important:** These are speculative. Focus remains on v0 core functionality.
 
@@ -286,10 +288,11 @@ None. v0 is experimental. Things may be:
 
 ### Phase 3 Goals
 
-- Agent autonomously chooses node
-- Agent evaluates node pricing
-- Agent migrates without human intervention
-- Multi-hop migration works reliably
+- All agent I/O through capability membrane (hostcalls)
+- Observation event log enables deterministic replay
+- Basic replay verification working
+- Agent SDK makes agent authoring accessible
+- Capability-aware multi-node migration
 
 ### Phase 4 Goals
 

@@ -333,6 +333,91 @@ This formalization improves specification clarity, traceability, and implementab
 
 ---
 
+## Capability Membrane Dependencies
+
+The capability membrane (CM-1 through CM-7) introduces a new constitutional invariant family governing agent I/O. These invariants are enforced by CE-1 through CE-6.
+
+### Constitutional Dependency Tree
+
+```
+CM-1 (Total Mediation)
+├── CM-2 (Explicit Declaration) — agents declare what they need
+├── CM-3 (Deny by Default) — everything else is blocked
+├── CM-4 (Observation Determinism) — observations are replayable
+│   └── extends EI-3 (Lineage Integrity) and RE-6 (Tick Determinism)
+├── CM-5 (Side Effect Attribution) — effects tied to identity + authority
+│   └── extends AUTHORITY_STATE_MACHINE.md tick permission matrix
+├── CM-6 (Capability Immutability During Tick) — environment stable within tick
+│   └── strengthens RE-6 (Tick Determinism)
+└── CM-7 (Capability Survival Through Migration) — capabilities preserved
+    └── extends MC-2 (Migration Scope) and MC-4 (Identity Preservation)
+```
+
+### Capability Enforcement Derivation Chain
+
+| Enforcement Rule | Derives From | Purpose |
+|-----------------|-------------|---------|
+| CE-1: Hostcall Namespace Isolation | CM-1, CM-3 | Only granted hostcalls importable |
+| CE-2: Manifest Validation at Load | CM-2 | Reject agents with unsatisfiable requirements |
+| CE-3: Tick Observation Log | CM-4 | Record all observations for replay |
+| CE-4: Authority-Gated Side Effects | CM-5 | Block side effects outside ACTIVE_OWNER |
+| CE-5: Pre-Migration Capability Verification | CM-7 | Target must satisfy agent capabilities |
+| CE-6: Hostcall Cost Accounting | CM-1, RE-3 | Include hostcall time in tick cost |
+
+### Cross-Layer Traceability
+
+| Capability Invariant | Related EI/RE | Relationship |
+|---------------------|--------------|--------------|
+| CM-1 | RE-7 | Strengthens sandbox from passive isolation to active mediation |
+| CM-4 | EI-3, RE-6 | Extends determinism from agent contract to runtime guarantee |
+| CM-5 | EI-1, EI-5 | Extends single-authority to cover I/O side effects |
+| CM-6 | RE-6 | Fixes execution environment within tick boundary |
+| CM-7 | MC-2, MC-4 | Extends migration scope to include capability requirements |
+
+#### CE-1: Hostcall Namespace Isolation
+
+- **Defined in:** CAPABILITY_ENFORCEMENT.md
+- **Derives from:** CM-1 (total mediation), CM-3 (deny by default)
+- **Referenced in:** INVARIANT_DEPENDENCY_GRAPH.md
+- **Validated by:** WASM link errors on ungrantable imports
+
+#### CE-2: Manifest Validation at Load
+
+- **Defined in:** CAPABILITY_ENFORCEMENT.md
+- **Derives from:** CM-2 (explicit declaration)
+- **Referenced in:** INVARIANT_DEPENDENCY_GRAPH.md
+- **Validated by:** Load-time rejection of agents with unsatisfiable manifests
+
+#### CE-3: Tick Observation Log
+
+- **Defined in:** CAPABILITY_ENFORCEMENT.md
+- **Derives from:** CM-4 (observation determinism)
+- **Referenced in:** INVARIANT_DEPENDENCY_GRAPH.md
+- **Validated by:** Replay divergence detection
+
+#### CE-4: Authority-Gated Side Effects
+
+- **Defined in:** CAPABILITY_ENFORCEMENT.md
+- **Derives from:** CM-5 (side effect attribution)
+- **Referenced in:** INVARIANT_DEPENDENCY_GRAPH.md
+- **Validated by:** Side-effect hostcall failure outside ACTIVE_OWNER
+
+#### CE-5: Pre-Migration Capability Verification
+
+- **Defined in:** CAPABILITY_ENFORCEMENT.md
+- **Derives from:** CM-7 (capability survival through migration)
+- **Referenced in:** INVARIANT_DEPENDENCY_GRAPH.md
+- **Validated by:** Migration rejection on capability mismatch
+
+#### CE-6: Hostcall Cost Accounting
+
+- **Defined in:** CAPABILITY_ENFORCEMENT.md
+- **Derives from:** CM-1 (total mediation), RE-3 (budget conservation)
+- **Referenced in:** INVARIANT_DEPENDENCY_GRAPH.md
+- **Validated by:** Tick cost including hostcall duration
+
+---
+
 ## Document Status
 
 **Type:** Enforcement Specification

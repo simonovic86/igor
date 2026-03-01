@@ -177,7 +177,7 @@ v0 is a survival-runtime experiment, not a production security platform.
 
 ## Phase Mapping
 
-Threat coverage aligns with repository phases in [TASKS.md](../../TASKS.md):
+Threat coverage aligns with repository phases in [ROADMAP.md](../governance/ROADMAP.md):
 
 | Phase | Relevant Tasks | Threat Coverage Intent |
 |------|----------------|------------------------|

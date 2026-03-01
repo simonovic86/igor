@@ -317,7 +317,7 @@ Igor requires **deterministic builds**:
 - No environment-specific behavior
 - Reproducible across developers and CI
 
-This philosophy aligns with PROJECT_CONTEXT.md:
+This philosophy aligns with the design principles:
 > "Deterministic behavior preferred"
 
 Toolchain determinism ensures:
@@ -330,4 +330,4 @@ Toolchain determinism ensures:
 
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - Development workflow
 - [CONTRIBUTING.md](../../CONTRIBUTING.md) - Contribution guidelines
-- [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) - Design philosophy
+- [docs/philosophy/OVERVIEW.md](../philosophy/OVERVIEW.md) - Design philosophy

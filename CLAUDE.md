@@ -68,10 +68,12 @@ Cross-reference: `docs/SPEC_INDEX.md`
 - **EI-1: Single Active Instance** — At most one node ticks an agent at any time
 - **EI-3: Checkpoint Lineage Integrity** — Single ordered chain, no forks
 - **EI-6: Safety Over Liveness** — Pause rather than violate invariants
+- **CM-1: Total Mediation** — All agent I/O passes through runtime hostcalls, no unmediated channels
+- **CM-4: Observation Determinism** — Observation hostcalls are deterministically replayable
 - **RE-1: Atomic Checkpoints** — Never partial writes
 - **RE-3: Budget Conservation** — Budget never created or destroyed, only transferred
 
-Full list: `docs/constitution/EXECUTION_INVARIANTS.md`, `docs/enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md`
+Full list: `docs/constitution/EXECUTION_INVARIANTS.md`, `docs/constitution/CAPABILITY_MEMBRANE.md`, `docs/enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md`
 
 ## Conventions
 

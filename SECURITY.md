@@ -4,7 +4,7 @@
 
 Igor v0 is experimental research software currently in Phase 2 (Survival) development. It is **not production-ready** and has known security limitations by design.
 
-**Current Status:** Early development, active testing, not suitable for production use.
+**Do not deploy Igor v0 on public networks or with sensitive data.**
 
 ## Supported Versions
 
@@ -14,63 +14,6 @@ Only the `main` branch is actively maintained. No stable releases have been tagg
 | ------- | ------------------ |
 | main    | :white_check_mark: |
 | v0.x    | :construction:     |
-
-## Security Scope
-
-Igor includes security-sensitive components:
-
-### WASM Sandbox Execution
-- Agent isolation via wazero runtime
-- Memory limits (64MB per agent)
-- Capability restrictions (no filesystem, no network)
-- Execution timeouts (100ms per tick)
-
-### Agent Migration Transport
-- Agent package transfer over libp2p streams
-- Checkpoint serialization and transmission
-- Confirmation handshake protocol
-
-### Checkpoint Persistence
-- State serialization and storage
-- Budget metadata encoding
-- Atomic write operations
-
-### Runtime Metering Logic
-- Execution time measurement
-- Budget calculation and enforcement
-- Cost deduction mechanisms
-
-## Known Limitations
-
-Igor v0 has intentional security limitations:
-
-**Budget Security:**
-- Budget accounting is trusted, not cryptographically verified
-- Nodes can lie about execution time
-- No payment receipts or proof of work
-- No dispute resolution mechanism
-
-**Checkpoint Security:**
-- Checkpoints stored in plaintext
-- No encryption of agent state
-- No integrity verification
-- No authentication of checkpoint origin
-
-**Network Security:**
-- No peer authentication beyond libp2p peer ID
-- No authorization for migration requests
-- No rate limiting or DoS protection
-- Relies on trusted network environment
-
-**Identity Security:**
-- Agents lack cryptographic identity in v0
-- No signing capability
-- No access control
-- Identity not carried in migrations
-
-These limitations are documented in [docs/runtime/SECURITY_MODEL.md](./docs/runtime/SECURITY_MODEL.md).
-
-**Do not deploy Igor v0 on public networks or with sensitive data.**
 
 ## Reporting Vulnerabilities
 
@@ -130,55 +73,13 @@ We follow coordinated disclosure:
 
 Typical timeline: 30-90 days from report to disclosure, depending on severity.
 
-## Security Expectations
+## Technical Security Documentation
 
-### What Igor v0 Protects Against
+For detailed threat analysis and security mechanisms:
 
-- **Malicious agents** escaping WASM sandbox
-- **Resource exhaustion** by single agent (memory, CPU)
-- **State corruption** through atomic checkpoint writes
-
-### What Igor v0 Does NOT Protect Against
-
-- **Malicious nodes** lying about metering or stealing state
-- **Network attacks** beyond basic libp2p security
-- **Cryptographic vulnerabilities** (minimal crypto in v0)
-- **Economic attacks** (no payment verification)
-- **Data privacy** (checkpoints in plaintext)
-
-Igor v0 is suitable only for:
-- Development and testing
-- Research environments
-- Trusted network deployments
-- Non-sensitive agent workloads
-
-## Security Roadmap
-
-Future phases may address current limitations:
-
-**Phase 3 (Autonomy):**
-- Agent manifest validation
-- Capability enforcement
-- Basic integrity checks
-
-**Phase 4 (Economics):**
-- Cryptographic receipts
-- Payment verification
-- Fraud detection
-
-**Phase 5 (Hardening):**
-- State encryption
-- Checkpoint signing
-- Advanced sandbox hardening
-- Multi-party verification
-
-No timeline or commitment. Listed for context only.
-
-## Security Resources
-
-- [docs/runtime/SECURITY_MODEL.md](./docs/runtime/SECURITY_MODEL.md) - Detailed threat model
+- [docs/runtime/THREAT_MODEL.md](./docs/runtime/THREAT_MODEL.md) - Threat assumptions, adversary classes, trust boundaries
+- [docs/runtime/SECURITY_MODEL.md](./docs/runtime/SECURITY_MODEL.md) - Current security mechanisms and limitations
 - [docs/enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md](./docs/enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md) - System guarantees
-- [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Design philosophy
 
 ## Contact
 

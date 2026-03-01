@@ -23,6 +23,7 @@ Enforcement documents:
 |----------|---------|
 | [RUNTIME_ENFORCEMENT_INVARIANTS.md](./RUNTIME_ENFORCEMENT_INVARIANTS.md) | Enforcement rules implementing constitutional guarantees (RE-1 through RE-8) |
 | [INVARIANT_DEPENDENCY_GRAPH.md](./INVARIANT_DEPENDENCY_GRAPH.md) | Invariant dependency relationships, derivation chains, and cross-document traceability |
+| [CAPABILITY_ENFORCEMENT.md](./CAPABILITY_ENFORCEMENT.md) | Capability enforcement rules (CE-1 through CE-6) derived from CAPABILITY_MEMBRANE.md |
 
 ## Relationship to Other Layers
 

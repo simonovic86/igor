@@ -174,7 +174,7 @@ Igor should be discoverable via these queries (test periodically):
 2. Ensure technical accuracy
 3. Avoid introducing hype
 4. Preserve experimental status clarity
-5. Maintain alignment with PROJECT_CONTEXT.md
+5. Maintain alignment with docs/philosophy/OVERVIEW.md
 
 **When adding new keywords:**
 1. Verify technical accuracy
@@ -190,7 +190,7 @@ Igor should be discoverable via these queries (test periodically):
 
 ## Philosophy Alignment
 
-From PROJECT_CONTEXT.md:
+From the design philosophy:
 > "Igor v0 is intentionally minimal. It is a proof-of-survival runtime."
 
 Keywords must reflect:

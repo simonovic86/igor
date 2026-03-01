@@ -592,7 +592,7 @@ Performance optimization is secondary to correctness.
 
 ## Additional Resources
 
-- [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) - Authoritative design specification
+- [docs/philosophy/OVERVIEW.md](../philosophy/OVERVIEW.md) - Project overview and design philosophy
 - [docs/runtime/ARCHITECTURE.md](../runtime/ARCHITECTURE.md) - Technical architecture
 - [docs/runtime/AGENT_LIFECYCLE.md](../runtime/AGENT_LIFECYCLE.md) - Agent development guide
 - [TASKS.md](../../TASKS.md) - Development roadmap

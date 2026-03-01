@@ -182,6 +182,22 @@ Defines the migration continuity contract:
 - Source node constraints during handoff (MC-8)
 - Failure safety matrix (FS-1 through FS-4)
 
+### [CAPABILITY_MEMBRANE.md](./CAPABILITY_MEMBRANE.md)
+
+Defines the constitutional guarantees governing agent I/O — the trust boundary between agent code and host resources:
+
+- Total mediation of agent I/O (CM-1)
+- Explicit capability declaration (CM-2)
+- Deny by default (CM-3)
+- Observation determinism (CM-4)
+- Side effect attribution (CM-5)
+- Capability immutability during tick (CM-6)
+- Capability survival through migration (CM-7)
+
+### [AUTHORITY_STATE_MACHINE.md](./AUTHORITY_STATE_MACHINE.md)
+
+Formalizes the authority lifecycle as a state machine with normative transition table, forbidden transitions, and tick permission matrix. Operationalizes the single-active-ticker guarantee from EI-1 and the authority lifecycle from OA-2.
+
 ---
 
 ## Derivation Rule

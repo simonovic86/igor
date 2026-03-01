@@ -17,6 +17,8 @@ Igor's specification is organized into three layers. Each layer has distinct res
 - [EXECUTION_INVARIANTS.md](../constitution/EXECUTION_INVARIANTS.md)
 - [OWNERSHIP_AND_AUTHORITY.md](../constitution/OWNERSHIP_AND_AUTHORITY.md)
 - [MIGRATION_CONTINUITY.md](../constitution/MIGRATION_CONTINUITY.md)
+- [AUTHORITY_STATE_MACHINE.md](../constitution/AUTHORITY_STATE_MACHINE.md)
+- [CAPABILITY_MEMBRANE.md](../constitution/CAPABILITY_MEMBRANE.md)
 
 **Contains:**
 - Non-negotiable runtime guarantees
@@ -37,6 +39,7 @@ Igor's specification is organized into three layers. Each layer has distinct res
 **Documents:**
 - [RUNTIME_ENFORCEMENT_INVARIANTS.md](../enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md)
 - [INVARIANT_DEPENDENCY_GRAPH.md](../enforcement/INVARIANT_DEPENDENCY_GRAPH.md)
+- [CAPABILITY_ENFORCEMENT.md](../enforcement/CAPABILITY_ENFORCEMENT.md)
 
 **Contains:**
 - Enforcement rules implementing constitutional guarantees

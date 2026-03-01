@@ -341,5 +341,5 @@ Track per release:
 
 - [CONTRIBUTING.md](../../CONTRIBUTING.md) - Contribution workflow
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - Development setup
-- [TASKS.md](../../TASKS.md) - Development roadmap
-- [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) - Design philosophy
+- [ROADMAP.md](./ROADMAP.md) - Development roadmap
+- [docs/philosophy/OVERVIEW.md](../philosophy/OVERVIEW.md) - Design philosophy

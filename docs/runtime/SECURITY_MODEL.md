@@ -23,11 +23,13 @@ This document focuses on **current mechanisms** and **current limitations** unde
 1. **Agent containment**
    - WASM sandbox isolation via wazero
    - No direct host filesystem/network capability in guest code
+   - Capability membrane: all agent I/O mediated through runtime hostcalls (CM-1). See [CAPABILITY_MEMBRANE.md](../constitution/CAPABILITY_MEMBRANE.md)
 
 2. **Resource bounding**
    - Memory capped per agent
    - Tick timeout enforced
    - Budget-gated execution
+   - Hostcall cost included in tick metering (CE-6)
 
 3. **Operational fail-fast behavior**
    - Runtime surfaces errors directly
@@ -255,7 +257,7 @@ Igor v0 prioritizes:
 3. fail-stop safety behavior over optimistic liveness
 4. honest disclosure over production claims
 
-From [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md):
+From the design philosophy:
 
 > "Perfect security is NOT required in v0."
 

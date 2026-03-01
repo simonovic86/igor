@@ -24,7 +24,7 @@ Igor v0 focuses on proving autonomous agent survival is feasible. Features outsi
 **Fail Loudly:**
 Invariant violations cause immediate errors. Correctness over graceful degradation.
 
-See [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) for authoritative design specification.
+See [docs/philosophy/OVERVIEW.md](./docs/philosophy/OVERVIEW.md) for project overview and design philosophy.
 
 ## Development Environment Setup
 
@@ -137,7 +137,7 @@ The pre-commit hook automatically runs `make check` on every commit. Fix all iss
 **Documentation Updates:**
 - Update relevant docs/ files if behavior changes
 - Update DEVELOPMENT.md if workflow changes
-- Update PROJECT_CONTEXT.md only with maintainer approval
+- Update constitutional specs only with maintainer approval (see docs/governance/SPEC_GOVERNANCE.md)
 
 **Clear Description:**
 - Explain what the PR does and why
@@ -338,7 +338,7 @@ Open an issue to discuss before investing significant effort.
 
 ### Out of Scope
 
-Per PROJECT_CONTEXT.md, the following are explicitly out of scope:
+Per the design philosophy (see docs/philosophy/OVERVIEW.md), the following are explicitly out of scope:
 
 - Agent marketplaces
 - Reputation systems
