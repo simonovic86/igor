@@ -223,8 +223,8 @@ func TestMultiNodeMigration(t *testing.T) {
 	env := newMigrationEnv(t)
 
 	// Verify replay data is present before migration
-	if env.instance.LastTickLog == nil {
-		t.Fatal("expected LastTickLog to be set after ticking")
+	if len(env.instance.ReplayWindow) == 0 {
+		t.Fatal("expected ReplayWindow to be populated after ticking")
 	}
 
 	// Migrate from A to B (replay verification happens on the target)

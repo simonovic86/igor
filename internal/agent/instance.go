@@ -21,7 +21,20 @@ import (
 const (
 	checkpointVersion   byte = 0x01
 	checkpointHeaderLen int  = 17 // 1 (version) + 8 (budget) + 8 (pricePerSecond)
+
+	// DefaultReplayWindowSize is the number of recent tick snapshots retained
+	// for sliding replay verification (CM-4).
+	DefaultReplayWindowSize = 16
 )
+
+// TickSnapshot holds replay verification data for a single tick.
+// Stored in the Instance's replay window for CM-4 sliding verification.
+type TickSnapshot struct {
+	TickNumber uint64
+	PreState   []byte
+	PostState  []byte
+	TickLog    *eventlog.TickLog
+}
 
 // Instance represents a running agent instance.
 type Instance struct {
@@ -39,10 +52,9 @@ type Instance struct {
 	TickNumber     uint64
 	logger         *slog.Logger
 
-	// Replay verification state (captured each tick for CM-4 verification)
-	PreTickState  []byte            // Agent state before the last tick
-	PostTickState []byte            // Agent state after the last tick
-	LastTickLog   *eventlog.TickLog // Sealed event log from the last tick
+	// Replay verification state: sliding window of recent tick snapshots (CM-4).
+	ReplayWindow    []TickSnapshot // Recent tick snapshots for verification
+	replayWindowMax int            // Maximum snapshots retained (0 = use DefaultReplayWindowSize)
 }
 
 // LoadAgent loads and compiles a WASM agent from a file.
@@ -215,10 +227,20 @@ func (i *Instance) Tick(ctx context.Context) error {
 		return fmt.Errorf("post-tick checkpoint failed: %w", err)
 	}
 
-	// Store replay verification data
-	i.PreTickState = preState
-	i.PostTickState = postState
-	i.LastTickLog = sealed
+	// Store replay verification snapshot in sliding window
+	i.ReplayWindow = append(i.ReplayWindow, TickSnapshot{
+		TickNumber: i.TickNumber,
+		PreState:   preState,
+		PostState:  postState,
+		TickLog:    sealed,
+	})
+	maxSnaps := i.replayWindowMax
+	if maxSnaps <= 0 {
+		maxSnaps = DefaultReplayWindowSize
+	}
+	if len(i.ReplayWindow) > maxSnaps {
+		i.ReplayWindow = i.ReplayWindow[len(i.ReplayWindow)-maxSnaps:]
+	}
 
 	// Calculate and deduct execution cost (integer arithmetic, no float precision loss)
 	costMicrocents := elapsed.Microseconds() * i.PricePerSecond / budget.MicrocentScale
@@ -449,6 +471,21 @@ func ExtractAgentState(checkpoint []byte) ([]byte, error) {
 		return nil, fmt.Errorf("unsupported checkpoint version: %d", checkpoint[0])
 	}
 	return checkpoint[checkpointHeaderLen:], nil
+}
+
+// SetReplayWindowSize configures the maximum number of tick snapshots retained
+// in the replay window. Must be called before the first Tick.
+func (i *Instance) SetReplayWindowSize(n int) {
+	i.replayWindowMax = n
+}
+
+// LatestSnapshot returns the most recent tick snapshot, or nil if no ticks
+// have been executed. Used by migration to extract replay data.
+func (i *Instance) LatestSnapshot() *TickSnapshot {
+	if len(i.ReplayWindow) == 0 {
+		return nil
+	}
+	return &i.ReplayWindow[len(i.ReplayWindow)-1]
 }
 
 // Close releases agent resources.

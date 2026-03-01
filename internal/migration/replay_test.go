@@ -10,13 +10,11 @@ import (
 	protomsg "github.com/simonovic86/igor/pkg/protocol"
 )
 
-func TestReplayDataFromInstance_NilTickLog(t *testing.T) {
-	inst := &agent.Instance{
-		LastTickLog: nil,
-	}
+func TestReplayDataFromInstance_EmptyWindow(t *testing.T) {
+	inst := &agent.Instance{}
 	rd := replayDataFromInstance(inst, nil)
 	if rd != nil {
-		t.Error("expected nil when LastTickLog is nil")
+		t.Error("expected nil when ReplayWindow is empty")
 	}
 }
 
@@ -31,14 +29,19 @@ func TestReplayDataFromInstance_WithData(t *testing.T) {
 	copy(checkpoint[17:], postState)
 
 	inst := &agent.Instance{
-		PreTickState:  []byte{0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-		PostTickState: postState,
-		LastTickLog: &eventlog.TickLog{
-			TickNumber: 5,
-			Entries: []eventlog.Entry{
-				{HostcallID: eventlog.ClockNow, Payload: []byte{0xAA, 0xBB}},
-				{HostcallID: eventlog.RandBytes, Payload: []byte{0xCC, 0xDD, 0xEE}},
-				{HostcallID: eventlog.LogEmit, Payload: []byte("tick")},
+		ReplayWindow: []agent.TickSnapshot{
+			{
+				TickNumber: 5,
+				PreState:   []byte{0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+				PostState:  postState,
+				TickLog: &eventlog.TickLog{
+					TickNumber: 5,
+					Entries: []eventlog.Entry{
+						{HostcallID: eventlog.ClockNow, Payload: []byte{0xAA, 0xBB}},
+						{HostcallID: eventlog.RandBytes, Payload: []byte{0xCC, 0xDD, 0xEE}},
+						{HostcallID: eventlog.LogEmit, Payload: []byte("tick")},
+					},
+				},
 			},
 		},
 	}
@@ -74,7 +77,7 @@ func TestReplayDataFromInstance_StalenessGuard(t *testing.T) {
 	postState := []byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 	differentState := []byte{0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
-	// Build checkpoint with differentState — does NOT match PostTickState
+	// Build checkpoint with differentState — does NOT match PostState
 	checkpoint := make([]byte, 17+len(differentState))
 	checkpoint[0] = 0x01
 	binary.LittleEndian.PutUint64(checkpoint[1:9], 1000000)
@@ -82,17 +85,22 @@ func TestReplayDataFromInstance_StalenessGuard(t *testing.T) {
 	copy(checkpoint[17:], differentState)
 
 	inst := &agent.Instance{
-		PreTickState:  []byte{0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-		PostTickState: postState,
-		LastTickLog: &eventlog.TickLog{
-			TickNumber: 5,
-			Entries:    []eventlog.Entry{{HostcallID: eventlog.ClockNow, Payload: []byte{0xAA}}},
+		ReplayWindow: []agent.TickSnapshot{
+			{
+				TickNumber: 5,
+				PreState:   []byte{0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+				PostState:  postState,
+				TickLog: &eventlog.TickLog{
+					TickNumber: 5,
+					Entries:    []eventlog.Entry{{HostcallID: eventlog.ClockNow, Payload: []byte{0xAA}}},
+				},
+			},
 		},
 	}
 
 	rd := replayDataFromInstance(inst, checkpoint)
 	if rd != nil {
-		t.Error("expected nil when PostTickState does not match checkpoint state (staleness guard)")
+		t.Error("expected nil when PostState does not match checkpoint state (staleness guard)")
 	}
 }
 

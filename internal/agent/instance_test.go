@@ -225,6 +225,24 @@ func TestTick_RecordObservations(t *testing.T) {
 	if len(history[0].Entries) != 3 {
 		t.Errorf("expected 3 entries in tick log, got %d", len(history[0].Entries))
 	}
+
+	// Verify replay window has one snapshot
+	if len(instance.ReplayWindow) != 1 {
+		t.Fatalf("expected 1 snapshot in ReplayWindow, got %d", len(instance.ReplayWindow))
+	}
+	snap := instance.ReplayWindow[0]
+	if snap.TickNumber != 1 {
+		t.Errorf("snapshot TickNumber: got %d, want 1", snap.TickNumber)
+	}
+	if snap.PreState == nil {
+		t.Error("snapshot PreState should not be nil")
+	}
+	if snap.PostState == nil {
+		t.Error("snapshot PostState should not be nil")
+	}
+	if snap.TickLog == nil {
+		t.Error("snapshot TickLog should not be nil")
+	}
 }
 
 func TestTick_BudgetExhausted(t *testing.T) {
@@ -335,5 +353,78 @@ func TestCheckpointAndResume(t *testing.T) {
 	counter := binary.LittleEndian.Uint64(state)
 	if counter != 3 {
 		t.Errorf("counter in checkpoint: got %d, want 3", counter)
+	}
+}
+
+func TestReplayWindow_Eviction(t *testing.T) {
+	wasmPath := buildTestAgent(t)
+	ctx := context.Background()
+	logger := newTestLogger()
+
+	engine, err := runtime.NewEngine(ctx, logger)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+	defer engine.Close(ctx)
+
+	storageProvider, err := storage.NewFSProvider(t.TempDir(), logger)
+	if err != nil {
+		t.Fatalf("NewFSProvider: %v", err)
+	}
+
+	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-evict", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, logger)
+	if err != nil {
+		t.Fatalf("LoadAgent: %v", err)
+	}
+	defer instance.Close(ctx)
+
+	instance.SetReplayWindowSize(3)
+
+	if err := instance.Init(ctx); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	// Run 5 ticks — window should retain only the last 3
+	for i := 0; i < 5; i++ {
+		if err := instance.Tick(ctx); err != nil {
+			t.Fatalf("Tick %d: %v", i+1, err)
+		}
+	}
+
+	if len(instance.ReplayWindow) != 3 {
+		t.Fatalf("expected 3 snapshots in ReplayWindow, got %d", len(instance.ReplayWindow))
+	}
+
+	// Verify the window contains ticks 3, 4, 5 (oldest evicted)
+	expectedTicks := []uint64{3, 4, 5}
+	for i, expected := range expectedTicks {
+		if instance.ReplayWindow[i].TickNumber != expected {
+			t.Errorf("ReplayWindow[%d].TickNumber: got %d, want %d", i, instance.ReplayWindow[i].TickNumber, expected)
+		}
+	}
+}
+
+func TestLatestSnapshot(t *testing.T) {
+	inst := &Instance{}
+
+	// Empty window returns nil
+	if snap := inst.LatestSnapshot(); snap != nil {
+		t.Error("expected nil for empty ReplayWindow")
+	}
+
+	// Add snapshots
+	inst.ReplayWindow = []TickSnapshot{
+		{TickNumber: 1},
+		{TickNumber: 2},
+		{TickNumber: 3},
+	}
+
+	snap := inst.LatestSnapshot()
+	if snap == nil {
+		t.Fatal("expected non-nil LatestSnapshot")
+	}
+	if snap.TickNumber != 3 {
+		t.Errorf("LatestSnapshot().TickNumber: got %d, want 3", snap.TickNumber)
 	}
 }

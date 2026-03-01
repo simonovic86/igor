@@ -22,16 +22,26 @@ type Config struct {
 
 	// CheckpointDir is the directory where agent checkpoints are stored.
 	CheckpointDir string
+
+	// ReplayWindowSize is the number of recent tick snapshots retained
+	// for sliding replay verification (CM-4). Default: 16.
+	ReplayWindowSize int
+
+	// VerifyInterval is the number of ticks between self-verification passes.
+	// 0 disables periodic verification. Default: 5.
+	VerifyInterval int
 }
 
 // Load returns a Config with default values applied.
 func Load() (*Config, error) {
 	cfg := &Config{
-		NodeID:         generateNodeID(),
-		ListenAddress:  "/ip4/0.0.0.0/tcp/4001",
-		PricePerSecond: 1000, // 0.001 currency units = 1000 microcents
-		BootstrapPeers: []string{},
-		CheckpointDir:  "./checkpoints",
+		NodeID:           generateNodeID(),
+		ListenAddress:    "/ip4/0.0.0.0/tcp/4001",
+		PricePerSecond:   1000, // 0.001 currency units = 1000 microcents
+		BootstrapPeers:   []string{},
+		CheckpointDir:    "./checkpoints",
+		ReplayWindowSize: 16,
+		VerifyInterval:   5,
 	}
 	return cfg, nil
 }
