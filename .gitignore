@@ -1,6 +1,7 @@
 # Igor v0 .gitignore
 
 # Build artifacts
+igord
 bin/
 dist/
 build/
