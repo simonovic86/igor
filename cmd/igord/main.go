@@ -23,6 +23,7 @@ func main() {
 	// Parse CLI flags
 	runAgent := flag.String("run-agent", "", "Path to WASM agent to run locally")
 	budget := flag.Float64("budget", 1.0, "Initial budget for agent execution")
+	manifestPath := flag.String("manifest", "", "Path to capability manifest JSON (default: <agent>.manifest.json)")
 	migrateAgent := flag.String("migrate-agent", "", "Agent ID to migrate")
 	targetPeer := flag.String("to", "", "Target peer multiaddr for migration")
 	wasmPath := flag.String("wasm", "", "WASM binary path for migration")
@@ -99,7 +100,7 @@ func main() {
 
 	// If --run-agent flag is provided, run agent locally
 	if *runAgent != "" {
-		if err := runLocalAgent(ctx, cfg, *runAgent, *budget, migrationSvc, logger); err != nil {
+		if err := runLocalAgent(ctx, cfg, *runAgent, *budget, *manifestPath, migrationSvc, logger); err != nil {
 			logging.Error(logger, "Failed to run agent", "error", err)
 			os.Exit(1)
 		}
@@ -122,6 +123,7 @@ func runLocalAgent(
 	cfg *config.Config,
 	wasmPath string,
 	budget float64,
+	manifestPathFlag string,
 	migrationSvc *migration.Service,
 	logger *slog.Logger,
 ) error {
@@ -138,7 +140,24 @@ func runLocalAgent(
 	}
 	defer engine.Close(ctx)
 
-	// Load agent with budget
+	// Load manifest from file
+	mPath := manifestPathFlag
+	if mPath == "" {
+		// Default: look for <agent>.manifest.json alongside the WASM file
+		mPath = wasmPath[:len(wasmPath)-len(".wasm")] + ".manifest.json"
+	}
+	manifestData, err := os.ReadFile(mPath)
+	if err != nil {
+		// No manifest file — backward compatible, empty capabilities
+		manifestData = []byte("{}")
+		logger.Info("No manifest file found, using empty capabilities",
+			"expected_path", mPath,
+		)
+	} else {
+		logger.Info("Manifest loaded", "path", mPath)
+	}
+
+	// Load agent with budget and manifest
 	instance, err := agent.LoadAgent(
 		ctx,
 		engine,
@@ -147,6 +166,7 @@ func runLocalAgent(
 		storageProvider,
 		budget,
 		cfg.PricePerSecond,
+		manifestData,
 		logger,
 	)
 	if err != nil {

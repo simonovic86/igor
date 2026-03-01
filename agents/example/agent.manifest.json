@@ -1,0 +1,7 @@
+{
+  "capabilities": {
+    "clock": { "version": 1 },
+    "rand": { "version": 1 },
+    "log": { "version": 1 }
+  }
+}

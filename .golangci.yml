@@ -66,6 +66,12 @@ issues:
   # Maximum issues to report (0 = unlimited)
   max-issues-per-linter: 0
   max-same-issues: 0
+
+  # Exclude WASM agent code — compiled with TinyGo, not native Go.
+  # The //go:wasmimport directives produce bodyless functions that
+  # the native type checker cannot handle.
+  exclude-dirs:
+    - agents
   
   # Exclude common false positives
   exclude-rules:

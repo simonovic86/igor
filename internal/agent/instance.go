@@ -8,8 +8,11 @@ import (
 	"math"
 	"time"
 
+	"github.com/simonovic86/igor/internal/eventlog"
+	"github.com/simonovic86/igor/internal/hostcall"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
+	"github.com/simonovic86/igor/pkg/manifest"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 )
@@ -24,10 +27,14 @@ type Instance struct {
 	State          []byte
 	Budget         float64 // Remaining budget in arbitrary currency units
 	PricePerSecond float64 // Cost per second of execution
+	Manifest       *manifest.CapabilityManifest
+	EventLog       *eventlog.EventLog
+	TickNumber     uint64
 	logger         *slog.Logger
 }
 
 // LoadAgent loads and compiles a WASM agent from a file.
+// manifestData is the JSON capability manifest; nil or empty means no capabilities.
 func LoadAgent(
 	ctx context.Context,
 	engine *runtime.Engine,
@@ -36,9 +43,35 @@ func LoadAgent(
 	storageProvider storage.Provider,
 	budget float64,
 	pricePerSecond float64,
+	manifestData []byte,
 	logger *slog.Logger,
 ) (*Instance, error) {
 	logger.Info("Loading agent", "agent_id", agentID, "path", wasmPath)
+
+	// Parse capability manifest
+	capManifest, err := manifest.ParseCapabilityManifest(manifestData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse manifest: %w", err)
+	}
+
+	// Validate manifest against node capabilities
+	if err := manifest.ValidateAgainstNode(capManifest, manifest.NodeCapabilities); err != nil {
+		return nil, fmt.Errorf("manifest validation failed: %w", err)
+	}
+
+	logger.Info("Capability manifest loaded",
+		"agent_id", agentID,
+		"capabilities", capManifest.Names(),
+	)
+
+	// Create event log for observation recording
+	el := eventlog.NewEventLog()
+
+	// Register igor host module with declared capabilities (CE-1, CE-2)
+	registry := hostcall.NewRegistry(logger, el)
+	if err := registry.RegisterHostModule(ctx, engine.Runtime(), capManifest); err != nil {
+		return nil, fmt.Errorf("failed to register host module: %w", err)
+	}
 
 	// Compile WASM module
 	compiled, err := engine.LoadWASM(ctx, wasmPath)
@@ -46,10 +79,23 @@ func LoadAgent(
 		return nil, fmt.Errorf("failed to load WASM: %w", err)
 	}
 
-	// Instantiate module
+	// Instantiate module — if the agent imports from "igor" but the capability
+	// was not declared, wazero will fail here with a clear import error (CM-3).
 	module, err := engine.InstantiateModule(ctx, compiled, agentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate module: %w", err)
+	}
+
+	// Initialize the WASM module runtime. TinyGo agents export _initialize
+	// (WASI reactor mode); standard Go agents may export _start.
+	// We call the appropriate initializer after instantiation because
+	// WithStartFunctions() skips auto-start to prevent wazero from
+	// closing the module on proc_exit(0).
+	if initFn := module.ExportedFunction("_initialize"); initFn != nil {
+		if _, err := initFn.Call(ctx); err != nil {
+			module.Close(ctx)
+			return nil, fmt.Errorf("_initialize failed: %w", err)
+		}
 	}
 
 	instance := &Instance{
@@ -61,6 +107,9 @@ func LoadAgent(
 		State:          nil,
 		Budget:         budget,
 		PricePerSecond: pricePerSecond,
+		Manifest:       capManifest,
+		EventLog:       el,
+		TickNumber:     0,
 		logger:         logger,
 	}
 
@@ -104,11 +153,16 @@ func (i *Instance) Init(ctx context.Context) error {
 }
 
 // Tick executes one tick of the agent with a timeout and meters execution cost.
+// Per CE-3, the event log records all observation hostcall return values.
 func (i *Instance) Tick(ctx context.Context) error {
 	// Check budget before execution
 	if i.Budget <= 0 {
 		return fmt.Errorf("budget exhausted: %.6f", i.Budget)
 	}
+
+	// Advance tick counter and begin event log recording
+	i.TickNumber++
+	i.EventLog.BeginTick(i.TickNumber)
 
 	// Enforce tick timeout
 	tickCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
@@ -123,6 +177,9 @@ func (i *Instance) Tick(ctx context.Context) error {
 	_, err := fn.Call(tickCtx)
 	elapsed := time.Since(start)
 
+	// Seal the event log regardless of tick success/failure
+	sealed := i.EventLog.SealTick()
+
 	if err != nil {
 		return fmt.Errorf("agent_tick failed: %w", err)
 	}
@@ -132,11 +189,18 @@ func (i *Instance) Tick(ctx context.Context) error {
 	cost := durationSeconds * i.PricePerSecond
 	i.Budget -= cost
 
+	observationCount := 0
+	if sealed != nil {
+		observationCount = len(sealed.Entries)
+	}
+
 	i.logger.Info("Tick completed",
 		"agent_id", i.AgentID,
+		"tick", i.TickNumber,
 		"duration_ms", elapsed.Milliseconds(),
 		"cost", fmt.Sprintf("%.6f", cost),
 		"budget_remaining", fmt.Sprintf("%.6f", i.Budget),
+		"observations", observationCount,
 	)
 
 	return nil

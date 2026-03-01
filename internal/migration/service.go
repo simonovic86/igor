@@ -94,6 +94,17 @@ func (s *Service) MigrateAgent(
 		return fmt.Errorf("failed to read WASM binary: %w", err)
 	}
 
+	// Load manifest from sidecar file (wasmPath with .json extension)
+	manifestPath := wasmPath[:len(wasmPath)-len(".wasm")] + ".manifest.json"
+	manifestData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		// No manifest file — use empty capabilities (backward compatible)
+		manifestData = []byte("{}")
+		s.logger.Info("No manifest file found, using empty capabilities",
+			"expected_path", manifestPath,
+		)
+	}
+
 	// Load checkpoint from storage
 	checkpoint, err := s.storageProvider.LoadCheckpoint(ctx, agentID)
 	if err != nil {
@@ -122,7 +133,7 @@ func (s *Service) MigrateAgent(
 		AgentID:        agentID,
 		WASMBinary:     wasmBinary,
 		Checkpoint:     checkpoint,
-		ManifestData:   []byte("{}"), // TODO: Add manifest
+		ManifestData:   manifestData,
 		Budget:         budget,
 		PricePerSecond: pricePerSecond,
 	}
@@ -225,7 +236,7 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		return
 	}
 
-	// Load agent with budget from package
+	// Load agent with budget and manifest from package
 	instance, err := agent.LoadAgent(
 		ctx,
 		s.runtimeEngine,
@@ -234,6 +245,7 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		s.storageProvider,
 		pkg.Budget,
 		pkg.PricePerSecond,
+		pkg.ManifestData,
 		s.logger,
 	)
 	if err != nil {
