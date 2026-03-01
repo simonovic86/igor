@@ -431,6 +431,13 @@ func (s *Service) RegisterAgent(agentID string, instance *agent.Instance) {
 	s.logger.Info("Agent registered with migration service", "agent_id", agentID)
 }
 
+// GetActiveInstance returns the active instance for the given agent ID, or nil.
+func (s *Service) GetActiveInstance(agentID string) *agent.Instance {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.activeAgents[agentID]
+}
+
 // GetActiveAgents returns the list of active agent IDs.
 func (s *Service) GetActiveAgents() []string {
 	s.mu.RLock()
