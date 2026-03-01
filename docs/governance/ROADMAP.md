@@ -1,10 +1,10 @@
 # Igor v0 Roadmap
 
-## Current Status: Phase 2 Complete ✅
+## Current Status: Phase 3 In Progress
 
-Igor v0 has completed **Phase 2 (Survival)**, implementing all core functionality needed for autonomous mobile agents.
+Igor v0 has completed **Phase 2 (Survival)** and begun **Phase 3 (Autonomy)**.
 
-### Completed Tasks (Phase 2)
+### Completed Tasks
 
 - ✅ **Task 0** - Repository scaffold
 - ✅ **Task 1** - P2P bootstrap & ping
@@ -12,8 +12,10 @@ Igor v0 has completed **Phase 2 (Survival)**, implementing all core functionalit
 - ✅ **Task 3** - Checkpoint persistence abstraction & storage provider
 - ✅ **Task 4** - Migration protocol over libp2p
 - ✅ **Task 5** - Rent metering & runtime accounting
+- ✅ **Task 6** - Capability membrane MVP (clock/rand/log hostcalls, manifest, event log, deny-by-default)
 
-**Result:** Agents can survive, migrate, and pay for execution.
+**Phase 2 result:** Agents can survive, migrate, and pay for execution.
+**Phase 3 progress:** Agents interact through runtime-mediated hostcalls with observation recording.
 
 ---
 
@@ -21,26 +23,24 @@ Igor v0 has completed **Phase 2 (Survival)**, implementing all core functionalit
 
 **Goal:** Enable agents to make autonomous decisions about where to run.
 
-### Task 6: Capability Membrane & Hostcall ABI
+### Task 6: Capability Membrane & Hostcall ABI ✅
 
-**Objective:** Implement the capability membrane — all agent I/O through runtime-mediated hostcalls.
+**Status:** Complete (MVP). Implemented capability manifest, `igor` host module (clock, rand, log), observation event log, and deny-by-default enforcement.
 
-**Scope:**
-- `igor` WASM host module with capability namespaces (clock, rand, kv, log)
-- Capability manifest schema and validation at load time (CE-1, CE-2)
-- Observation event log recording for deterministic replay (CE-3)
-- Side-effect gating on ACTIVE_OWNER state (CE-4)
+**Delivered:**
+- `igor` WASM host module with clock, rand, log hostcalls (`internal/hostcall/`)
+- Capability manifest parsing and validation at load time (`pkg/manifest/`)
+- Per-tick observation event log recording (`internal/eventlog/`)
+- Deny-by-default: undeclared capabilities cause load failure (CE-1, CE-2, CE-3)
+- TinyGo-compiled agents with `//go:wasmimport` hostcall imports
+
+**Deferred to follow-on tasks:**
+- KV storage hostcalls (needs authority gating, CE-4)
 - Pre-migration capability verification (CE-5)
-
-**Components:**
-- Host module builder (wazero `NewHostModuleBuilder`)
-- Manifest parser and validator (`pkg/manifest`)
-- Event log writer (per-tick observation recording)
-- Capability registry per node
+- Hostcall cost accounting (CE-6)
+- Replay verification (Task 7)
 
 **Specs:** [CAPABILITY_MEMBRANE.md](../constitution/CAPABILITY_MEMBRANE.md), [CAPABILITY_ENFORCEMENT.md](../enforcement/CAPABILITY_ENFORCEMENT.md), [HOSTCALL_ABI.md](../runtime/HOSTCALL_ABI.md)
-
-**Outcome:** Agents interact through structured, auditable, replayable hostcalls. Foundation for replay engine and permissionless operation.
 
 ### Task 7: Replay Engine (Basic)
 
@@ -319,7 +319,7 @@ Igor development follows "done when it's done" philosophy:
 - Correctness over features
 - Learning over shipping
 
-Phase 3 begins when Phase 2 is validated through extended testing.
+Phase 3 began after Phase 2 validation. Task 6 is complete.
 
 ---
 
@@ -424,18 +424,15 @@ Phase 2 is **validated** when:
 - No critical bugs remain
 - Documentation is comprehensive
 
-**Status: Phase 2 implemented, validation ongoing.**
+**Status: Phase 2 validated. Phase 3 in progress.**
 
 ---
 
 ## Next Immediate Steps
 
-With Phase 2 complete, the immediate focus is:
+With Phase 3 Task 6 (Capability Membrane MVP) complete:
 
-1. **Extended testing** - Run agents for hours/days
-2. **Bug fixing** - Address issues found in testing
-3. **Documentation review** - Ensure accuracy
+1. **Hardening** - Bug fixes, test coverage, documentation accuracy
+2. **Task 7: Replay Engine** - Single-tick replay verification using event log
+3. **Extended testing** - Run agents with hostcalls for hours/days
 4. **Community feedback** - Gather early user input
-5. **Phase 3 planning** - Design agent autonomy features
-
-**No new features until Phase 2 is validated.**

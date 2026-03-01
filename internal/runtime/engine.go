@@ -77,7 +77,10 @@ func (e *Engine) InstantiateModule(
 		WithName(moduleName).
 		WithStdout(os.Stdout).
 		WithStderr(os.Stderr).
-		// Don't automatically start the WASI _start function
+		// Skip auto-start so we can call _start manually. Go 1.24+ with
+		// //go:wasmexport needs _start for runtime init, but wazero's start
+		// function mechanism closes the module after _start returns.
+		// Calling _start manually as a regular export keeps the module alive.
 		WithStartFunctions()
 
 	module, err := e.runtime.InstantiateModule(ctx, compiled, config)
@@ -86,6 +89,13 @@ func (e *Engine) InstantiateModule(
 	}
 
 	return module, nil
+}
+
+// Runtime returns the underlying wazero runtime for host module registration.
+// This must be called after NewEngine (WASI is already instantiated) and
+// before InstantiateModule (so the agent can import from host modules).
+func (e *Engine) Runtime() wazero.Runtime {
+	return e.runtime
 }
 
 // Close releases all runtime resources.

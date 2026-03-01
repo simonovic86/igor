@@ -28,16 +28,19 @@ Run a single test: `go test -v -run TestName ./internal/agent/...`
 Run the node manually:
 ```bash
 ./bin/igord --run-agent agents/example/agent.wasm --budget 10.0
+./bin/igord --run-agent agents/example/agent.wasm --budget 10.0 --manifest agents/example/agent.manifest.json
 ./bin/igord --migrate-agent local-agent --to /ip4/127.0.0.1/tcp/4002/p2p/<peerID> --wasm agent.wasm
 ```
 
 ## Architecture
 
 ### Execution model
-Agents export 5 WASM functions: `agent_init`, `agent_tick`, `agent_checkpoint`, `agent_checkpoint_ptr`, `agent_resume` (plus `malloc`). The runtime drives a 1 Hz tick loop. Each tick is budgeted: `cost = elapsed_seconds × price_per_second`. Checkpoints save every 5 seconds. Tick timeout: 100ms.
+Agents export 5 WASM functions: `agent_init`, `agent_tick`, `agent_checkpoint`, `agent_checkpoint_ptr`, `agent_resume`. TinyGo agents provide `malloc` automatically. The runtime drives a 1 Hz tick loop. Each tick is budgeted: `cost = elapsed_seconds × price_per_second`. Checkpoints save every 5 seconds. Tick timeout: 100ms.
 
-### Checkpoint format (binary, little-endian)
-`[budget: 8 bytes float64][pricePerSecond: 8 bytes float64][agent state: N bytes]`
+### Checkpoint format v1 (binary, little-endian)
+`[version: 1 byte (0x01)][budget: 8 bytes int64 microcents][pricePerSecond: 8 bytes int64 microcents][agent state: N bytes]`
+
+Header is 17 bytes. Budget uses int64 microcents (1 currency unit = 1,000,000 microcents).
 
 Atomic writes via temp file → fsync → rename.
 
@@ -45,9 +48,12 @@ Atomic writes via temp file → fsync → rename.
 - `cmd/igord/` — CLI entry point, flag parsing, tick loop orchestration
 - `internal/agent/` — Agent lifecycle: load WASM, init, tick, checkpoint, resume, budget deduction
 - `internal/runtime/` — wazero sandbox: 64MB memory limit, WASI with fs/net disabled
+- `internal/hostcall/` — `igor` host module: clock, rand, log hostcall implementations
+- `internal/eventlog/` — Per-tick observation event log for deterministic replay
 - `internal/migration/` — P2P migration over libp2p stream protocol `/igor/migrate/1.0.0`
 - `internal/storage/` — `CheckpointProvider` interface + filesystem implementation
 - `internal/p2p/` — libp2p host setup, bootstrap peers, protocol handlers
+- `pkg/manifest/` — Capability manifest parsing and validation
 - `pkg/protocol/` — Message types: `AgentPackage`, `AgentTransfer`, `AgentStarted`
 
 ### Migration flow

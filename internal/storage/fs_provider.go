@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // FSProvider implements Provider using the local filesystem.
@@ -37,7 +38,10 @@ func (p *FSProvider) SaveCheckpoint(
 	agentID string,
 	state []byte,
 ) error {
-	checkpointPath := p.checkpointPath(agentID)
+	checkpointPath, err := p.checkpointPath(agentID)
+	if err != nil {
+		return err
+	}
 	tempPath := checkpointPath + ".tmp"
 
 	// Write to temporary file
@@ -89,7 +93,10 @@ func (p *FSProvider) LoadCheckpoint(
 	ctx context.Context,
 	agentID string,
 ) ([]byte, error) {
-	checkpointPath := p.checkpointPath(agentID)
+	checkpointPath, err := p.checkpointPath(agentID)
+	if err != nil {
+		return nil, err
+	}
 
 	data, err := os.ReadFile(checkpointPath)
 	if err != nil {
@@ -113,9 +120,12 @@ func (p *FSProvider) DeleteCheckpoint(
 	ctx context.Context,
 	agentID string,
 ) error {
-	checkpointPath := p.checkpointPath(agentID)
+	checkpointPath, err := p.checkpointPath(agentID)
+	if err != nil {
+		return err
+	}
 
-	err := os.Remove(checkpointPath)
+	err = os.Remove(checkpointPath)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete checkpoint: %w", err)
 	}
@@ -125,6 +135,12 @@ func (p *FSProvider) DeleteCheckpoint(
 }
 
 // checkpointPath returns the filesystem path for an agent's checkpoint.
-func (p *FSProvider) checkpointPath(agentID string) string {
-	return filepath.Join(p.baseDir, agentID+".checkpoint")
+// Returns an error if the agentID would escape the base directory (path traversal).
+func (p *FSProvider) checkpointPath(agentID string) (string, error) {
+	path := filepath.Join(p.baseDir, agentID+".checkpoint")
+	cleaned := filepath.Clean(path)
+	if !strings.HasPrefix(cleaned, filepath.Clean(p.baseDir)+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid agent ID: path traversal detected")
+	}
+	return cleaned, nil
 }

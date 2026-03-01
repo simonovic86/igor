@@ -71,7 +71,7 @@ See [docs/governance/TOOLCHAIN.md](./docs/governance/TOOLCHAIN.md) for upgrade p
 ### Prerequisites
 
 **Required:**
-- Go 1.22+ ([install](https://go.dev/dl/))
+- Go 1.25+ ([install](https://go.dev/dl/))
 - TinyGo ([install](https://tinygo.org/getting-started/install/))
 - golangci-lint ([install](https://golangci-lint.run/welcome/install/))
 - goimports: `go install golang.org/x/tools/cmd/goimports@latest`

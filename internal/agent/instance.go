@@ -5,13 +5,21 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log/slog"
-	"math"
 	"time"
 
+	"github.com/simonovic86/igor/internal/eventlog"
+	"github.com/simonovic86/igor/internal/hostcall"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
+	"github.com/simonovic86/igor/pkg/budget"
+	"github.com/simonovic86/igor/pkg/manifest"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
+)
+
+const (
+	checkpointVersion   byte = 0x01
+	checkpointHeaderLen int  = 17 // 1 (version) + 8 (budget) + 8 (pricePerSecond)
 )
 
 // Instance represents a running agent instance.
@@ -22,23 +30,53 @@ type Instance struct {
 	Engine         *runtime.Engine
 	Storage        storage.Provider
 	State          []byte
-	Budget         float64 // Remaining budget in arbitrary currency units
-	PricePerSecond float64 // Cost per second of execution
+	Budget         int64 // Remaining budget in microcents (1 currency unit = 1,000,000 microcents)
+	PricePerSecond int64 // Cost per second in microcents
+	Manifest       *manifest.CapabilityManifest
+	EventLog       *eventlog.EventLog
+	TickNumber     uint64
 	logger         *slog.Logger
 }
 
 // LoadAgent loads and compiles a WASM agent from a file.
+// manifestData is the JSON capability manifest; nil or empty means no capabilities.
 func LoadAgent(
 	ctx context.Context,
 	engine *runtime.Engine,
 	wasmPath string,
 	agentID string,
 	storageProvider storage.Provider,
-	budget float64,
-	pricePerSecond float64,
+	budget int64,
+	pricePerSecond int64,
+	manifestData []byte,
 	logger *slog.Logger,
 ) (*Instance, error) {
 	logger.Info("Loading agent", "agent_id", agentID, "path", wasmPath)
+
+	// Parse capability manifest
+	capManifest, err := manifest.ParseCapabilityManifest(manifestData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse manifest: %w", err)
+	}
+
+	// Validate manifest against node capabilities
+	if err := manifest.ValidateAgainstNode(capManifest, manifest.NodeCapabilities); err != nil {
+		return nil, fmt.Errorf("manifest validation failed: %w", err)
+	}
+
+	logger.Info("Capability manifest loaded",
+		"agent_id", agentID,
+		"capabilities", capManifest.Names(),
+	)
+
+	// Create event log for observation recording
+	el := eventlog.NewEventLog(eventlog.DefaultMaxTicks)
+
+	// Register igor host module with declared capabilities (CE-1, CE-2)
+	registry := hostcall.NewRegistry(logger, el)
+	if err := registry.RegisterHostModule(ctx, engine.Runtime(), capManifest); err != nil {
+		return nil, fmt.Errorf("failed to register host module: %w", err)
+	}
 
 	// Compile WASM module
 	compiled, err := engine.LoadWASM(ctx, wasmPath)
@@ -46,10 +84,23 @@ func LoadAgent(
 		return nil, fmt.Errorf("failed to load WASM: %w", err)
 	}
 
-	// Instantiate module
+	// Instantiate module — if the agent imports from "igor" but the capability
+	// was not declared, wazero will fail here with a clear import error (CM-3).
 	module, err := engine.InstantiateModule(ctx, compiled, agentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate module: %w", err)
+	}
+
+	// Initialize the WASM module runtime. TinyGo agents export _initialize
+	// (WASI reactor mode); standard Go agents may export _start.
+	// We call the appropriate initializer after instantiation because
+	// WithStartFunctions() skips auto-start to prevent wazero from
+	// closing the module on proc_exit(0).
+	if initFn := module.ExportedFunction("_initialize"); initFn != nil {
+		if _, err := initFn.Call(ctx); err != nil {
+			module.Close(ctx)
+			return nil, fmt.Errorf("_initialize failed: %w", err)
+		}
 	}
 
 	instance := &Instance{
@@ -61,6 +112,9 @@ func LoadAgent(
 		State:          nil,
 		Budget:         budget,
 		PricePerSecond: pricePerSecond,
+		Manifest:       capManifest,
+		EventLog:       el,
+		TickNumber:     0,
 		logger:         logger,
 	}
 
@@ -104,11 +158,16 @@ func (i *Instance) Init(ctx context.Context) error {
 }
 
 // Tick executes one tick of the agent with a timeout and meters execution cost.
+// Per CE-3, the event log records all observation hostcall return values.
 func (i *Instance) Tick(ctx context.Context) error {
 	// Check budget before execution
 	if i.Budget <= 0 {
-		return fmt.Errorf("budget exhausted: %.6f", i.Budget)
+		return fmt.Errorf("budget exhausted: %s", budget.Format(i.Budget))
 	}
+
+	// Advance tick counter and begin event log recording
+	i.TickNumber++
+	i.EventLog.BeginTick(i.TickNumber)
 
 	// Enforce tick timeout
 	tickCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
@@ -123,20 +182,29 @@ func (i *Instance) Tick(ctx context.Context) error {
 	_, err := fn.Call(tickCtx)
 	elapsed := time.Since(start)
 
+	// Seal the event log regardless of tick success/failure
+	sealed := i.EventLog.SealTick()
+
 	if err != nil {
 		return fmt.Errorf("agent_tick failed: %w", err)
 	}
 
-	// Calculate and deduct execution cost
-	durationSeconds := elapsed.Seconds()
-	cost := durationSeconds * i.PricePerSecond
-	i.Budget -= cost
+	// Calculate and deduct execution cost (integer arithmetic, no float precision loss)
+	costMicrocents := elapsed.Microseconds() * i.PricePerSecond / budget.MicrocentScale
+	i.Budget -= costMicrocents
+
+	observationCount := 0
+	if sealed != nil {
+		observationCount = len(sealed.Entries)
+	}
 
 	i.logger.Info("Tick completed",
 		"agent_id", i.AgentID,
+		"tick", i.TickNumber,
 		"duration_ms", elapsed.Milliseconds(),
-		"cost", fmt.Sprintf("%.6f", cost),
-		"budget_remaining", fmt.Sprintf("%.6f", i.Budget),
+		"cost", budget.Format(costMicrocents),
+		"budget_remaining", budget.Format(i.Budget),
+		"observations", observationCount,
 	)
 
 	return nil
@@ -251,12 +319,13 @@ func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 		return fmt.Errorf("failed to checkpoint agent: %w", err)
 	}
 
-	// Create checkpoint with budget metadata
-	// Format: [budget:8][pricePerSecond:8][state:...]
-	checkpoint := make([]byte, 16+len(state))
-	binary.LittleEndian.PutUint64(checkpoint[0:8], math.Float64bits(i.Budget))
-	binary.LittleEndian.PutUint64(checkpoint[8:16], math.Float64bits(i.PricePerSecond))
-	copy(checkpoint[16:], state)
+	// Create checkpoint with budget metadata (v1 format)
+	// Format: [version:1][budget:8][pricePerSecond:8][state:...]
+	checkpoint := make([]byte, checkpointHeaderLen+len(state))
+	checkpoint[0] = checkpointVersion
+	binary.LittleEndian.PutUint64(checkpoint[1:9], uint64(i.Budget))
+	binary.LittleEndian.PutUint64(checkpoint[9:17], uint64(i.PricePerSecond))
+	copy(checkpoint[17:], state)
 
 	// Save to storage provider
 	if err := i.Storage.SaveCheckpoint(ctx, i.AgentID, checkpoint); err != nil {
@@ -280,24 +349,27 @@ func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 		return fmt.Errorf("failed to load checkpoint: %w", err)
 	}
 
-	// Parse checkpoint format: [budget:8][pricePerSecond:8][state:...]
-	if len(checkpoint) < 16 {
+	// Parse checkpoint v1 format: [version:1][budget:8][pricePerSecond:8][state:...]
+	if len(checkpoint) < checkpointHeaderLen {
 		return fmt.Errorf("invalid checkpoint format: too short")
 	}
+	if checkpoint[0] != checkpointVersion {
+		return fmt.Errorf("unsupported checkpoint version: %d", checkpoint[0])
+	}
 
-	// Extract budget metadata
-	budget := math.Float64frombits(binary.LittleEndian.Uint64(checkpoint[0:8]))
-	pricePerSecond := math.Float64frombits(binary.LittleEndian.Uint64(checkpoint[8:16]))
-	state := checkpoint[16:]
+	// Extract budget metadata (int64 microcents)
+	restoredBudget := int64(binary.LittleEndian.Uint64(checkpoint[1:9]))
+	restoredPrice := int64(binary.LittleEndian.Uint64(checkpoint[9:17]))
+	state := checkpoint[17:]
 
 	// Update instance budget
-	i.Budget = budget
-	i.PricePerSecond = pricePerSecond
+	i.Budget = restoredBudget
+	i.PricePerSecond = restoredPrice
 
 	i.logger.Info("Budget restored from checkpoint",
 		"agent_id", i.AgentID,
-		"budget", fmt.Sprintf("%.6f", budget),
-		"price_per_second", fmt.Sprintf("%.6f", pricePerSecond),
+		"budget", budget.Format(restoredBudget),
+		"price_per_second", budget.Format(restoredPrice),
 	)
 
 	// Resume agent from state

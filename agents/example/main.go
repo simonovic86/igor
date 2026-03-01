@@ -1,3 +1,5 @@
+//go:build tinygo || wasip1
+
 package main
 
 import (
@@ -6,67 +8,86 @@ import (
 	"unsafe"
 )
 
+// Igor hostcall imports — these are provided by the igor host module.
+// Only available if the corresponding capability is declared in the manifest.
+
+//go:wasmimport igor clock_now
+func clockNow() int64
+
+//go:wasmimport igor rand_bytes
+func randBytes(ptr uint32, length uint32) int32
+
+//go:wasmimport igor log_emit
+func logEmit(ptr uint32, length uint32)
+
+// logMsg sends a message through the igor log_emit hostcall.
+func logMsg(msg string) {
+	if len(msg) == 0 {
+		return
+	}
+	buf := []byte(msg)
+	logEmit(uint32(uintptr(unsafe.Pointer(&buf[0]))), uint32(len(buf)))
+}
+
 // State represents the agent's persistent state
 type State struct {
 	Counter uint64
 }
 
-//nolint:unused // State used by WASM exports
 var state State
 
 // agent_init is called when the agent first starts
 //
 //export agent_init
-//nolint:unused // Called by WASM runtime
 func agent_init() {
 	state.Counter = 0
-	fmt.Println("[agent] Initialized with counter = 0")
+	logMsg("initialized with counter=0")
 }
 
 // agent_tick is called periodically by the runtime
 //
 //export agent_tick
-//nolint:unused // Called by WASM runtime
 func agent_tick() {
 	state.Counter++
-	fmt.Printf("[agent] Tick %d\n", state.Counter)
+
+	// Observe current time through capability membrane
+	now := clockNow()
+
+	// Get some random bytes to demonstrate rand capability
+	var randBuf [4]byte
+	randBytes(uint32(uintptr(unsafe.Pointer(&randBuf[0]))), 4)
+
+	logMsg(fmt.Sprintf("tick %d time=%d rand=%x", state.Counter, now, randBuf))
 }
 
 // agent_checkpoint serializes the agent's state and returns size
-// The state is written to memory starting at address returned by agent_checkpoint_ptr
 //
 //export agent_checkpoint
-//nolint:unused // Called by WASM runtime
 func agent_checkpoint() uint32 {
-	fmt.Printf("[agent] Checkpoint: counter=%d\n", state.Counter)
+	logMsg(fmt.Sprintf("checkpoint counter=%d", state.Counter))
 	return 8 // Size of uint64
 }
 
 // agent_checkpoint_ptr returns pointer to checkpoint data
 //
 //export agent_checkpoint_ptr
-//nolint:unused // Called by WASM runtime
 func agent_checkpoint_ptr() uint32 {
-	// Return pointer to the counter field directly
 	return uint32(uintptr(unsafe.Pointer(&state.Counter)))
 }
 
 // agent_resume restores the agent from checkpointed state
 //
 //export agent_resume
-//nolint:unused // Called by WASM runtime
 func agent_resume(ptr, size uint32) {
 	if size == 0 {
-		fmt.Println("[agent] Resume: empty state, keeping counter at 0")
+		logMsg("resume: empty state, keeping counter at 0")
 		return
 	}
 
-	// Deserialize state from memory
-	//nolint:gosec // Unsafe pointer required for WASM memory access
 	buf := unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), size)
 	state.Counter = binary.LittleEndian.Uint64(buf)
 
-	fmt.Printf("[agent] Resumed with counter=%d\n", state.Counter)
+	logMsg(fmt.Sprintf("resumed with counter=%d", state.Counter))
 }
 
 func main() {}
