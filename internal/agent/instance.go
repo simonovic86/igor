@@ -440,6 +440,17 @@ func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 	return nil
 }
 
+// ExtractAgentState extracts the agent state portion from a v1 checkpoint.
+func ExtractAgentState(checkpoint []byte) ([]byte, error) {
+	if len(checkpoint) < checkpointHeaderLen {
+		return nil, fmt.Errorf("checkpoint too short: %d bytes", len(checkpoint))
+	}
+	if checkpoint[0] != checkpointVersion {
+		return nil, fmt.Errorf("unsupported checkpoint version: %d", checkpoint[0])
+	}
+	return checkpoint[checkpointHeaderLen:], nil
+}
+
 // Close releases agent resources.
 func (i *Instance) Close(ctx context.Context) error {
 	if i.Module != nil {
