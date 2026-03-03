@@ -6,6 +6,7 @@ package hostcall
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/simonovic86/igor/internal/eventlog"
@@ -35,6 +36,16 @@ func (r *Registry) RegisterHostModule(
 	rt wazero.Runtime,
 	m *manifest.CapabilityManifest,
 ) error {
+	// Close any previously instantiated igor module. This happens when a node
+	// receives a second agent (e.g. after the first migrated away and another
+	// migrates in). The old guest module is already closed, so the host module
+	// can be safely replaced with fresh closures bound to the new event log.
+	if existing := rt.Module("igor"); existing != nil {
+		if err := existing.Close(ctx); err != nil {
+			return fmt.Errorf("failed to close existing igor module: %w", err)
+		}
+	}
+
 	builder := rt.NewHostModuleBuilder("igor")
 	registered := 0
 

@@ -1,8 +1,8 @@
 # Igor v0 Roadmap
 
-## Current Status: Phase 3 In Progress
+## Current Status: Phase 3 Complete
 
-Igor v0 has completed **Phase 2 (Survival)** and begun **Phase 3 (Autonomy)**.
+Igor v0 has completed **Phase 2 (Survival)** and **Phase 3 (Autonomy)**.
 
 ### Completed Tasks
 
@@ -15,9 +15,10 @@ Igor v0 has completed **Phase 2 (Survival)** and begun **Phase 3 (Autonomy)**.
 - ✅ **Task 6** - Capability membrane MVP (clock/rand/log hostcalls, manifest, event log, deny-by-default)
 - ✅ **Task 7** - Replay engine (single-tick verification, configurable modes, sliding window)
 - ✅ **Task 8** - Agent SDK & developer experience (SDK, mocks, simulator, inspector, template)
+- ✅ **Task 9** - Multi-node mobility testing (chain migration A→B→C→A, capability preservation, budget conservation, stress testing)
 
 **Phase 2 result:** Agents can survive, migrate, and pay for execution.
-**Phase 3 progress:** Capability membrane, replay verification, and developer tooling complete. Multi-node mobility testing next.
+**Phase 3 result:** Capability membrane, replay verification, developer tooling, and multi-node mobility validated.
 
 ---
 
@@ -437,8 +438,8 @@ Phase 2 is **validated** when:
 
 ## Next Immediate Steps
 
-With Phase 3 Tasks 6 (Capability Membrane), 7 (Replay Engine), and 8 (Agent SDK) complete:
+Phase 3 complete. Next:
 
-1. **Task 9: Multi-Node Mobility Testing** - Chain migration A → B → C → A, capability preservation, budget conservation
-2. **Hardening** - Bug fixes, test coverage, documentation accuracy
-3. **Extended testing** - Run agents with hostcalls for hours/days under load
+1. **Hardening** - Bug fixes, test coverage, documentation accuracy
+2. **Extended testing** - Run agents with hostcalls for hours/days under load
+3. **Task 10: Payment Receipt Signing** - Cryptographic proof of execution, wallet hostcalls

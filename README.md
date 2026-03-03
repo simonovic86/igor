@@ -9,7 +9,7 @@ Igor is a decentralized execution runtime for autonomous software agents. It pro
 ## About This Repository
 
 **What:** Experimental infrastructure for autonomous agent survival  
-**Status:** Research-stage — Phase 3 (Autonomy) in progress. Capability membrane, replay verification, agent SDK, capability mocks, local simulator, and checkpoint inspector complete. Multi-node mobility testing next.
+**Status:** Research-stage — Phase 3 (Autonomy) complete. Capability membrane, replay verification, agent SDK, and multi-node mobility testing validated. Phase 4 (Economics) next.
 **Purpose:** Demonstrate that software can checkpoint, migrate, and self-fund execution
 
 **Read first:**
@@ -178,13 +178,13 @@ All 6 success criteria met:
 
 ## Project Status: Experimental
 
-**Maturity:** Research-stage, proof-of-concept (Phase 2 complete, Phase 3 in progress)  
+**Maturity:** Research-stage, proof-of-concept (Phase 3 complete, Phase 4 next)
 **Production:** Not ready for production use  
 **Security:** WASM hash identity binding; no full cryptographic attestation yet  
 
 **Known limitations:**
 - Trusted runtime accounting (no payment receipts)
-- Single-hop migration (no routing)
+- Chain migration tested (A→B→C→A) but no routing protocol
 - Local filesystem storage (no distribution)
 - No agent discovery protocol
 - Minimal security hardening
