@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 )
 
@@ -53,7 +55,28 @@ func Load() (*Config, error) {
 		ReplayMode:       "full",
 		ReplayCostLog:    false,
 	}
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
 	return cfg, nil
+}
+
+// Validate checks config invariants.
+func (c *Config) Validate() error {
+	if c.PricePerSecond <= 0 {
+		return fmt.Errorf("PricePerSecond must be positive, got %d", c.PricePerSecond)
+	}
+	if c.ReplayWindowSize < 0 {
+		return fmt.Errorf("ReplayWindowSize must be non-negative, got %d", c.ReplayWindowSize)
+	}
+	if c.VerifyInterval < 0 {
+		return fmt.Errorf("VerifyInterval must be non-negative, got %d", c.VerifyInterval)
+	}
+	validModes := map[string]bool{"off": true, "periodic": true, "on-migrate": true, "full": true}
+	if !validModes[c.ReplayMode] {
+		return fmt.Errorf("ReplayMode must be one of off/periodic/on-migrate/full, got %q", c.ReplayMode)
+	}
+	return nil
 }
 
 // generateNodeID creates a random UUID for the node if one is not provided.

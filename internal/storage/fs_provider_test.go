@@ -134,6 +134,26 @@ func TestCheckpointPath_PathTraversal(t *testing.T) {
 	}
 }
 
+func TestNewFSProvider_CleansStaleTemp(t *testing.T) {
+	dir := t.TempDir()
+	// Create stale .tmp files before provider initialization
+	stalePath := dir + "/agent-stale.checkpoint.tmp"
+	if err := os.WriteFile(stalePath, []byte("stale"), 0o644); err != nil {
+		t.Fatalf("create stale file: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	_, err := NewFSProvider(dir, logger)
+	if err != nil {
+		t.Fatalf("NewFSProvider: %v", err)
+	}
+
+	// Stale file should be gone
+	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
+		t.Error("stale .tmp file should have been cleaned up")
+	}
+}
+
 func TestNewFSProvider_CreatesDir(t *testing.T) {
 	dir := t.TempDir()
 	subDir := dir + "/sub/nested"

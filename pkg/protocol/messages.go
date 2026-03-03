@@ -1,29 +1,5 @@
 package protocol
 
-// MigrationRequest represents a request from an agent to migrate
-// to another node.
-type MigrationRequest struct {
-	AgentID              string
-	RequiredCapabilities []string
-	Budget               int64
-}
-
-// MigrationOffer represents a node offering to host an agent.
-type MigrationOffer struct {
-	NodeID         string
-	PricePerSecond int64
-	AvailableUntil int64
-}
-
-// MigrationAccept represents a node's acceptance of a migration request.
-type MigrationAccept struct {
-	AgentID       string
-	TargetNodeID  string
-	AcceptedPrice int64
-	Success       bool
-	ErrorMessage  string
-}
-
 // AgentPackage contains all data needed to transfer an agent.
 type AgentPackage struct {
 	AgentID        string
@@ -59,19 +35,12 @@ type AgentTransfer struct {
 	SourceNodeID string
 }
 
-// AgentStarted is emitted when an agent successfully starts on a node.
+// AgentStarted is the confirmation message sent by the target node after
+// receiving a migration. Sent for both success and failure.
 type AgentStarted struct {
 	AgentID   string
 	NodeID    string
 	StartTime int64
 	Success   bool
 	Error     string
-}
-
-// AgentTerminated is emitted when an agent stops execution on a node.
-type AgentTerminated struct {
-	AgentID string
-	NodeID  string
-	EndTime int64
-	Reason  string
 }

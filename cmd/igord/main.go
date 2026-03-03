@@ -86,13 +86,13 @@ func main() {
 	logger := logging.NewLogger()
 
 	// Print startup banner
-	logging.Info(logger, "Igor Node starting...")
-	logging.Info(logger, fmt.Sprintf("NodeID: %s", cfg.NodeID))
+	logger.Info("Igor Node starting...")
+	logger.Info("NodeID: " + cfg.NodeID)
 
 	// Initialize P2P node
 	node, err := p2p.NewNode(ctx, cfg, logger)
 	if err != nil {
-		logging.Error(logger, "Failed to create P2P node", "error", err)
+		logger.Error("Failed to create P2P node", "error", err)
 		os.Exit(1)
 	}
 	defer node.Close()
@@ -100,14 +100,14 @@ func main() {
 	// Create storage provider
 	storageProvider, err := storage.NewFSProvider(cfg.CheckpointDir, logger)
 	if err != nil {
-		logging.Error(logger, "Failed to create storage provider", "error", err)
+		logger.Error("Failed to create storage provider", "error", err)
 		os.Exit(1)
 	}
 
 	// Create WASM runtime engine for migration service
 	engine, err := runtime.NewEngine(ctx, logger)
 	if err != nil {
-		logging.Error(logger, "Failed to create runtime engine", "error", err)
+		logger.Error("Failed to create runtime engine", "error", err)
 		os.Exit(1)
 	}
 	defer engine.Close(ctx)
@@ -118,25 +118,25 @@ func main() {
 	// If --migrate-agent flag is provided, perform migration
 	if *migrateAgent != "" {
 		if *targetPeer == "" {
-			logging.Error(logger, "Migration requires --to flag with target peer address")
+			logger.Error("Migration requires --to flag with target peer address")
 			os.Exit(1)
 		}
 		if *wasmPath == "" {
-			logging.Error(logger, "Migration requires --wasm flag with WASM binary path")
+			logger.Error("Migration requires --wasm flag with WASM binary path")
 			os.Exit(1)
 		}
 
-		logging.Info(logger, "Initiating agent migration",
+		logger.Info("Initiating agent migration",
 			"agent_id", *migrateAgent,
 			"target", *targetPeer,
 		)
 
 		if err := migrationSvc.MigrateAgent(ctx, *migrateAgent, *wasmPath, *targetPeer); err != nil {
-			logging.Error(logger, "Migration failed", "error", err)
+			logger.Error("Migration failed", "error", err)
 			os.Exit(1)
 		}
 
-		logging.Info(logger, "Migration completed successfully")
+		logger.Info("Migration completed successfully")
 		return
 	}
 
@@ -144,20 +144,20 @@ func main() {
 	if *runAgent != "" {
 		budgetMicrocents := budget.FromFloat(*budgetFlag)
 		if err := runLocalAgent(ctx, cfg, engine, storageProvider, *runAgent, budgetMicrocents, *manifestPath, migrationSvc, logger); err != nil {
-			logging.Error(logger, "Failed to run agent", "error", err)
+			logger.Error("Failed to run agent", "error", err)
 			os.Exit(1)
 		}
 		return
 	}
 
-	logging.Info(logger, "Igor Node ready")
+	logger.Info("Igor Node ready")
 
 	// Block until interrupted
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	logging.Info(logger, "Igor Node shutting down...")
+	logger.Info("Igor Node shutting down...")
 }
 
 // runLocalAgent loads and executes an agent locally with tick loop and checkpointing.
@@ -408,7 +408,7 @@ func runSimulator(wasmPath, manifestPath string, budgetVal float64, ticks int, v
 	}
 	result, err := simulator.Run(ctx, cfg, logger)
 	if err != nil {
-		logging.Error(logger, "Simulation failed", "error", err)
+		logger.Error("Simulation failed", "error", err)
 		os.Exit(1)
 	}
 	simulator.PrintSummary(result, logger)

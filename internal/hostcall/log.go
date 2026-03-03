@@ -8,6 +8,9 @@ import (
 	"github.com/tetratelabs/wazero/api"
 )
 
+// maxLogBytes caps the buffer size for log_emit to prevent excessive memory allocation.
+const maxLogBytes = 1 * 1024 * 1024 // 1 MB
+
 // registerLog adds log_emit to the host module builder.
 // log_emit(ptr i32, len i32): emits a structured log entry.
 // Not a side effect — logging is an observation that produces no
@@ -15,8 +18,13 @@ import (
 func (r *Registry) registerLog(builder wazero.HostModuleBuilder) {
 	builder.NewFunctionBuilder().
 		WithFunc(func(_ context.Context, m api.Module, ptr, length uint32) {
+			if length == 0 || length > maxLogBytes {
+				return
+			}
 			data, ok := m.Memory().Read(ptr, length)
 			if !ok {
+				r.logger.Warn("log_emit: failed to read from WASM memory",
+					"ptr", ptr, "length", length)
 				return
 			}
 

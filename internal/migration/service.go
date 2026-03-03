@@ -223,24 +223,24 @@ func (s *Service) MigrateAgent(
 	// map still holds the same instance we read earlier. A concurrent incoming
 	// migration could have registered a different instance for this agent ID;
 	// deleting that would violate EI-1 (Single Active Instance).
+	// Close is held under the lock to prevent concurrent access to a closing
+	// instance (wazero Module.Close is fast — it just marks the module closed).
 	s.mu.Lock()
 	if localInstance != nil && s.activeAgents[agentID] == localInstance {
 		delete(s.activeAgents, agentID)
-		s.mu.Unlock()
 		if err := localInstance.Close(ctx); err != nil {
 			s.logger.Error("Failed to close local instance", "error", err)
 		}
 		s.logger.Info("Local agent instance terminated", "agent_id", agentID)
-	} else {
-		s.mu.Unlock()
 	}
+	s.mu.Unlock()
 
-	// Delete local checkpoint
+	// Delete local checkpoint — failure is an error because a stale checkpoint
+	// could cause EI-1 violations if this node restarts and resumes the agent.
 	if err := s.storageProvider.DeleteCheckpoint(ctx, agentID); err != nil {
-		s.logger.Error("Failed to delete local checkpoint", "error", err)
-	} else {
-		s.logger.Info("Local checkpoint deleted", "agent_id", agentID)
+		return fmt.Errorf("migration succeeded but failed to delete local checkpoint: %w", err)
 	}
+	s.logger.Info("Local checkpoint deleted", "agent_id", agentID)
 
 	s.logger.Info("Migration completed successfully", "agent_id", agentID)
 	return nil

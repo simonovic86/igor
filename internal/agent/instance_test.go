@@ -501,6 +501,33 @@ func TestParseCheckpointHeader_EmptyState(t *testing.T) {
 	}
 }
 
+func TestParseCheckpointHeader_NegativeBudget(t *testing.T) {
+	checkpoint := make([]byte, 57)
+	checkpoint[0] = 0x02
+	// Write -1 as budget (all bits set via two's complement)
+	negBudget := int64(-1)
+	binary.LittleEndian.PutUint64(checkpoint[1:9], uint64(negBudget))
+	binary.LittleEndian.PutUint64(checkpoint[9:17], 1000)
+
+	_, _, _, _, _, err := ParseCheckpointHeader(checkpoint)
+	if err == nil {
+		t.Error("expected error for negative budget in checkpoint")
+	}
+}
+
+func TestParseCheckpointHeader_NegativePrice(t *testing.T) {
+	checkpoint := make([]byte, 57)
+	checkpoint[0] = 0x02
+	binary.LittleEndian.PutUint64(checkpoint[1:9], 1000000)
+	negPrice := int64(-500)
+	binary.LittleEndian.PutUint64(checkpoint[9:17], uint64(negPrice))
+
+	_, _, _, _, _, err := ParseCheckpointHeader(checkpoint)
+	if err == nil {
+		t.Error("expected error for negative price in checkpoint")
+	}
+}
+
 func TestParseCheckpointHeader_Corruption(t *testing.T) {
 	tests := []struct {
 		name  string
