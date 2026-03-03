@@ -46,9 +46,9 @@ clean: ## Remove build artifacts
 	rm -f agents/example/agent.wasm.checkpoint
 	@echo "Clean complete"
 
-test: ## Run tests
+test: ## Run tests (with race detector)
 	@echo "Running tests..."
-	$(GOTEST) -v ./...
+	$(GOTEST) -v -race ./...
 
 lint: ## Run golangci-lint
 	@echo "Running linters..."

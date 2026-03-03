@@ -234,10 +234,10 @@ Or introduce a higher-precision intermediate calculation to avoid integer overfl
 
 Ranked by impact-to-effort ratio:
 
-1. **Shared Runtime Engine** (#8) — trivial refactor, immediate memory savings
-2. **Cached WASM in Replay** (#1) — moderate effort, ~300x replay speedup
-3. **Hash-Based Post-State** (#2) — small change, halves snapshot memory
-4. **Sub-Microsecond Metering** (#10) — one-line fix, correctness improvement
+1. ~~**Shared Runtime Engine** (#8)~~ — **DONE**. Single engine shared between migration service and local agent.
+2. ~~**Cached WASM in Replay** (#1)~~ — **DONE**. `wazero.CompilationCache` shared across replay invocations.
+3. ~~**Hash-Based Post-State** (#2)~~ — **DONE**. `TickSnapshot.PostStateHash [32]byte` replaces full state copy.
+4. ~~**Sub-Microsecond Metering** (#10)~~ — **DONE**. Nanosecond precision via `elapsed.Nanoseconds()`.
 5. **Replay Failure Escalation** (#5) — config + policy, operational maturity
 6. **Observation-Weighted Retention** (#3) — small change, better verification coverage
 7. **SDK Checkpoint Serialization** (#7) — significant effort, biggest DX improvement

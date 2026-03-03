@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -313,13 +314,14 @@ func verifyNextTick(
 			continue
 		}
 
+		// Pass nil expectedState — hash-based verification (IMPROVEMENTS #2).
 		result := replayEngine.ReplayTick(
 			ctx,
 			instance.WASMBytes,
 			instance.Manifest,
 			snap.PreState,
 			snap.TickLog,
-			snap.PostState,
+			nil,
 		)
 
 		if result.Error != nil {
@@ -330,12 +332,12 @@ func verifyNextTick(
 			return snap.TickNumber
 		}
 
-		if !result.Verified {
+		// Hash-based post-state comparison (IMPROVEMENTS #2).
+		replayedHash := sha256.Sum256(result.ReplayedState)
+		if replayedHash != snap.PostStateHash {
 			logger.Error("Replay divergence detected",
 				"tick", result.TickNumber,
-				"first_diff_byte", result.FirstDiffByte,
-				"replayed_len", len(result.ReplayedState),
-				"expected_len", len(result.ExpectedState),
+				"state_bytes", len(result.ReplayedState),
 			)
 			return snap.TickNumber
 		}

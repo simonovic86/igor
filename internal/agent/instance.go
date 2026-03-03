@@ -30,11 +30,14 @@ const (
 
 // TickSnapshot holds replay verification data for a single tick.
 // Stored in the Instance's replay window for CM-4 sliding verification.
+// PostStateHash stores only the SHA-256 hash of the post-tick state to halve
+// snapshot memory usage (IMPROVEMENTS #2). The full pre-tick state is retained
+// because it is needed as replay input.
 type TickSnapshot struct {
-	TickNumber uint64
-	PreState   []byte
-	PostState  []byte
-	TickLog    *eventlog.TickLog
+	TickNumber    uint64
+	PreState      []byte
+	PostStateHash [32]byte
+	TickLog       *eventlog.TickLog
 }
 
 // Instance represents a running agent instance.
@@ -247,12 +250,13 @@ func (i *Instance) Tick(ctx context.Context) error {
 		return fmt.Errorf("post-tick checkpoint failed: %w", err)
 	}
 
-	// Store replay verification snapshot in sliding window
+	// Store replay verification snapshot in sliding window.
+	// Only the hash of the post-state is retained (IMPROVEMENTS #2).
 	i.ReplayWindow = append(i.ReplayWindow, TickSnapshot{
-		TickNumber: i.TickNumber,
-		PreState:   preState,
-		PostState:  postState,
-		TickLog:    sealed,
+		TickNumber:    i.TickNumber,
+		PreState:      preState,
+		PostStateHash: sha256.Sum256(postState),
+		TickLog:       sealed,
 	})
 	maxSnaps := i.replayWindowMax
 	if maxSnaps <= 0 {
@@ -262,8 +266,8 @@ func (i *Instance) Tick(ctx context.Context) error {
 		i.ReplayWindow = i.ReplayWindow[len(i.ReplayWindow)-maxSnaps:]
 	}
 
-	// Calculate and deduct execution cost (integer arithmetic, no float precision loss)
-	costMicrocents := elapsed.Microseconds() * i.PricePerSecond / budget.MicrocentScale
+	// Calculate and deduct execution cost (nanosecond precision, no float, no truncation)
+	costMicrocents := elapsed.Nanoseconds() * i.PricePerSecond / 1_000_000_000
 	i.Budget -= costMicrocents
 
 	observationCount := 0

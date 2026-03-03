@@ -35,9 +35,9 @@ func TestReplayDataFromInstance_WithData(t *testing.T) {
 	inst := &agent.Instance{
 		ReplayWindow: []agent.TickSnapshot{
 			{
-				TickNumber: 5,
-				PreState:   []byte{0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-				PostState:  postState,
+				TickNumber:    5,
+				PreState:      []byte{0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+				PostStateHash: sha256.Sum256(postState),
 				TickLog: &eventlog.TickLog{
 					TickNumber: 5,
 					Entries: []eventlog.Entry{
@@ -92,9 +92,9 @@ func TestReplayDataFromInstance_StalenessGuard(t *testing.T) {
 	inst := &agent.Instance{
 		ReplayWindow: []agent.TickSnapshot{
 			{
-				TickNumber: 5,
-				PreState:   []byte{0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-				PostState:  postState,
+				TickNumber:    5,
+				PreState:      []byte{0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+				PostStateHash: sha256.Sum256(postState),
 				TickLog: &eventlog.TickLog{
 					TickNumber: 5,
 					Entries:    []eventlog.Entry{{HostcallID: eventlog.ClockNow, Payload: []byte{0xAA}}},
@@ -105,7 +105,7 @@ func TestReplayDataFromInstance_StalenessGuard(t *testing.T) {
 
 	rd := replayDataFromInstance(inst, checkpoint)
 	if rd != nil {
-		t.Error("expected nil when PostState does not match checkpoint state (staleness guard)")
+		t.Error("expected nil when PostStateHash does not match checkpoint state (staleness guard)")
 	}
 }
 

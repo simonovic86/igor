@@ -1,7 +1,7 @@
 package migration
 
 import (
-	"bytes"
+	"crypto/sha256"
 
 	"github.com/simonovic86/igor/internal/agent"
 	"github.com/simonovic86/igor/internal/eventlog"
@@ -20,14 +20,14 @@ func replayDataFromInstance(inst *agent.Instance, checkpoint []byte) *protomsg.R
 		return nil
 	}
 
-	// Staleness guard: only include replay data when PostState matches
+	// Staleness guard: only include replay data when PostStateHash matches
 	// the checkpoint we're sending. If more ticks occurred after the last
 	// checkpoint save, the replay data would not correspond to the checkpoint.
 	storedState, err := agent.ExtractAgentState(checkpoint)
 	if err != nil {
 		return nil
 	}
-	if !bytes.Equal(snap.PostState, storedState) {
+	if sha256.Sum256(storedState) != snap.PostStateHash {
 		return nil
 	}
 

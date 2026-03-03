@@ -238,8 +238,8 @@ func TestTick_RecordObservations(t *testing.T) {
 	if snap.PreState == nil {
 		t.Error("snapshot PreState should not be nil")
 	}
-	if snap.PostState == nil {
-		t.Error("snapshot PostState should not be nil")
+	if snap.PostStateHash == ([32]byte{}) {
+		t.Error("snapshot PostStateHash should not be zero")
 	}
 	if snap.TickLog == nil {
 		t.Error("snapshot TickLog should not be nil")
