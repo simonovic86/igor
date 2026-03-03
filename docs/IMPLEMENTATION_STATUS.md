@@ -55,8 +55,8 @@ Last updated: 2026-03-03
 | Replay window (sliding buffer) | Implemented | `internal/agent/instance.go` `ReplayWindow` |
 | `--replay-window` CLI flag | Implemented | `cmd/igord/main.go` |
 | `--verify-interval` CLI flag | Implemented | `cmd/igord/main.go` |
-| Formal replay modes (off/periodic/on-migrate/full) | Planned | Task: replay-modes |
-| Replay cost metering | Planned | Task: replay-cost-log |
+| Formal replay modes (off/periodic/on-migrate/full) | Implemented | `internal/config/config.go` `ReplayMode`, `cmd/igord/main.go` `--replay-mode` |
+| Replay cost metering | Implemented | `internal/replay/engine.go` `Result.Duration`, `cmd/igord/main.go` `--replay-cost-log` |
 
 ## Capability Membrane
 
@@ -67,6 +67,7 @@ Last updated: 2026-03-03
 | Host module registration per manifest | Implemented | `internal/hostcall/registry.go` |
 | Observation recording (CM-4) | Implemented | `internal/eventlog/eventlog.go` |
 | Manifest in migration package | Implemented | `pkg/protocol/messages.go` `ManifestData` |
+| Pre-migration capability check (CE-5) | Implemented | `internal/migration/service.go` `handleIncomingMigration` |
 | KV storage hostcalls | Not implemented | Roadmap Task 8+ |
 | Network hostcalls | Not implemented | Roadmap Phase 3+ |
 
@@ -91,6 +92,6 @@ Last updated: 2026-03-03
 | Source: checkpoint + package + send | Implemented | `internal/migration/service.go` `MigrateAgent` |
 | Target: verify + resume + confirm | Implemented | `internal/migration/service.go` `handleIncomingMigration` |
 | Single-instance handoff | Implemented | Source deletes only after confirmation |
-| /tmp WASM write on target | Implemented (known tech debt) | `internal/migration/service.go` line 279 |
+| /tmp WASM write on target | Removed | Replaced by `agent.LoadAgentFromBytes` (no temp file) |
 | Replay data in migration package | Implemented | `internal/migration/replay.go` |
 | Staleness guard for replay data | Implemented | `internal/migration/replay.go` |

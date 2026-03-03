@@ -1,0 +1,82 @@
+package igor
+
+import "unsafe"
+
+// Agent is the interface that agent authors implement.
+// The SDK handles all WASM lifecycle exports and memory management;
+// agents only need to provide application logic and serialization.
+type Agent interface {
+	// Init initializes the agent's state. Called once on first start.
+	// Do not call observation hostcalls (ClockNow, RandBytes, Log) here —
+	// only agent_tick should produce observations for replay correctness (CM-4).
+	Init()
+
+	// Tick executes one step of the agent's logic (~1 Hz).
+	// Must complete within 100ms.
+	Tick()
+
+	// Marshal serializes the agent's state for checkpointing.
+	// The returned bytes must fully capture the agent's state so that
+	// Unmarshal can restore it exactly.
+	Marshal() []byte
+
+	// Unmarshal restores the agent's state from a previous Marshal output.
+	// Called during resume (restart or migration). Must be side-effect-free
+	// since it is also called during replay verification (CM-4).
+	Unmarshal(data []byte)
+}
+
+// Global agent instance and checkpoint buffer, set by Run.
+var (
+	registeredAgent Agent
+	ckptBuf         []byte
+)
+
+// Run registers an Agent implementation with the SDK.
+// Must be called from the agent's init() function.
+//
+//	func init() { igor.Run(&MyAgent{}) }
+//	func main() {}
+func Run(a Agent) {
+	registeredAgent = a
+}
+
+//export agent_init
+func agent_init() {
+	if registeredAgent != nil {
+		registeredAgent.Init()
+	}
+}
+
+//export agent_tick
+func agent_tick() {
+	if registeredAgent != nil {
+		registeredAgent.Tick()
+	}
+}
+
+//export agent_checkpoint
+func agent_checkpoint() uint32 {
+	if registeredAgent == nil {
+		return 0
+	}
+	ckptBuf = registeredAgent.Marshal()
+	return uint32(len(ckptBuf))
+}
+
+//export agent_checkpoint_ptr
+func agent_checkpoint_ptr() uint32 {
+	if len(ckptBuf) == 0 {
+		return 0
+	}
+	return uint32(uintptr(unsafe.Pointer(&ckptBuf[0])))
+}
+
+//export agent_resume
+func agent_resume(ptr, size uint32) {
+	if registeredAgent == nil || size == 0 {
+		return
+	}
+	data := unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), size)
+	registeredAgent.Unmarshal(data)
+}

@@ -42,19 +42,23 @@ Igor v0 has completed **Phase 2 (Survival)** and begun **Phase 3 (Autonomy)**.
 
 **Specs:** [CAPABILITY_MEMBRANE.md](../constitution/CAPABILITY_MEMBRANE.md), [CAPABILITY_ENFORCEMENT.md](../enforcement/CAPABILITY_ENFORCEMENT.md), [HOSTCALL_ABI.md](../runtime/HOSTCALL_ABI.md)
 
-### Task 7: Replay Engine (Basic)
+### Task 7: Replay Engine (Basic) ✅
 
-**Objective:** Implement single-tick replay verification using the observation event log.
+**Status:** Complete. Single-tick replay verification fully implemented with configurable modes.
 
-**Scope:**
-- Replay sandbox that feeds recorded observations instead of live data
-- Single-tick replay: checkpoint_N + event_log → verify checkpoint_N+1
-- Divergence detection and reporting
-- Local self-verification mode
+**Delivered:**
+- Replay sandbox with isolated wazero runtime (`internal/replay/engine.go`)
+- Replay-mode hostcalls that feed recorded observation values
+- Single-tick verification: `checkpoint_N + event_log → verify checkpoint_N+1`
+- Divergence detection with byte-level diff reporting
+- Periodic self-verification in tick loop (`cmd/igord/main.go` `verifyNextTick`)
+- Migration-time replay verification (`internal/migration/service.go` `verifyMigrationReplay`)
+- Sliding replay window with configurable size (`--replay-window`)
+- Configurable verification interval (`--verify-interval`)
+- Formal replay modes: off, periodic, on-migrate, full (`--replay-mode`)
+- Replay cost metering with optional logging (`--replay-cost-log`)
 
 **Specs:** [REPLAY_ENGINE.md](../runtime/REPLAY_ENGINE.md)
-
-**Outcome:** Runtime can verify tick execution correctness post-hoc.
 
 ### Task 8: Agent SDK & Developer Experience
 
@@ -430,9 +434,9 @@ Phase 2 is **validated** when:
 
 ## Next Immediate Steps
 
-With Phase 3 Task 6 (Capability Membrane MVP) complete:
+With Phase 3 Tasks 6 (Capability Membrane) and 7 (Replay Engine) complete:
 
-1. **Hardening** - Bug fixes, test coverage, documentation accuracy
-2. **Task 7: Replay Engine** - Single-tick replay verification using event log
-3. **Extended testing** - Run agents with hostcalls for hours/days
-4. **Community feedback** - Gather early user input
+1. **Task 8: Agent SDK** - Hostcall wrappers, lifecycle helpers, developer experience
+2. **Task 9: Multi-Node Mobility Testing** - Chain migration, capability preservation
+3. **Hardening** - Bug fixes, test coverage, documentation accuracy
+4. **Extended testing** - Run agents with hostcalls for hours/days

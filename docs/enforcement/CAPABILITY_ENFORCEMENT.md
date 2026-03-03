@@ -166,7 +166,7 @@ These invariants describe **how the runtime upholds capability membrane guarante
 - Post-migration tick failures
 - Capability mismatch in migration logs
 
-**Status:** Not implemented — target performs CE-2 validation at `agent.LoadAgent()` time (after checkpoint is already stored), but there is no pre-handshake capability negotiation. The source cannot verify target capability compatibility before initiating the transfer.
+**Status:** Implemented — target node validates the agent's capability manifest against `manifest.NodeCapabilities` before saving the checkpoint or loading the agent. If any declared capability is unsatisfied, the migration is rejected immediately and the source retains the agent. See `internal/migration/service.go` `handleIncomingMigration`.
 
 ---
 

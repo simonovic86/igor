@@ -121,7 +121,7 @@ func main() {
 	// If --run-agent flag is provided, run agent locally
 	if *runAgent != "" {
 		budgetMicrocents := budget.FromFloat(*budgetFlag)
-		if err := runLocalAgent(ctx, cfg, *runAgent, budgetMicrocents, *manifestPath, migrationSvc, logger); err != nil {
+		if err := runLocalAgent(ctx, cfg, engine, storageProvider, *runAgent, budgetMicrocents, *manifestPath, migrationSvc, logger); err != nil {
 			logging.Error(logger, "Failed to run agent", "error", err)
 			os.Exit(1)
 		}
@@ -142,25 +142,14 @@ func main() {
 func runLocalAgent(
 	ctx context.Context,
 	cfg *config.Config,
+	engine *runtime.Engine,
+	storageProvider storage.Provider,
 	wasmPath string,
 	budgetMicrocents int64,
 	manifestPathFlag string,
 	migrationSvc *migration.Service,
 	logger *slog.Logger,
 ) error {
-	// Create storage provider
-	storageProvider, err := storage.NewFSProvider(cfg.CheckpointDir, logger)
-	if err != nil {
-		return fmt.Errorf("failed to create storage provider: %w", err)
-	}
-
-	// Create WASM runtime engine
-	engine, err := runtime.NewEngine(ctx, logger)
-	if err != nil {
-		return fmt.Errorf("failed to create runtime engine: %w", err)
-	}
-	defer engine.Close(ctx)
-
 	// Load manifest from file
 	mPath := manifestPathFlag
 	if mPath == "" {

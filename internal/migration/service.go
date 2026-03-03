@@ -292,6 +292,20 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		)
 	}
 
+	// CE-5: Verify target node can satisfy agent's declared capabilities before
+	// committing any state. Reject early so no orphaned checkpoint is written.
+	capManifest, err := manifest.ParseCapabilityManifest(pkg.ManifestData)
+	if err != nil {
+		s.logger.Error("Invalid manifest in migration package", "error", err)
+		s.sendStartConfirmation(stream, pkg.AgentID, false, "invalid manifest: "+err.Error())
+		return
+	}
+	if err := manifest.ValidateAgainstNode(capManifest, manifest.NodeCapabilities); err != nil {
+		s.logger.Error("Capability check failed", "agent_id", pkg.AgentID, "error", err)
+		s.sendStartConfirmation(stream, pkg.AgentID, false, "capability check failed: "+err.Error())
+		return
+	}
+
 	// Save checkpoint to storage
 	if err := s.storageProvider.SaveCheckpoint(ctx, pkg.AgentID, pkg.Checkpoint); err != nil {
 		s.logger.Error("Failed to save checkpoint", "error", err)

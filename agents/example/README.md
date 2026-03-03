@@ -1,6 +1,6 @@
 # Survivor Agent
 
-An autonomous agent that demonstrates Igor's survival capabilities: checkpointing, migration, resume, and continuity across infrastructure.
+An autonomous agent that demonstrates Igor's survival capabilities: checkpointing, migration, resume, and continuity across infrastructure. Built with the Igor Agent SDK.
 
 ## What It Does
 
@@ -12,6 +12,21 @@ The survivor agent maintains persistent state across ticks, checkpoints, and mig
 - **Luck** — running XOR of random bytes (demonstrates rand hostcall)
 
 Each tick it logs a narrative line showing its tick count, age, and luck value. Every 10 ticks it logs a milestone. After a restart or migration, the tick counter and age continue from where they left off.
+
+## SDK Usage
+
+This agent uses the Igor SDK (`sdk/igor`), which handles all WASM lifecycle exports and memory management. The agent implements the `igor.Agent` interface:
+
+```go
+type Survivor struct { ... }
+func (s *Survivor) Init()                 // one-time initialization
+func (s *Survivor) Tick()                 // per-tick logic using igor.ClockNow(), igor.RandBytes(), igor.Logf()
+func (s *Survivor) Marshal() []byte       // serialize state for checkpointing
+func (s *Survivor) Unmarshal(data []byte)  // restore state on resume
+func init() { igor.Run(&Survivor{}) }
+```
+
+The SDK provides the five required WASM exports (`agent_init`, `agent_tick`, `agent_checkpoint`, `agent_checkpoint_ptr`, `agent_resume`) automatically.
 
 ## State Format
 
@@ -27,9 +42,9 @@ Each tick it logs a narrative line showing its tick count, age, and luck value. 
 ## Replay Compatibility
 
 The agent is designed for CM-4 (Observation Determinism) compliance:
-- Only `agent_tick` calls observation hostcalls (clock, rand, log)
-- `agent_init`, `agent_checkpoint`, and `agent_resume` are pure — no hostcalls
-- `agent_resume` performs pure state restoration with no side effects
+- Only `Tick()` calls observation hostcalls (clock, rand, log)
+- `Init()`, `Marshal()`, and `Unmarshal()` are pure — no hostcalls
+- `Unmarshal()` performs pure state restoration with no side effects
 
 This ensures replay verification works correctly both locally and during migration.
 
@@ -37,9 +52,9 @@ This ensures replay verification works correctly both locally and during migrati
 
 All three observation hostcalls (declared in `agent.manifest.json`):
 
-- `clock_now` — read wall clock for age tracking
-- `rand_bytes` — generate random bytes for luck accumulation
-- `log_emit` — emit narrative log messages
+- `igor.ClockNow()` — read wall clock for age tracking
+- `igor.RandBytes()` — generate random bytes for luck accumulation
+- `igor.Logf()` — emit narrative log messages
 
 ## Building
 

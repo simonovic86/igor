@@ -357,43 +357,40 @@ If `agent_resume()` fails:
 - Log error
 - Keep checkpoint intact
 
-## Example Agent (Counter)
+## Example Agent (Survivor)
 
-Complete implementation in `agents/example/main.go`:
+Complete implementation in `agents/example/main.go` using the Igor SDK (`sdk/igor`):
 
 ```go
-type State struct {
-    Counter uint64
-}
-var state State
-
-//export agent_init
-func agent_init() {
-    state.Counter = 0
+type Survivor struct {
+    TickCount uint64
+    BirthNano int64
+    LastNano  int64
+    Luck      uint32
 }
 
-//export agent_tick
-func agent_tick() {
-    state.Counter++
-    fmt.Printf("Tick %d\n", state.Counter)
+func (s *Survivor) Init() {}
+
+func (s *Survivor) Tick() {
+    s.TickCount++
+    now := igor.ClockNow()
+    if s.BirthNano == 0 { s.BirthNano = now }
+    s.LastNano = now
+    buf := make([]byte, 4)
+    igor.RandBytes(buf)
+    s.Luck ^= binary.LittleEndian.Uint32(buf)
+    igor.Logf("[survivor] tick %d | age %ds | luck 0x%08x",
+        s.TickCount, (s.LastNano-s.BirthNano)/1e9, s.Luck)
 }
 
-//export agent_checkpoint
-func agent_checkpoint() uint32 {
-    return 8 // size of counter
-}
+func (s *Survivor) Marshal() []byte   { /* 28-byte LE encoding */ }
+func (s *Survivor) Unmarshal(data []byte) { /* reverse */ }
 
-//export agent_checkpoint_ptr
-func agent_checkpoint_ptr() uint32 {
-    return uint32(uintptr(unsafe.Pointer(&state.Counter)))
-}
-
-//export agent_resume
-func agent_resume(ptr, size uint32) {
-    buf := unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), size)
-    state.Counter = binary.LittleEndian.Uint64(buf)
-}
+func init() { igor.Run(&Survivor{}) }
+func main() {}
 ```
+
+The SDK provides all five required WASM exports (`agent_init`, `agent_tick`, `agent_checkpoint`, `agent_checkpoint_ptr`, `agent_resume`) automatically, delegating to the `Agent` interface methods.
 
 ## Building Agents
 
