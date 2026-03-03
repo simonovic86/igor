@@ -12,6 +12,9 @@
 //	func (a *MyAgent) Marshal() []byte         { /* serialize */ }
 //	func (a *MyAgent) Unmarshal(data []byte)   { /* deserialize */ }
 //	func init() { igor.Run(&MyAgent{}) }
+
+//go:build tinygo || wasip1
+
 package igor
 
 import (

@@ -68,7 +68,7 @@ Last updated: 2026-03-03
 | Observation recording (CM-4) | Implemented | `internal/eventlog/eventlog.go` |
 | Manifest in migration package | Implemented | `pkg/protocol/messages.go` `ManifestData` |
 | Pre-migration capability check (CE-5) | Implemented | `internal/migration/service.go` `handleIncomingMigration` |
-| KV storage hostcalls | Not implemented | Roadmap Task 8+ |
+| KV storage hostcalls | Not implemented | Roadmap future task |
 | Network hostcalls | Not implemented | Roadmap Phase 3+ |
 
 ## Identity and Authority
@@ -95,3 +95,20 @@ Last updated: 2026-03-03
 | /tmp WASM write on target | Removed | Replaced by `agent.LoadAgentFromBytes` (no temp file) |
 | Replay data in migration package | Implemented | `internal/migration/replay.go` |
 | Staleness guard for replay data | Implemented | `internal/migration/replay.go` |
+
+## Agent SDK & Developer Experience
+
+| Aspect | Status | Code Reference |
+|--------|--------|----------------|
+| Agent SDK (Agent interface, hostcall wrappers) | Implemented | `sdk/igor/lifecycle.go`, `sdk/igor/hostcalls_wrappers_wasm.go` |
+| Build-tag split (WASM vs native) | Implemented | `sdk/igor/hostcalls_wrappers_wasm.go`, `sdk/igor/hostcalls_wrappers_stub.go` |
+| Capability mocks (MockBackend, Runtime) | Implemented | `sdk/igor/mock_backend.go`, `sdk/igor/mock/mock.go` |
+| Deterministic mock (fixed clock, seeded rand) | Implemented | `sdk/igor/mock/mock.go` `NewDeterministic` |
+| Local simulator (single-process WASM runner) | Implemented | `internal/simulator/simulator.go` |
+| Simulator deterministic hostcalls | Implemented | `internal/simulator/hostcalls.go` |
+| Simulator replay verification | Implemented | `internal/simulator/simulator.go` `verifyTick` |
+| Checkpoint inspector | Implemented | `internal/inspector/inspector.go` |
+| WASM hash verification in inspector | Implemented | `internal/inspector/inspector.go` `VerifyWASM` |
+| Agent template (Survivor example) | Implemented | `agents/example/` |
+| `--simulate` CLI flag | Implemented | `cmd/igord/main.go` |
+| `--inspect-checkpoint` CLI flag | Implemented | `cmd/igord/main.go` |
