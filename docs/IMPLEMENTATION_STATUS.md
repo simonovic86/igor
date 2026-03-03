@@ -95,6 +95,14 @@ Last updated: 2026-03-03
 | /tmp WASM write on target | Removed | Replaced by `agent.LoadAgentFromBytes` (no temp file) |
 | Replay data in migration package | Implemented | `internal/migration/replay.go` |
 | Staleness guard for replay data | Implemented | `internal/migration/replay.go` |
+| Host module re-registration on return | Implemented | `internal/hostcall/registry.go` (close existing before re-instantiate) |
+| Orphaned checkpoint cleanup on failure | Implemented | `internal/migration/service.go` `deleteOrphanedCheckpoint` |
+| Per-node capability overrides | Implemented | `internal/migration/service.go` `SetNodeCapabilities` |
+| Chain migration (A→B→C→A) | Tested | `internal/migration/multinode_test.go` `TestChainMigration_ABC_A` |
+| Budget conservation across hops | Tested | `internal/migration/multinode_test.go` `TestChainMigration_BudgetConservation` |
+| Capability rejection on migration | Tested | `internal/migration/multinode_test.go` `TestCapabilityRejection_MigrationFails` |
+| Capability preservation across hops | Tested | `internal/migration/multinode_test.go` `TestCapabilityPreservation_AcrossHops` |
+| Stress migration (20 round-trips) | Tested | `internal/migration/multinode_test.go` `TestStressMigration_RapidRoundTrips` |
 
 ## Agent SDK & Developer Experience
 

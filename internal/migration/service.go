@@ -352,6 +352,7 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 	)
 	if err != nil {
 		s.logger.Error("Failed to load agent", "error", err)
+		s.deleteOrphanedCheckpoint(ctx, pkg.AgentID)
 		s.sendStartConfirmation(stream, pkg.AgentID, false, err.Error())
 		return
 	}
@@ -360,6 +361,7 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 	if err := instance.Init(ctx); err != nil {
 		s.logger.Error("Failed to initialize agent", "error", err)
 		instance.Close(ctx)
+		s.deleteOrphanedCheckpoint(ctx, pkg.AgentID)
 		s.sendStartConfirmation(stream, pkg.AgentID, false, err.Error())
 		return
 	}
@@ -368,6 +370,7 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 	if err := instance.LoadCheckpointFromStorage(ctx); err != nil {
 		s.logger.Error("Failed to resume agent", "error", err)
 		instance.Close(ctx)
+		s.deleteOrphanedCheckpoint(ctx, pkg.AgentID)
 		s.sendStartConfirmation(stream, pkg.AgentID, false, err.Error())
 		return
 	}
@@ -509,6 +512,17 @@ func (s *Service) GetActiveAgents() []string {
 		agents = append(agents, id)
 	}
 	return agents
+}
+
+// deleteOrphanedCheckpoint removes a checkpoint that was saved during an
+// incoming migration but whose agent failed to fully initialize. Without
+// cleanup, a stale checkpoint would block future migrations for this agent ID.
+func (s *Service) deleteOrphanedCheckpoint(ctx context.Context, agentID string) {
+	if err := s.storageProvider.DeleteCheckpoint(ctx, agentID); err != nil {
+		s.logger.Error("Failed to delete orphaned checkpoint", "agent_id", agentID, "error", err)
+	} else {
+		s.logger.Info("Orphaned checkpoint cleaned up", "agent_id", agentID)
+	}
 }
 
 // SetNodeCapabilities overrides the default node capabilities for this service.
