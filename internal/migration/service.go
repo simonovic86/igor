@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -159,11 +160,12 @@ func (s *Service) MigrateAgent(
 	// Include replay verification data from the active instance (if available).
 	// The staleness guard in replayDataFromInstance ensures the replay data
 	// corresponds to the checkpoint we're sending.
+	// Save the instance pointer for compare-and-delete after transfer.
 	s.mu.RLock()
-	instance, hasInstance := s.activeAgents[agentID]
+	localInstance, hasInstance := s.activeAgents[agentID]
 	s.mu.RUnlock()
 	if hasInstance {
-		pkg.ReplayData = replayDataFromInstance(instance, checkpoint)
+		pkg.ReplayData = replayDataFromInstance(localInstance, checkpoint)
 		if pkg.ReplayData != nil {
 			s.logger.Info("Replay data included in migration package",
 				"agent_id", agentID,
@@ -213,18 +215,20 @@ func (s *Service) MigrateAgent(
 		"target_node", started.NodeID,
 	)
 
-	// Terminate local instance if exists
+	// Terminate local instance using compare-and-delete: only remove if the
+	// map still holds the same instance we read earlier. A concurrent incoming
+	// migration could have registered a different instance for this agent ID;
+	// deleting that would violate EI-1 (Single Active Instance).
 	s.mu.Lock()
-	instance, exists := s.activeAgents[agentID]
-	if exists {
+	if localInstance != nil && s.activeAgents[agentID] == localInstance {
 		delete(s.activeAgents, agentID)
-	}
-	s.mu.Unlock()
-	if exists {
-		if err := instance.Close(ctx); err != nil {
+		s.mu.Unlock()
+		if err := localInstance.Close(ctx); err != nil {
 			s.logger.Error("Failed to close local instance", "error", err)
 		}
 		s.logger.Info("Local agent instance terminated", "agent_id", agentID)
+	} else {
+		s.mu.Unlock()
 	}
 
 	// Delete local checkpoint
@@ -245,7 +249,16 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 	remotePeer := stream.Conn().RemotePeer()
 	s.logger.Info("Receiving agent migration", "from_peer", remotePeer.String())
 
-	ctx := context.Background()
+	// Bound the entire handler to prevent resource exhaustion from slow
+	// or malicious peers. 2 minutes allows time for replay verification.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	// Set a read deadline for the initial transfer decode. Large WASM
+	// binaries may take time to arrive but 30s is generous for local/LAN.
+	if err := stream.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
+		s.logger.Error("Failed to set stream read deadline", "error", err)
+	}
 
 	// Decode transfer message
 	decoder := json.NewDecoder(stream)
@@ -254,6 +267,11 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		s.logger.Error("Failed to decode transfer", "error", err)
 		s.sendStartConfirmation(stream, "", false, err.Error())
 		return
+	}
+
+	// Clear read deadline for remaining operations (checkpoint save, agent init, etc.)
+	if err := stream.SetReadDeadline(time.Time{}); err != nil {
+		s.logger.Error("Failed to clear stream read deadline", "error", err)
 	}
 
 	pkg := transfer.Package
