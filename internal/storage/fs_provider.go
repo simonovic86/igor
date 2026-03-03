@@ -25,10 +25,31 @@ func NewFSProvider(baseDir string, logger *slog.Logger) (*FSProvider, error) {
 
 	logger.Info("Filesystem storage provider created", "base_dir", baseDir)
 
-	return &FSProvider{
+	p := &FSProvider{
 		baseDir: baseDir,
 		logger:  logger,
-	}, nil
+	}
+	p.cleanStaleTempFiles()
+	return p, nil
+}
+
+// cleanStaleTempFiles removes leftover .tmp files from interrupted checkpoints.
+// A crash between fsync and rename leaves a .tmp file that should be discarded
+// to avoid promoting a partial write on the next checkpoint attempt.
+func (p *FSProvider) cleanStaleTempFiles() {
+	pattern := filepath.Join(p.baseDir, "*.tmp")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		p.logger.Warn("Failed to glob for stale temp files", "error", err)
+		return
+	}
+	for _, m := range matches {
+		if err := os.Remove(m); err != nil {
+			p.logger.Warn("Failed to remove stale temp file", "path", m, "error", err)
+		} else {
+			p.logger.Info("Removed stale temp file", "path", m)
+		}
+	}
 }
 
 // SaveCheckpoint saves an agent checkpoint atomically.

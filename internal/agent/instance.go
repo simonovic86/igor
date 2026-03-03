@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"time"
 
@@ -263,11 +264,21 @@ func (i *Instance) Tick(ctx context.Context) error {
 		maxSnaps = DefaultReplayWindowSize
 	}
 	if len(i.ReplayWindow) > maxSnaps {
-		i.ReplayWindow = i.ReplayWindow[len(i.ReplayWindow)-maxSnaps:]
+		kept := i.ReplayWindow[len(i.ReplayWindow)-maxSnaps:]
+		fresh := make([]TickSnapshot, len(kept))
+		copy(fresh, kept)
+		i.ReplayWindow = fresh
 	}
 
-	// Calculate and deduct execution cost (nanosecond precision, no float, no truncation)
-	costMicrocents := elapsed.Nanoseconds() * i.PricePerSecond / 1_000_000_000
+	// Calculate and deduct execution cost (nanosecond precision, no float, no truncation).
+	// Guard against int64 overflow: if nanos * price would overflow, cap cost at remaining budget.
+	var costMicrocents int64
+	nanos := elapsed.Nanoseconds()
+	if i.PricePerSecond > 0 && nanos > math.MaxInt64/i.PricePerSecond {
+		costMicrocents = i.Budget
+	} else {
+		costMicrocents = nanos * i.PricePerSecond / 1_000_000_000
+	}
 	i.Budget -= costMicrocents
 
 	observationCount := 0
@@ -398,6 +409,9 @@ func (i *Instance) Resume(ctx context.Context, state []byte) error {
 	}
 
 	ptr := uint32(results[0])
+	if ptr == 0 {
+		return fmt.Errorf("malloc returned null pointer (out of memory)")
+	}
 
 	// Write state to WASM memory
 	ok := i.Module.Memory().Write(ptr, state)
@@ -493,10 +507,18 @@ func ParseCheckpointHeader(checkpoint []byte) (budgetVal int64, price int64, tic
 	if checkpoint[0] != checkpointVersion {
 		return 0, 0, 0, [32]byte{}, nil, fmt.Errorf("unsupported checkpoint version: %d", checkpoint[0])
 	}
+	budgetParsed := int64(binary.LittleEndian.Uint64(checkpoint[1:9]))
+	priceParsed := int64(binary.LittleEndian.Uint64(checkpoint[9:17]))
+	if budgetParsed < 0 {
+		return 0, 0, 0, [32]byte{}, nil, fmt.Errorf("checkpoint contains negative budget: %d", budgetParsed)
+	}
+	if priceParsed < 0 {
+		return 0, 0, 0, [32]byte{}, nil, fmt.Errorf("checkpoint contains negative price: %d", priceParsed)
+	}
 	var hash [32]byte
 	copy(hash[:], checkpoint[25:57])
-	return int64(binary.LittleEndian.Uint64(checkpoint[1:9])),
-		int64(binary.LittleEndian.Uint64(checkpoint[9:17])),
+	return budgetParsed,
+		priceParsed,
 		binary.LittleEndian.Uint64(checkpoint[17:25]),
 		hash,
 		checkpoint[checkpointHeaderLen:],

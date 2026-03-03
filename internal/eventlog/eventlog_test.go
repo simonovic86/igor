@@ -136,6 +136,23 @@ func TestEventLog_Eviction(t *testing.T) {
 	}
 }
 
+func TestEventLog_EvictionReleasesMemory(t *testing.T) {
+	el := NewEventLog(3)
+	for i := uint64(1); i <= 10; i++ {
+		el.BeginTick(i)
+		el.Record(ClockNow, make([]byte, 1024))
+		el.SealTick()
+	}
+	history := el.History()
+	if len(history) != 3 {
+		t.Fatalf("expected 3, got %d", len(history))
+	}
+	// Verify capacity is not leaking (should be exactly 3, not 10)
+	if cap(history) > 3 {
+		t.Errorf("history capacity should be 3, got %d (memory leak)", cap(history))
+	}
+}
+
 func TestEventLog_UnboundedWhenZero(t *testing.T) {
 	el := NewEventLog(0)
 

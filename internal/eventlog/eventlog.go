@@ -87,9 +87,14 @@ func (l *EventLog) SealTick() *TickLog {
 	l.history = append(l.history, sealed)
 	l.current = nil
 
-	// Evict oldest ticks when history exceeds maxTicks bound
+	// Evict oldest ticks when history exceeds maxTicks bound.
+	// Copy to a new slice to release references to evicted TickLogs,
+	// preventing memory leaks from the retained underlying array.
 	if l.maxTicks > 0 && len(l.history) > l.maxTicks {
-		l.history = l.history[len(l.history)-l.maxTicks:]
+		kept := l.history[len(l.history)-l.maxTicks:]
+		fresh := make([]*TickLog, len(kept))
+		copy(fresh, kept)
+		l.history = fresh
 	}
 
 	return sealed
