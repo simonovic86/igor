@@ -59,7 +59,7 @@ type Instance struct {
 	replayWindowMax int            // Maximum snapshots retained (0 = use DefaultReplayWindowSize)
 }
 
-// LoadAgent loads and compiles a WASM agent from a file.
+// LoadAgent loads and compiles a WASM agent from a file path.
 // manifestData is the JSON capability manifest; nil or empty means no capabilities.
 func LoadAgent(
 	ctx context.Context,
@@ -67,20 +67,53 @@ func LoadAgent(
 	wasmPath string,
 	agentID string,
 	storageProvider storage.Provider,
-	budget int64,
+	budgetVal int64,
 	pricePerSecond int64,
 	manifestData []byte,
 	logger *slog.Logger,
 ) (*Instance, error) {
 	logger.Info("Loading agent", "agent_id", agentID, "path", wasmPath)
 
-	// Parse capability manifest
+	wasmBytes, err := os.ReadFile(wasmPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read WASM file: %w", err)
+	}
+
+	return loadAgent(ctx, engine, wasmBytes, agentID, storageProvider, budgetVal, pricePerSecond, manifestData, logger)
+}
+
+// LoadAgentFromBytes loads and compiles a WASM agent from raw bytes.
+// Used by the migration service to avoid writing WASM to a temporary file.
+func LoadAgentFromBytes(
+	ctx context.Context,
+	engine *runtime.Engine,
+	wasmBytes []byte,
+	agentID string,
+	storageProvider storage.Provider,
+	budgetVal int64,
+	pricePerSecond int64,
+	manifestData []byte,
+	logger *slog.Logger,
+) (*Instance, error) {
+	return loadAgent(ctx, engine, wasmBytes, agentID, storageProvider, budgetVal, pricePerSecond, manifestData, logger)
+}
+
+func loadAgent(
+	ctx context.Context,
+	engine *runtime.Engine,
+	wasmBytes []byte,
+	agentID string,
+	storageProvider storage.Provider,
+	budgetVal int64,
+	pricePerSecond int64,
+	manifestData []byte,
+	logger *slog.Logger,
+) (*Instance, error) {
 	capManifest, err := manifest.ParseCapabilityManifest(manifestData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse manifest: %w", err)
 	}
 
-	// Validate manifest against node capabilities
 	if err := manifest.ValidateAgainstNode(capManifest, manifest.NodeCapabilities); err != nil {
 		return nil, fmt.Errorf("manifest validation failed: %w", err)
 	}
@@ -90,19 +123,11 @@ func LoadAgent(
 		"capabilities", capManifest.Names(),
 	)
 
-	// Create event log for observation recording
 	el := eventlog.NewEventLog(eventlog.DefaultMaxTicks)
 
-	// Register igor host module with declared capabilities (CE-1, CE-2)
 	registry := hostcall.NewRegistry(logger, el)
 	if err := registry.RegisterHostModule(ctx, engine.Runtime(), capManifest); err != nil {
 		return nil, fmt.Errorf("failed to register host module: %w", err)
-	}
-
-	// Read and compile WASM module (bytes retained for replay verification)
-	wasmBytes, err := os.ReadFile(wasmPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read WASM file: %w", err)
 	}
 
 	compiled, err := engine.CompileWASMBytes(ctx, wasmBytes)
@@ -110,18 +135,11 @@ func LoadAgent(
 		return nil, fmt.Errorf("failed to compile WASM: %w", err)
 	}
 
-	// Instantiate module — if the agent imports from "igor" but the capability
-	// was not declared, wazero will fail here with a clear import error (CM-3).
 	module, err := engine.InstantiateModule(ctx, compiled, agentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate module: %w", err)
 	}
 
-	// Initialize the WASM module runtime. TinyGo agents export _initialize
-	// (WASI reactor mode); standard Go agents may export _start.
-	// We call the appropriate initializer after instantiation because
-	// WithStartFunctions() skips auto-start to prevent wazero from
-	// closing the module on proc_exit(0).
 	if initFn := module.ExportedFunction("_initialize"); initFn != nil {
 		if _, err := initFn.Call(ctx); err != nil {
 			module.Close(ctx)
@@ -138,7 +156,7 @@ func LoadAgent(
 		Engine:         engine,
 		Storage:        storageProvider,
 		State:          nil,
-		Budget:         budget,
+		Budget:         budgetVal,
 		PricePerSecond: pricePerSecond,
 		Manifest:       capManifest,
 		EventLog:       el,
@@ -146,7 +164,6 @@ func LoadAgent(
 		logger:         logger,
 	}
 
-	// Verify required exports exist
 	if err := instance.verifyExports(); err != nil {
 		return nil, fmt.Errorf("agent lifecycle validation failed: %w", err)
 	}

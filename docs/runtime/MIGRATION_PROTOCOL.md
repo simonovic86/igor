@@ -100,21 +100,22 @@ Source Node                              Target Node
      ├───────────────────────────────────────>│
      │                                        │
      │                                        │ 7. Decode transfer
-     │                                        │ 8. Save checkpoint
-     │                                        │ 9. Write WASM to /tmp
-     │                                        │ 10. Load agent
-     │                                        │ 11. Initialize
-     │                                        │ 12. Resume from checkpoint
-     │                                        │ 13. Register as active
+     │                                        │ 8. Verify WASM hash
+     │                                        │ 9. Verify replay (if data present)
+     │                                        │ 10. Save checkpoint
+     │                                        │ 11. Load agent from bytes
+     │                                        │ 12. Initialize
+     │                                        │ 13. Resume from checkpoint
+     │                                        │ 14. Register as active
      │                                        │
-     │ 14. Receive AgentStarted               │
+     │ 15. Receive AgentStarted               │
      │<───────────────────────────────────────┤
      │                                        │
-     │ 15. Verify success                     │
+     │ 16. Verify success                     │
      │                                        │
-     │ 16. Terminate local instance           │
+     │ 17. Terminate local instance           │
      │                                        │
-     │ 17. Delete local checkpoint            │
+     │ 18. Delete local checkpoint            │
      │                                        │
      X (Agent terminated)               ● (Agent running)
 ```
@@ -239,40 +240,34 @@ Source Node                              Target Node
    storage.SaveCheckpoint(ctx, pkg.AgentID, pkg.Checkpoint)
    ```
 
-6. **Write WASM binary**
+6. **Load agent from bytes**
    ```go
-   wasmPath := fmt.Sprintf("/tmp/igor-agent-%s.wasm", pkg.AgentID)
-   os.WriteFile(wasmPath, pkg.WASMBinary, 0644)
-   ```
-
-7. **Load agent**
-   ```go
-   instance := agent.LoadAgent(
-       ctx, engine, wasmPath, pkg.AgentID,
+   instance := agent.LoadAgentFromBytes(
+       ctx, engine, pkg.WASMBinary, pkg.AgentID,
        storage, pkg.Budget, pkg.PricePerSecond, pkg.ManifestData, logger,
    )
    ```
 
-8. **Initialize and resume**
+7. **Initialize and resume**
    ```go
    instance.Init(ctx)
    instance.LoadCheckpointFromStorage(ctx)
    ```
 
-9. **Register as active**
+8. **Register as active**
    ```go
    activeAgents[pkg.AgentID] = instance
    ```
 
-10. **Send confirmation**
-    ```go
-    json.NewEncoder(stream).Encode(AgentStarted{
-        AgentID:   pkg.AgentID,
-        NodeID:    localNodeID,
-        StartTime: time.Now().Unix(),
-        Success:   true,
-    })
-    ```
+9. **Send confirmation**
+   ```go
+   json.NewEncoder(stream).Encode(AgentStarted{
+       AgentID:   pkg.AgentID,
+       NodeID:    localNodeID,
+       StartTime: time.Now().Unix(),
+       Success:   true,
+   })
+   ```
 
 ## CLI Usage
 
@@ -374,7 +369,7 @@ If no confirmation received:
 
 Typical migration time (local network):
 - Connect: ~10ms
-- Transfer: ~50ms (for 190KB WASM + 24B checkpoint)
+- Transfer: ~50ms (for 190KB WASM + 65B checkpoint)
 - Resume: ~300ms (WASM compilation)
 - Total: ~360ms
 
@@ -396,7 +391,7 @@ Typical migration time (local network):
 
 ```
 Starting agent migration agent_id=local-agent target=/ip4/.../p2p/...
-Checkpoint loaded for migration checkpoint_size=24
+Checkpoint loaded for migration checkpoint_size=65
 Budget metadata extracted budget=0.999999 price_per_second=0.001000
 Transfer sent agent_id=local-agent
 Agent started on target target_node=12D3KooW...
@@ -409,7 +404,7 @@ Migration completed successfully agent_id=local-agent
 
 ```
 Receiving agent migration from_peer=12D3KooW...
-Agent package received agent_id=local-agent wasm_size=188404 checkpoint_size=24
+Agent package received agent_id=local-agent wasm_size=188404 checkpoint_size=65
 Checkpoint saved agent_id=local-agent path=checkpoints/local-agent.checkpoint
 Agent loaded successfully agent_id=local-agent
 Budget restored from checkpoint budget=0.999999

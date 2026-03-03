@@ -299,19 +299,10 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		return
 	}
 
-	// Write WASM binary to temporary file
-	wasmPath := fmt.Sprintf("/tmp/igor-agent-%s.wasm", pkg.AgentID)
-	if err := os.WriteFile(wasmPath, pkg.WASMBinary, 0644); err != nil {
-		s.logger.Error("Failed to write WASM binary", "error", err)
-		s.sendStartConfirmation(stream, pkg.AgentID, false, err.Error())
-		return
-	}
-
-	// Load agent with budget and manifest from package
-	instance, err := agent.LoadAgent(
+	instance, err := agent.LoadAgentFromBytes(
 		ctx,
 		s.runtimeEngine,
-		wasmPath,
+		pkg.WASMBinary,
 		pkg.AgentID,
 		s.storageProvider,
 		pkg.Budget,

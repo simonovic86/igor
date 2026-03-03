@@ -105,13 +105,16 @@ Source Node                    Target Node
      │                              │
      ├─ Checkpoint agent            │
      ├─ Load WASM binary            │
-     ├─ Package: WASM + state       │
-     │  + budget                    │
+     ├─ Package: WASM + hash +      │
+     │  state + budget + manifest   │
+     │  + replay data               │
      ├─ Connect to target           │
      ├─ Open stream ────────────────>│
      ├─ Send AgentTransfer ─────────>│
+     │                              ├─ Verify WASM hash
+     │                              ├─ Verify replay (if present)
      │                              ├─ Save checkpoint
-     │                              ├─ Load agent
+     │                              ├─ Load agent from bytes
      │                              ├─ Resume from checkpoint
      │<─ Receive AgentStarted ───────┤
      ├─ Verify success              │
