@@ -1,0 +1,27 @@
+{
+  "AgentID": "golden-replay-agent",
+  "WASMBinary": "AGFzbQ==",
+  "WASMHash": "zV1JNaSMBnLLBkB7tEO8AIev+UfGuGS6yIaYLHOzAn8=",
+  "Checkpoint": "AgECAw==",
+  "ManifestData": "eyJjYXBhYmlsaXRpZXMiOnsiY2xvY2siOnsidmVyc2lvbiI6MX19fQ==",
+  "Budget": 5000000,
+  "PricePerSecond": 2000,
+  "ReplayData": {
+    "PreTickState": "qrvM3Q==",
+    "TickNumber": 42,
+    "Entries": [
+      {
+        "HostcallID": 1,
+        "Payload": "AQIDBAUGBwg="
+      },
+      {
+        "HostcallID": 2,
+        "Payload": "3q2+7w=="
+      },
+      {
+        "HostcallID": 3,
+        "Payload": "dGljaw=="
+      }
+    ]
+  }
+}

@@ -135,11 +135,14 @@ If migration fails at any step, agent remains on source node.
 
 ```go
 type AgentPackage struct {
-    AgentID        string   // Unique identifier
-    WASMBinary     []byte   // Compiled module (~190KB)
-    Checkpoint     []byte   // [budget:8][price:8][state:N]
-    Budget         float64  // Remaining funds
-    PricePerSecond float64  // Execution cost rate
+    AgentID        string      // Unique identifier
+    WASMBinary     []byte      // Compiled module (~190KB)
+    WASMHash       []byte      // SHA-256 of WASMBinary
+    Checkpoint     []byte      // 57-byte header + agent state
+    ManifestData   []byte      // Capability manifest JSON
+    Budget         int64       // Remaining budget in microcents
+    PricePerSecond int64       // Cost per second in microcents
+    ReplayData     *ReplayData // Replay verification data (optional)
 }
 ```
 
@@ -153,11 +156,11 @@ Every tick is timed and metered:
 
 ```go
 start := time.Now()
-agent_tick()  // Execute
+agent_tick()
 elapsed := time.Since(start)
 
-cost := elapsed.Seconds() × pricePerSecond
-budget -= cost
+costMicrocents := elapsed.Microseconds() * pricePerSecond / budget.MicrocentScale
+budget -= costMicrocents
 ```
 
 Precision: nanosecond-level via Go's monotonic clock.
@@ -185,25 +188,23 @@ When budget exhausts:
 
 ### Budget Persistence
 
-Checkpoints include budget as metadata:
+Checkpoints include budget and identity as metadata (57-byte header):
 
 ```
 Byte Layout:
-┌──────────┬─────────────┬────────────┐
-│  Budget  │ PricePerSec │ Agent State│
-│ (8 bytes)│  (8 bytes)  │ (N bytes)  │
-│ float64  │  float64    │            │
-└──────────┴─────────────┴────────────┘
- 0          8             16           16+N
+┌─────────┬──────────┬─────────────┬────────────┬──────────┬────────────┐
+│ Version │  Budget  │ PricePerSec │ TickNumber │ WASMHash │ Agent State│
+│ (1 byte)│ (8 bytes)│  (8 bytes)  │ (8 bytes)  │(32 bytes)│ (N bytes)  │
+└─────────┴──────────┴─────────────┴────────────┴──────────┴────────────┘
+ 0         1          9             17           25         57
 ```
 
-Little-endian IEEE 754 encoding.
+Little-endian encoding. Budget and price are int64 microcents (1 unit = 1,000,000 microcents).
 
 On resume:
 ```go
-budget := Float64frombits(checkpoint[0:8])
-pricePerSecond := Float64frombits(checkpoint[8:16])
-agentState := checkpoint[16:]
+budgetVal, pricePerSecond, tickNumber, wasmHash, agentState, err := ParseCheckpointHeader(checkpoint)
+// Verify wasmHash matches loaded WASM binary
 ```
 
 Budget transfers with agent during migration via `AgentPackage`.

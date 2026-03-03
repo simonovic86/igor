@@ -1,8 +1,11 @@
 package migration
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/simonovic86/igor/internal/agent"
@@ -21,12 +24,13 @@ func TestReplayDataFromInstance_EmptyWindow(t *testing.T) {
 func TestReplayDataFromInstance_WithData(t *testing.T) {
 	postState := []byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
-	// Build a v1 checkpoint that contains postState as the agent state
-	checkpoint := make([]byte, 17+len(postState))
-	checkpoint[0] = 0x01
+	// Build a checkpoint that contains postState as the agent state
+	checkpoint := make([]byte, 57+len(postState))
+	checkpoint[0] = 0x02
 	binary.LittleEndian.PutUint64(checkpoint[1:9], 1000000)
 	binary.LittleEndian.PutUint64(checkpoint[9:17], 1000)
-	copy(checkpoint[17:], postState)
+	binary.LittleEndian.PutUint64(checkpoint[17:25], 5)
+	copy(checkpoint[57:], postState)
 
 	inst := &agent.Instance{
 		ReplayWindow: []agent.TickSnapshot{
@@ -78,11 +82,12 @@ func TestReplayDataFromInstance_StalenessGuard(t *testing.T) {
 	differentState := []byte{0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
 	// Build checkpoint with differentState — does NOT match PostState
-	checkpoint := make([]byte, 17+len(differentState))
-	checkpoint[0] = 0x01
+	checkpoint := make([]byte, 57+len(differentState))
+	checkpoint[0] = 0x02
 	binary.LittleEndian.PutUint64(checkpoint[1:9], 1000000)
 	binary.LittleEndian.PutUint64(checkpoint[9:17], 1000)
-	copy(checkpoint[17:], differentState)
+	binary.LittleEndian.PutUint64(checkpoint[17:25], 5)
+	copy(checkpoint[57:], differentState)
 
 	inst := &agent.Instance{
 		ReplayWindow: []agent.TickSnapshot{
@@ -202,11 +207,12 @@ func TestReplayData_JSONRoundTrip_NilOmitted(t *testing.T) {
 
 func TestExtractAgentState(t *testing.T) {
 	state := []byte{0xDE, 0xAD, 0xBE, 0xEF}
-	checkpoint := make([]byte, 17+len(state))
-	checkpoint[0] = 0x01
+	checkpoint := make([]byte, 57+len(state))
+	checkpoint[0] = 0x02
 	binary.LittleEndian.PutUint64(checkpoint[1:9], 500000)
 	binary.LittleEndian.PutUint64(checkpoint[9:17], 1000)
-	copy(checkpoint[17:], state)
+	binary.LittleEndian.PutUint64(checkpoint[17:25], 10)
+	copy(checkpoint[57:], state)
 
 	extracted, err := agent.ExtractAgentState(checkpoint)
 	if err != nil {
@@ -221,14 +227,14 @@ func TestExtractAgentState(t *testing.T) {
 }
 
 func TestExtractAgentState_TooShort(t *testing.T) {
-	_, err := agent.ExtractAgentState([]byte{0x01, 0x02})
+	_, err := agent.ExtractAgentState([]byte{0x02, 0x01, 0x02})
 	if err == nil {
 		t.Error("expected error for short checkpoint")
 	}
 }
 
 func TestExtractAgentState_WrongVersion(t *testing.T) {
-	checkpoint := make([]byte, 17)
+	checkpoint := make([]byte, 57)
 	checkpoint[0] = 0xFF
 	_, err := agent.ExtractAgentState(checkpoint)
 	if err == nil {
@@ -236,66 +242,19 @@ func TestExtractAgentState_WrongVersion(t *testing.T) {
 	}
 }
 
-func TestExtractAgentState_V2(t *testing.T) {
-	state := []byte{0xDE, 0xAD, 0xBE, 0xEF}
-	// v2: [0x02][budget:8][price:8][tickNumber:8][state:4]
-	checkpoint := make([]byte, 25+len(state))
-	checkpoint[0] = 0x02
-	binary.LittleEndian.PutUint64(checkpoint[1:9], 500000)
-	binary.LittleEndian.PutUint64(checkpoint[9:17], 1000)
-	binary.LittleEndian.PutUint64(checkpoint[17:25], 42) // tickNumber=42
-	copy(checkpoint[25:], state)
-
-	extracted, err := agent.ExtractAgentState(checkpoint)
-	if err != nil {
-		t.Fatalf("ExtractAgentState v2: %v", err)
-	}
-	if len(extracted) != 4 {
-		t.Errorf("extracted length: got %d, want 4", len(extracted))
-	}
-	if extracted[0] != 0xDE || extracted[3] != 0xEF {
-		t.Errorf("extracted data mismatch")
-	}
-}
-
-func TestParseCheckpointHeader_V1(t *testing.T) {
-	state := []byte{0x01, 0x02}
-	checkpoint := make([]byte, 17+len(state))
-	checkpoint[0] = 0x01
-	binary.LittleEndian.PutUint64(checkpoint[1:9], 5000000)
-	binary.LittleEndian.PutUint64(checkpoint[9:17], 10000)
-	copy(checkpoint[17:], state)
-
-	budgetVal, price, tick, s, err := agent.ParseCheckpointHeader(checkpoint)
-	if err != nil {
-		t.Fatalf("ParseCheckpointHeader v1: %v", err)
-	}
-	if budgetVal != 5000000 {
-		t.Errorf("budget: got %d, want 5000000", budgetVal)
-	}
-	if price != 10000 {
-		t.Errorf("price: got %d, want 10000", price)
-	}
-	if tick != 0 {
-		t.Errorf("tick: got %d, want 0 (v1 default)", tick)
-	}
-	if len(s) != 2 || s[0] != 0x01 || s[1] != 0x02 {
-		t.Errorf("state mismatch: got %v", s)
-	}
-}
-
-func TestParseCheckpointHeader_V2(t *testing.T) {
+func TestParseCheckpointHeader(t *testing.T) {
 	state := []byte{0xAA, 0xBB}
-	checkpoint := make([]byte, 25+len(state))
+	checkpoint := make([]byte, 57+len(state))
 	checkpoint[0] = 0x02
 	binary.LittleEndian.PutUint64(checkpoint[1:9], 7000000)
 	binary.LittleEndian.PutUint64(checkpoint[9:17], 20000)
 	binary.LittleEndian.PutUint64(checkpoint[17:25], 99)
-	copy(checkpoint[25:], state)
+	// bytes 25-57: wasmHash (leave zeroed for this test)
+	copy(checkpoint[57:], state)
 
-	budgetVal, price, tick, s, err := agent.ParseCheckpointHeader(checkpoint)
+	budgetVal, price, tick, _, s, err := agent.ParseCheckpointHeader(checkpoint)
 	if err != nil {
-		t.Fatalf("ParseCheckpointHeader v2: %v", err)
+		t.Fatalf("ParseCheckpointHeader: %v", err)
 	}
 	if budgetVal != 7000000 {
 		t.Errorf("budget: got %d, want 7000000", budgetVal)
@@ -308,5 +267,103 @@ func TestParseCheckpointHeader_V2(t *testing.T) {
 	}
 	if len(s) != 2 || s[0] != 0xAA || s[1] != 0xBB {
 		t.Errorf("state mismatch: got %v", s)
+	}
+}
+
+func TestAgentPackage_GoldenJSON(t *testing.T) {
+	data, err := os.ReadFile("testdata/agent_package.json")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+
+	var pkg protomsg.AgentPackage
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if pkg.AgentID != "golden-agent" {
+		t.Errorf("AgentID: got %q, want %q", pkg.AgentID, "golden-agent")
+	}
+	if pkg.Budget != 1000000 {
+		t.Errorf("Budget: got %d, want 1000000", pkg.Budget)
+	}
+	if pkg.PricePerSecond != 1000 {
+		t.Errorf("PricePerSecond: got %d, want 1000", pkg.PricePerSecond)
+	}
+	if !bytes.Equal(pkg.WASMBinary, []byte{0x00, 0x61, 0x73, 0x6D}) {
+		t.Errorf("WASMBinary mismatch")
+	}
+
+	expectedHash := sha256.Sum256(pkg.WASMBinary)
+	if !bytes.Equal(pkg.WASMHash, expectedHash[:]) {
+		t.Errorf("WASMHash does not match sha256(WASMBinary)")
+	}
+
+	if pkg.ReplayData != nil {
+		t.Errorf("expected nil ReplayData")
+	}
+
+	// Round-trip: marshal and compare
+	reMarshaled, err := json.MarshalIndent(pkg, "", "  ")
+	if err != nil {
+		t.Fatalf("re-marshal: %v", err)
+	}
+	if !bytes.Equal(data, reMarshaled) {
+		t.Errorf("round-trip mismatch:\n  original: %s\n  remarshal: %s", data, reMarshaled)
+	}
+}
+
+func TestAgentPackage_WithReplayData_GoldenJSON(t *testing.T) {
+	data, err := os.ReadFile("testdata/agent_package_with_replay.json")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+
+	var pkg protomsg.AgentPackage
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if pkg.AgentID != "golden-replay-agent" {
+		t.Errorf("AgentID: got %q", pkg.AgentID)
+	}
+	if pkg.Budget != 5000000 {
+		t.Errorf("Budget: got %d, want 5000000", pkg.Budget)
+	}
+	if pkg.PricePerSecond != 2000 {
+		t.Errorf("PricePerSecond: got %d, want 2000", pkg.PricePerSecond)
+	}
+
+	expectedHash := sha256.Sum256(pkg.WASMBinary)
+	if !bytes.Equal(pkg.WASMHash, expectedHash[:]) {
+		t.Errorf("WASMHash does not match sha256(WASMBinary)")
+	}
+
+	if pkg.ReplayData == nil {
+		t.Fatal("expected non-nil ReplayData")
+	}
+	if pkg.ReplayData.TickNumber != 42 {
+		t.Errorf("ReplayData.TickNumber: got %d, want 42", pkg.ReplayData.TickNumber)
+	}
+	if len(pkg.ReplayData.Entries) != 3 {
+		t.Fatalf("ReplayData.Entries: got %d, want 3", len(pkg.ReplayData.Entries))
+	}
+	if pkg.ReplayData.Entries[0].HostcallID != 1 {
+		t.Errorf("Entry[0].HostcallID: got %d, want 1", pkg.ReplayData.Entries[0].HostcallID)
+	}
+	if pkg.ReplayData.Entries[2].HostcallID != 3 {
+		t.Errorf("Entry[2].HostcallID: got %d, want 3", pkg.ReplayData.Entries[2].HostcallID)
+	}
+	if string(pkg.ReplayData.Entries[2].Payload) != "tick" {
+		t.Errorf("Entry[2].Payload: got %q, want %q", pkg.ReplayData.Entries[2].Payload, "tick")
+	}
+
+	// Round-trip: marshal and compare
+	reMarshaled, err := json.MarshalIndent(pkg, "", "  ")
+	if err != nil {
+		t.Fatalf("re-marshal: %v", err)
+	}
+	if !bytes.Equal(data, reMarshaled) {
+		t.Errorf("round-trip mismatch:\n  original: %s\n  remarshal: %s", data, reMarshaled)
 	}
 }

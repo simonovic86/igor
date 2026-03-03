@@ -5,6 +5,7 @@ package migration
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -35,6 +36,8 @@ type Service struct {
 	runtimeEngine   *runtime.Engine
 	storageProvider storage.Provider
 	replayEngine    *replay.Engine
+	replayMode      string // "off", "periodic", "on-migrate", "full"
+	replayCostLog   bool
 	logger          *slog.Logger
 
 	// Active agents running on this node.
@@ -48,6 +51,8 @@ func NewService(
 	h host.Host,
 	engine *runtime.Engine,
 	storage storage.Provider,
+	replayMode string,
+	replayCostLog bool,
 	logger *slog.Logger,
 ) *Service {
 	svc := &Service{
@@ -55,6 +60,8 @@ func NewService(
 		runtimeEngine:   engine,
 		storageProvider: storage,
 		replayEngine:    replay.NewEngine(logger),
+		replayMode:      replayMode,
+		replayCostLog:   replayCostLog,
 		logger:          logger,
 		activeAgents:    make(map[string]*agent.Instance),
 	}
@@ -124,7 +131,7 @@ func (s *Service) MigrateAgent(
 
 	// Extract budget metadata from checkpoint for package visibility
 	var budgetVal, pricePerSecond int64
-	if parsedBudget, parsedPrice, _, _, err := agent.ParseCheckpointHeader(checkpoint); err == nil {
+	if parsedBudget, parsedPrice, _, _, _, err := agent.ParseCheckpointHeader(checkpoint); err == nil {
 		budgetVal = parsedBudget
 		pricePerSecond = parsedPrice
 		s.logger.Info("Budget metadata extracted",
@@ -138,10 +145,11 @@ func (s *Service) MigrateAgent(
 		)
 	}
 
-	// Create agent package
+	wasmHashArr := sha256.Sum256(wasmBinary)
 	pkg := protomsg.AgentPackage{
 		AgentID:        agentID,
 		WASMBinary:     wasmBinary,
+		WASMHash:       wasmHashArr[:],
 		Checkpoint:     checkpoint,
 		ManifestData:   manifestData,
 		Budget:         budgetVal,
@@ -257,14 +265,30 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		"price_per_second", budget.Format(pkg.PricePerSecond),
 	)
 
+	// Verify WASM binary integrity
+	if len(pkg.WASMHash) == 32 {
+		computed := sha256.Sum256(pkg.WASMBinary)
+		if computed != [32]byte(pkg.WASMHash) {
+			s.logger.Error("WASM hash mismatch — rejecting migration", "agent_id", pkg.AgentID)
+			s.sendStartConfirmation(stream, pkg.AgentID, false, "WASM binary hash mismatch")
+			return
+		}
+	}
+
 	// Replay verification: verify checkpoint integrity before accepting (CM-4)
-	if pkg.ReplayData != nil {
+	migrateVerify := s.replayMode == "on-migrate" || s.replayMode == "full"
+	if migrateVerify && pkg.ReplayData != nil {
 		if reject := s.verifyMigrationReplay(ctx, stream, &pkg); reject {
 			return
 		}
-	} else {
+	} else if pkg.ReplayData == nil {
 		s.logger.Info("No replay data in package, skipping verification",
 			"agent_id", pkg.AgentID,
+		)
+	} else {
+		s.logger.Info("Replay verification skipped by mode",
+			"agent_id", pkg.AgentID,
+			"replay_mode", s.replayMode,
 		)
 	}
 
@@ -419,10 +443,14 @@ func (s *Service) verifyMigrationReplay(
 		return true
 	}
 
-	s.logger.Info("Replay verification passed",
+	attrs := []any{
 		"agent_id", pkg.AgentID,
 		"tick", result.TickNumber,
-	)
+	}
+	if s.replayCostLog {
+		attrs = append(attrs, "replay_duration", result.Duration)
+	}
+	s.logger.Info("Replay verification passed", attrs...)
 	return false
 }
 

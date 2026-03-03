@@ -30,6 +30,14 @@ type Config struct {
 	// VerifyInterval is the number of ticks between self-verification passes.
 	// 0 disables periodic verification. Default: 5.
 	VerifyInterval int
+
+	// ReplayMode controls when replay verification runs.
+	// "off" = no verification; "periodic" = self-verify every VerifyInterval ticks;
+	// "on-migrate" = verify only on incoming migration; "full" = both (default).
+	ReplayMode string
+
+	// ReplayCostLog enables logging of replay compute duration for economic observability.
+	ReplayCostLog bool
 }
 
 // Load returns a Config with default values applied.
@@ -42,6 +50,8 @@ func Load() (*Config, error) {
 		CheckpointDir:    "./checkpoints",
 		ReplayWindowSize: 16,
 		VerifyInterval:   5,
+		ReplayMode:       "full",
+		ReplayCostLog:    false,
 	}
 	return cfg, nil
 }

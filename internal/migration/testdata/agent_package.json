@@ -1,0 +1,9 @@
+{
+  "AgentID": "golden-agent",
+  "WASMBinary": "AGFzbQ==",
+  "WASMHash": "zV1JNaSMBnLLBkB7tEO8AIev+UfGuGS6yIaYLHOzAn8=",
+  "Checkpoint": "AgECAw==",
+  "ManifestData": "e30=",
+  "Budget": 1000000,
+  "PricePerSecond": 1000
+}

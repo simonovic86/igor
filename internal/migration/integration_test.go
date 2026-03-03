@@ -170,8 +170,8 @@ func newMigrationEnv(t *testing.T) *migrationEnv {
 	}
 	t.Cleanup(func() { engB.Close(ctx) })
 
-	migA := NewService(hostA, engA, stA, logger)
-	migB := NewService(hostB, engB, stB, logger)
+	migA := NewService(hostA, engA, stA, "full", false, logger)
+	migB := NewService(hostB, engB, stB, "full", false, logger)
 
 	agentID := "integration-test-agent"
 	manifestJSON := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
@@ -256,7 +256,7 @@ func TestMultiNodeMigration(t *testing.T) {
 			t.Fatalf("target LoadCheckpoint: %v", err)
 		}
 
-		if len(checkpoint) < 25 || checkpoint[0] != 0x02 {
+		if len(checkpoint) < 57 || checkpoint[0] != 0x02 {
 			t.Fatalf("invalid checkpoint: len=%d, version=%d", len(checkpoint), checkpoint[0])
 		}
 
@@ -265,7 +265,7 @@ func TestMultiNodeMigration(t *testing.T) {
 			t.Errorf("budget: got %d, want %d", targetBudget, env.budgetBeforeMigration)
 		}
 
-		counter := binary.LittleEndian.Uint64(checkpoint[25:])
+		counter := binary.LittleEndian.Uint64(checkpoint[57:])
 		if counter != 3 {
 			t.Errorf("counter: got %d, want 3", counter)
 		}
@@ -291,7 +291,7 @@ func TestMultiNodeMigration(t *testing.T) {
 			t.Fatalf("target LoadCheckpoint after tick: %v", err)
 		}
 
-		counter := binary.LittleEndian.Uint64(checkpoint[25:])
+		counter := binary.LittleEndian.Uint64(checkpoint[57:])
 		if counter != 4 {
 			t.Errorf("counter after tick: got %d, want 4", counter)
 		}

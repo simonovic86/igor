@@ -20,12 +20,14 @@ Complete agent data for transfer.
 
 ```go
 type AgentPackage struct {
-    AgentID        string   // Unique agent identifier
-    WASMBinary     []byte   // Compiled WASM module
-    Checkpoint     []byte   // Serialized state + budget metadata
-    ManifestData   []byte   // Agent manifest (future)
-    Budget         float64  // Remaining budget
-    PricePerSecond float64  // Cost per second
+    AgentID        string      // Unique agent identifier
+    WASMBinary     []byte      // Compiled WASM module
+    WASMHash       []byte      // SHA-256 of WASMBinary for integrity verification
+    Checkpoint     []byte      // Serialized state + budget metadata (57-byte header)
+    ManifestData   []byte      // Capability manifest JSON
+    Budget         int64       // Remaining budget in microcents
+    PricePerSecond int64       // Cost per second in microcents
+    ReplayData     *ReplayData // Replay verification data (nil if no tick executed)
 }
 ```
 
@@ -40,6 +42,24 @@ type AgentTransfer struct {
 }
 ```
 
+```go
+
+// ReplayData contains replay verification data for a single tick.
+// Included in migration packages so the target node can verify checkpoint
+// integrity by re-executing the last tick and comparing results (CM-4).
+type ReplayData struct {
+    PreTickState []byte        // Agent state before the tick
+    TickNumber   uint64        // Tick that was executed
+    Entries      []ReplayEntry // Ordered observation hostcall records
+}
+
+// ReplayEntry is a single observation recorded during a tick.
+type ReplayEntry struct {
+    HostcallID uint16 // Identifies which hostcall (clock_now=1, rand_bytes=2, log_emit=3)
+    Payload    []byte // Serialized return value
+}
+```
+
 ### AgentStarted
 
 Confirmation sent from target back to source.
@@ -48,6 +68,7 @@ Confirmation sent from target back to source.
 type AgentStarted struct {
     AgentID   string
     NodeID    string  // Target peer ID
+    StartTime int64   // Unix timestamp
     Success   bool
     Error     string  // If Success=false
 }
@@ -129,18 +150,21 @@ Source Node                              Target Node
 
 5. **Extract budget metadata**
    ```go
-   budget := float64frombits(checkpoint[0:8])
-   pricePerSecond := float64frombits(checkpoint[8:16])
+   budgetVal, pricePerSecond, _, _, _, _ := agent.ParseCheckpointHeader(checkpoint)
    ```
 
 6. **Create package**
    ```go
+   wasmHash := sha256.Sum256(wasmBinary)
    pkg := AgentPackage{
        AgentID:        agentID,
        WASMBinary:     wasmBinary,
+       WASMHash:       wasmHash[:],
        Checkpoint:     checkpoint,
-       Budget:         budget,
+       ManifestData:   manifestData,
+       Budget:         budgetVal,
        PricePerSecond: pricePerSecond,
+       ReplayData:     replayDataFromInstance(instance, checkpoint),
    }
    ```
 
@@ -192,48 +216,63 @@ Source Node                              Target Node
    pkg := transfer.Package
    ```
 
-3. **Save checkpoint**
+3. **Verify WASM hash**
+   ```go
+   computed := sha256.Sum256(pkg.WASMBinary)
+   if computed != [32]byte(pkg.WASMHash) {
+       // Reject migration
+   }
+   ```
+
+4. **Verify replay data** (if present)
+   ```go
+   if pkg.ReplayData != nil {
+       result := replayEngine.ReplayTick(ctx, pkg.WASMBinary, ...)
+       if !result.Verified {
+           // Reject migration
+       }
+   }
+   ```
+
+5. **Save checkpoint**
    ```go
    storage.SaveCheckpoint(ctx, pkg.AgentID, pkg.Checkpoint)
    ```
 
-4. **Write WASM binary**
+6. **Write WASM binary**
    ```go
    wasmPath := fmt.Sprintf("/tmp/igor-agent-%s.wasm", pkg.AgentID)
    os.WriteFile(wasmPath, pkg.WASMBinary, 0644)
    ```
 
-5. **Load agent**
+7. **Load agent**
    ```go
    instance := agent.LoadAgent(
        ctx, engine, wasmPath, pkg.AgentID,
-       storage, pkg.Budget, pkg.PricePerSecond, logger,
+       storage, pkg.Budget, pkg.PricePerSecond, pkg.ManifestData, logger,
    )
    ```
 
-6. **Initialize**
+8. **Initialize and resume**
    ```go
    instance.Init(ctx)
-   ```
-
-7. **Resume from checkpoint**
-   ```go
    instance.LoadCheckpointFromStorage(ctx)
    ```
 
-8. **Register as active**
+9. **Register as active**
    ```go
    activeAgents[pkg.AgentID] = instance
    ```
 
-9. **Send confirmation**
-   ```go
-   json.NewEncoder(stream).Encode(AgentStarted{
-       AgentID: pkg.AgentID,
-       NodeID:  localNodeID,
-       Success: true,
-   })
-   ```
+10. **Send confirmation**
+    ```go
+    json.NewEncoder(stream).Encode(AgentStarted{
+        AgentID:   pkg.AgentID,
+        NodeID:    localNodeID,
+        StartTime: time.Now().Unix(),
+        Success:   true,
+    })
+    ```
 
 ## CLI Usage
 
@@ -341,9 +380,9 @@ Typical migration time (local network):
 
 ### Checkpoint Size
 
-- Metadata: 16 bytes (budget + price)
+- Header: 57 bytes (version + budget + price + tick + wasmHash)
 - State: Agent-dependent
-- Example agent: 24 bytes total
+- Example agent: 65 bytes total (57 header + 8 state)
 
 ### WASM Transfer Size
 

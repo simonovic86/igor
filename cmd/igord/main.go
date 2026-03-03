@@ -31,6 +31,8 @@ func main() {
 	wasmPath := flag.String("wasm", "", "WASM binary path for migration")
 	replayWindow := flag.Int("replay-window", 0, "Number of recent tick snapshots to retain for verification (0 = use config default)")
 	verifyInterval := flag.Int("verify-interval", 0, "Ticks between self-verification passes (0 = use config default)")
+	replayMode := flag.String("replay-mode", "", "Replay verification mode: off, periodic, on-migrate, full (default: full)")
+	replayCostLog := flag.Bool("replay-cost-log", false, "Log replay compute duration for economic observability")
 	flag.Parse()
 
 	// Create context
@@ -50,6 +52,12 @@ func main() {
 	}
 	if *verifyInterval > 0 {
 		cfg.VerifyInterval = *verifyInterval
+	}
+	if *replayMode != "" {
+		cfg.ReplayMode = *replayMode
+	}
+	if *replayCostLog {
+		cfg.ReplayCostLog = true
 	}
 
 	// Initialize logging
@@ -83,7 +91,7 @@ func main() {
 	defer engine.Close(ctx)
 
 	// Initialize migration service
-	migrationSvc := migration.NewService(node.Host, engine, storageProvider, logger)
+	migrationSvc := migration.NewService(node.Host, engine, storageProvider, cfg.ReplayMode, cfg.ReplayCostLog, logger)
 
 	// If --migrate-agent flag is provided, perform migration
 	if *migrateAgent != "" {
@@ -227,9 +235,12 @@ func runLocalAgent(
 	var ticksSinceVerify int
 	var lastVerifiedTick uint64
 
+	periodicVerify := cfg.ReplayMode == "periodic" || cfg.ReplayMode == "full"
+
 	logger.Info("Starting agent tick loop",
 		"replay_window", cfg.ReplayWindowSize,
 		"verify_interval", cfg.VerifyInterval,
+		"replay_mode", cfg.ReplayMode,
 	)
 
 	for {
@@ -247,30 +258,14 @@ func runLocalAgent(
 			return nil
 
 		case <-ticker.C:
-			tickErr := safeTick(ctx, instance)
-			if tickErr != nil {
-				if instance.Budget <= 0 {
-					logger.Info("Agent budget exhausted, terminating",
-						"agent_id", "local-agent",
-						"reason", "budget_exhausted",
-					)
-				} else {
-					logger.Error("Tick failed", "error", tickErr)
-				}
-
-				// Checkpoint before terminating
-				if err := instance.SaveCheckpointToStorage(ctx); err != nil {
-					logger.Error("Failed to save checkpoint on termination", "error", err)
-				}
-
-				return tickErr
+			if tickErr := safeTick(ctx, instance); tickErr != nil {
+				return handleTickFailure(ctx, instance, tickErr, logger)
 			}
 
-			// Periodic self-verification from the replay window
 			ticksSinceVerify++
-			if cfg.VerifyInterval > 0 && ticksSinceVerify >= cfg.VerifyInterval {
+			if periodicVerify && cfg.VerifyInterval > 0 && ticksSinceVerify >= cfg.VerifyInterval {
 				ticksSinceVerify = 0
-				lastVerifiedTick = verifyNextTick(ctx, instance, replayEngine, lastVerifiedTick, logger)
+				lastVerifiedTick = verifyNextTick(ctx, instance, replayEngine, lastVerifiedTick, cfg.ReplayCostLog, logger)
 			}
 
 		case <-checkpointTicker.C:
@@ -280,6 +275,22 @@ func runLocalAgent(
 			}
 		}
 	}
+}
+
+// handleTickFailure logs the failure reason, saves a final checkpoint, and returns the error.
+func handleTickFailure(ctx context.Context, instance *agent.Instance, tickErr error, logger *slog.Logger) error {
+	if instance.Budget <= 0 {
+		logger.Info("Agent budget exhausted, terminating",
+			"agent_id", "local-agent",
+			"reason", "budget_exhausted",
+		)
+	} else {
+		logger.Error("Tick failed", "error", tickErr)
+	}
+	if err := instance.SaveCheckpointToStorage(ctx); err != nil {
+		logger.Error("Failed to save checkpoint on termination", "error", err)
+	}
+	return tickErr
 }
 
 // safeTick executes one tick with panic recovery (EI-6: Safety Over Liveness).
@@ -302,6 +313,7 @@ func verifyNextTick(
 	instance *agent.Instance,
 	replayEngine *replay.Engine,
 	lastVerified uint64,
+	logCost bool,
 	logger *slog.Logger,
 ) uint64 {
 	for _, snap := range instance.ReplayWindow {
@@ -339,10 +351,14 @@ func verifyNextTick(
 			return snap.TickNumber
 		}
 
-		logger.Info("Replay verified",
+		attrs := []any{
 			"tick", result.TickNumber,
 			"state_bytes", len(result.ReplayedState),
-		)
+		}
+		if logCost {
+			attrs = append(attrs, "replay_duration", result.Duration)
+		}
+		logger.Info("Replay verified", attrs...)
 		return snap.TickNumber
 	}
 	return lastVerified

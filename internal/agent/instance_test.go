@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"log/slog"
 	"os"
@@ -326,8 +327,8 @@ func TestCheckpointAndResume(t *testing.T) {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 
-	// Verify checkpoint v2 format: [version:1][budget:8][pricePerSecond:8][tickNumber:8][state:...]
-	if len(rawCheckpoint) < 25 {
+	// Verify checkpoint format: [version:1][budget:8][price:8][tick:8][wasmHash:32][state:N]
+	if len(rawCheckpoint) < 57 {
 		t.Fatalf("checkpoint too short: %d bytes", len(rawCheckpoint))
 	}
 	if rawCheckpoint[0] != 0x02 {
@@ -348,8 +349,15 @@ func TestCheckpointAndResume(t *testing.T) {
 		t.Errorf("stored tick number: got %d, want 3", storedTick)
 	}
 
+	// Verify WASM hash is present (bytes 25-57)
+	var storedHash [32]byte
+	copy(storedHash[:], rawCheckpoint[25:57])
+	if storedHash == [32]byte{} {
+		t.Error("stored WASM hash should not be zero")
+	}
+
 	// State portion should be 8 bytes (uint64 counter)
-	state := rawCheckpoint[25:]
+	state := rawCheckpoint[57:]
 	if len(state) != 8 {
 		t.Errorf("state size: got %d, want 8", len(state))
 	}
@@ -357,60 +365,6 @@ func TestCheckpointAndResume(t *testing.T) {
 	counter := binary.LittleEndian.Uint64(state)
 	if counter != 3 {
 		t.Errorf("counter in checkpoint: got %d, want 3", counter)
-	}
-}
-
-func TestLoadCheckpointFromStorage_V1Backward(t *testing.T) {
-	wasmPath := buildTestAgent(t)
-	ctx := context.Background()
-	logger := newTestLogger()
-
-	engine, err := runtime.NewEngine(ctx, logger)
-	if err != nil {
-		t.Fatalf("NewEngine: %v", err)
-	}
-	defer engine.Close(ctx)
-
-	storageProvider, err := storage.NewFSProvider(t.TempDir(), logger)
-	if err != nil {
-		t.Fatalf("NewFSProvider: %v", err)
-	}
-
-	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-v1-compat", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, logger)
-	if err != nil {
-		t.Fatalf("LoadAgent: %v", err)
-	}
-	defer instance.Close(ctx)
-
-	if err := instance.Init(ctx); err != nil {
-		t.Fatalf("Init: %v", err)
-	}
-
-	// Build a v1 checkpoint manually: [0x01][budget:8][price:8][state:8]
-	agentState := make([]byte, 8)
-	binary.LittleEndian.PutUint64(agentState, 5) // counter=5
-	v1checkpoint := make([]byte, 17+len(agentState))
-	v1checkpoint[0] = 0x01
-	binary.LittleEndian.PutUint64(v1checkpoint[1:9], uint64(budget.FromFloat(5.0)))
-	binary.LittleEndian.PutUint64(v1checkpoint[9:17], uint64(budget.FromFloat(0.01)))
-	copy(v1checkpoint[17:], agentState)
-
-	// Save the raw v1 checkpoint directly to storage
-	if err := storageProvider.SaveCheckpoint(ctx, "test-v1-compat", v1checkpoint); err != nil {
-		t.Fatalf("SaveCheckpoint: %v", err)
-	}
-
-	// Load v1 checkpoint — must succeed and TickNumber must default to 0
-	if err := instance.LoadCheckpointFromStorage(ctx); err != nil {
-		t.Fatalf("LoadCheckpointFromStorage v1: %v", err)
-	}
-
-	if instance.TickNumber != 0 {
-		t.Errorf("v1 backward compat: TickNumber should be 0, got %d", instance.TickNumber)
-	}
-	if instance.Budget != budget.FromFloat(5.0) {
-		t.Errorf("v1 backward compat: budget got %d, want %d", instance.Budget, budget.FromFloat(5.0))
 	}
 }
 
@@ -484,5 +438,91 @@ func TestLatestSnapshot(t *testing.T) {
 	}
 	if snap.TickNumber != 3 {
 		t.Errorf("LatestSnapshot().TickNumber: got %d, want 3", snap.TickNumber)
+	}
+}
+
+func TestParseCheckpointHeader_Golden(t *testing.T) {
+	data, err := os.ReadFile("testdata/checkpoint.bin")
+	if err != nil {
+		t.Fatalf("read golden fixture: %v", err)
+	}
+
+	budgetVal, price, tick, wasmHash, state, err := ParseCheckpointHeader(data)
+	if err != nil {
+		t.Fatalf("ParseCheckpointHeader: %v", err)
+	}
+
+	if budgetVal != 1000000 {
+		t.Errorf("budget: got %d, want 1000000", budgetVal)
+	}
+	if price != 1000 {
+		t.Errorf("price: got %d, want 1000", price)
+	}
+	if tick != 5 {
+		t.Errorf("tick: got %d, want 5", tick)
+	}
+
+	expectedHash := sha256.Sum256([]byte("known-wasm-binary-for-golden-test"))
+	if wasmHash != expectedHash {
+		t.Errorf("wasmHash mismatch")
+	}
+
+	if len(state) != 8 {
+		t.Fatalf("state length: got %d, want 8", len(state))
+	}
+	counter := binary.LittleEndian.Uint64(state)
+	if counter != 3 {
+		t.Errorf("counter: got %d, want 3", counter)
+	}
+}
+
+func TestParseCheckpointHeader_EmptyState(t *testing.T) {
+	data, err := os.ReadFile("testdata/checkpoint_empty_state.bin")
+	if err != nil {
+		t.Fatalf("read golden fixture: %v", err)
+	}
+
+	budgetVal, price, tick, _, state, err := ParseCheckpointHeader(data)
+	if err != nil {
+		t.Fatalf("ParseCheckpointHeader: %v", err)
+	}
+
+	if budgetVal != 500000 {
+		t.Errorf("budget: got %d, want 500000", budgetVal)
+	}
+	if price != 2000 {
+		t.Errorf("price: got %d, want 2000", price)
+	}
+	if tick != 0 {
+		t.Errorf("tick: got %d, want 0", tick)
+	}
+	if len(state) != 0 {
+		t.Errorf("state should be empty, got %d bytes", len(state))
+	}
+}
+
+func TestParseCheckpointHeader_Corruption(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []byte
+	}{
+		{"zero_length", []byte{}},
+		{"too_short", make([]byte, 30)},
+		{"truncated_hash", make([]byte, 40)},
+		{"wrong_version", func() []byte {
+			b := make([]byte, 57)
+			b[0] = 0xFF
+			return b
+		}()},
+		{"one_byte", []byte{0x02}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, _, _, _, err := ParseCheckpointHeader(tt.input)
+			if err == nil {
+				t.Error("expected error for corrupted checkpoint")
+			}
+		})
 	}
 }

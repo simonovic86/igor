@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"log/slog"
@@ -19,11 +20,8 @@ import (
 )
 
 const (
-	checkpointVersionV1   byte = 0x01
-	checkpointHeaderLenV1 int  = 17 // 1 (version) + 8 (budget) + 8 (pricePerSecond)
-
-	checkpointVersionV2   byte = 0x02
-	checkpointHeaderLenV2 int  = 25 // 1 (version) + 8 (budget) + 8 (pricePerSecond) + 8 (tickNumber)
+	checkpointVersion   byte = 0x02
+	checkpointHeaderLen int  = 57 // 1 (version) + 8 (budget) + 8 (pricePerSecond) + 8 (tickNumber) + 32 (wasmHash)
 
 	// DefaultReplayWindowSize is the number of recent tick snapshots retained
 	// for sliding replay verification (CM-4).
@@ -42,7 +40,8 @@ type TickSnapshot struct {
 // Instance represents a running agent instance.
 type Instance struct {
 	AgentID        string
-	WASMBytes      []byte // Raw WASM binary (retained for replay verification)
+	WASMBytes      []byte   // Raw WASM binary (retained for replay verification)
+	WASMHash       [32]byte // SHA-256 of WASMBytes, stored in checkpoint header for integrity
 	Compiled       wazero.CompiledModule
 	Module         api.Module
 	Engine         *runtime.Engine
@@ -133,6 +132,7 @@ func LoadAgent(
 	instance := &Instance{
 		AgentID:        agentID,
 		WASMBytes:      wasmBytes,
+		WASMHash:       sha256.Sum256(wasmBytes),
 		Compiled:       compiled,
 		Module:         module,
 		Engine:         engine,
@@ -404,14 +404,14 @@ func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 		return fmt.Errorf("failed to checkpoint agent: %w", err)
 	}
 
-	// Create checkpoint with budget metadata and tick number (v2 format)
-	// Format: [version:1 (0x02)][budget:8][pricePerSecond:8][tickNumber:8][state:N]
-	checkpoint := make([]byte, checkpointHeaderLenV2+len(state))
-	checkpoint[0] = checkpointVersionV2
+	// Format: [version:1][budget:8][price:8][tick:8][wasmHash:32][state:N]
+	checkpoint := make([]byte, checkpointHeaderLen+len(state))
+	checkpoint[0] = checkpointVersion
 	binary.LittleEndian.PutUint64(checkpoint[1:9], uint64(i.Budget))
 	binary.LittleEndian.PutUint64(checkpoint[9:17], uint64(i.PricePerSecond))
 	binary.LittleEndian.PutUint64(checkpoint[17:25], i.TickNumber)
-	copy(checkpoint[25:], state)
+	copy(checkpoint[25:57], i.WASMHash[:])
+	copy(checkpoint[57:], state)
 
 	// Save to storage provider
 	if err := i.Storage.SaveCheckpoint(ctx, i.AgentID, checkpoint); err != nil {
@@ -423,7 +423,6 @@ func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 
 // LoadCheckpointFromStorage loads checkpoint from storage and resumes agent.
 // The checkpoint includes budget metadata, tick number, and agent state.
-// Supports both v1 (no tick number) and v2 (with tick number) checkpoint formats.
 func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 	// Load from storage provider
 	checkpoint, err := i.Storage.LoadCheckpoint(ctx, i.AgentID)
@@ -436,13 +435,15 @@ func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 		return fmt.Errorf("failed to load checkpoint: %w", err)
 	}
 
-	// Parse checkpoint header (v1 or v2)
-	restoredBudget, restoredPrice, restoredTick, state, err := ParseCheckpointHeader(checkpoint)
+	restoredBudget, restoredPrice, restoredTick, storedHash, state, err := ParseCheckpointHeader(checkpoint)
 	if err != nil {
 		return fmt.Errorf("invalid checkpoint: %w", err)
 	}
 
-	// Update instance state
+	if storedHash != i.WASMHash {
+		return fmt.Errorf("WASM hash mismatch: checkpoint was created by a different binary")
+	}
+
 	i.Budget = restoredBudget
 	i.PricePerSecond = restoredPrice
 	i.TickNumber = restoredTick
@@ -462,37 +463,28 @@ func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 	return nil
 }
 
-// ParseCheckpointHeader parses a v1 or v2 checkpoint header.
-// Returns budget, pricePerSecond, tickNumber, agentState, and any error.
-// For v1 checkpoints, tickNumber is returned as 0.
-func ParseCheckpointHeader(checkpoint []byte) (budgetVal int64, price int64, tick uint64, state []byte, err error) {
-	if len(checkpoint) < checkpointHeaderLenV1 {
-		return 0, 0, 0, nil, fmt.Errorf("checkpoint too short: %d bytes", len(checkpoint))
+// ParseCheckpointHeader parses a checkpoint header.
+// Returns budget, pricePerSecond, tickNumber, wasmHash, agentState, and any error.
+func ParseCheckpointHeader(checkpoint []byte) (budgetVal int64, price int64, tick uint64, wasmHash [32]byte, state []byte, err error) {
+	if len(checkpoint) < checkpointHeaderLen {
+		return 0, 0, 0, [32]byte{}, nil, fmt.Errorf("checkpoint too short: %d bytes (need %d)", len(checkpoint), checkpointHeaderLen)
 	}
-	switch checkpoint[0] {
-	case checkpointVersionV1:
-		return int64(binary.LittleEndian.Uint64(checkpoint[1:9])),
-			int64(binary.LittleEndian.Uint64(checkpoint[9:17])),
-			0,
-			checkpoint[checkpointHeaderLenV1:],
-			nil
-	case checkpointVersionV2:
-		if len(checkpoint) < checkpointHeaderLenV2 {
-			return 0, 0, 0, nil, fmt.Errorf("v2 checkpoint too short: %d bytes", len(checkpoint))
-		}
-		return int64(binary.LittleEndian.Uint64(checkpoint[1:9])),
-			int64(binary.LittleEndian.Uint64(checkpoint[9:17])),
-			binary.LittleEndian.Uint64(checkpoint[17:25]),
-			checkpoint[checkpointHeaderLenV2:],
-			nil
-	default:
-		return 0, 0, 0, nil, fmt.Errorf("unsupported checkpoint version: %d", checkpoint[0])
+	if checkpoint[0] != checkpointVersion {
+		return 0, 0, 0, [32]byte{}, nil, fmt.Errorf("unsupported checkpoint version: %d", checkpoint[0])
 	}
+	var hash [32]byte
+	copy(hash[:], checkpoint[25:57])
+	return int64(binary.LittleEndian.Uint64(checkpoint[1:9])),
+		int64(binary.LittleEndian.Uint64(checkpoint[9:17])),
+		binary.LittleEndian.Uint64(checkpoint[17:25]),
+		hash,
+		checkpoint[checkpointHeaderLen:],
+		nil
 }
 
-// ExtractAgentState extracts the agent state portion from a v1 or v2 checkpoint.
+// ExtractAgentState extracts the agent state portion from a checkpoint.
 func ExtractAgentState(checkpoint []byte) ([]byte, error) {
-	_, _, _, state, err := ParseCheckpointHeader(checkpoint)
+	_, _, _, _, state, err := ParseCheckpointHeader(checkpoint)
 	return state, err
 }
 

@@ -132,19 +132,21 @@ Rather than replaying every tick, replay a statistical sample. This reduces veri
 
 ## Integration with Existing Components
 
-### Checkpoint Format Extension
+### Checkpoint Format
 
-The current checkpoint format is:
+The checkpoint format includes all fields needed for replay:
+
 ```
-[budget: 8 bytes][pricePerSecond: 8 bytes][agent state: N bytes]
+Offset  Size  Field
+0       1     Version (0x02)
+1       8     Budget (int64 microcents, little-endian)
+9       8     PricePerSecond (int64 microcents, little-endian)
+17      8     TickNumber (uint64, little-endian)
+25      32    WASMHash (SHA-256 of agent binary)
+57      N     Agent State (application-defined)
 ```
 
-For replay support, checkpoints need:
-- Tick number (for ordering)
-- Checkpoint content hash (for verification)
-- Reference to associated event log (or inline event log)
-
-The exact format extension is an implementation decision.
+Header: 57 bytes. The tick number enables ordering. The WASM hash enables binary identity verification. Event logs are transferred alongside checkpoints in the `ReplayData` field of `AgentPackage` during migration.
 
 ### Migration
 

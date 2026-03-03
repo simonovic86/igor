@@ -133,24 +133,33 @@ Nodes operate autonomously without coordination.
 
 ### Checkpoints
 
-Atomic snapshots preserving agent state and budget:
+Atomic snapshots preserving agent state, budget, and binary identity (57-byte header):
 
 ```
-[0-7]   Budget (float64)
-[8-15]  PricePerSecond (float64)
-[16+]   Agent State (application-defined)
+Offset  Size  Field
+0       1     Version (0x02)
+1       8     Budget (int64 microcents, little-endian)
+9       8     PricePerSecond (int64 microcents, little-endian)
+17      8     TickNumber (uint64, little-endian)
+25      32    WASMHash (SHA-256 of agent binary)
+57      N     Agent State (application-defined)
 ```
+
+Budget unit: 1 currency unit = 1,000,000 microcents. Integer arithmetic avoids float precision drift.
 
 ### Migration Protocol
 
 Agents migrate via direct peer-to-peer streams:
 
 1. Source checkpoints agent
-2. Source packages: WASM + checkpoint + budget
-3. Source transfers to target (libp2p stream)
-4. Target resumes agent
-5. Target confirms success
-6. Source terminates local instance
+2. Source packages: WASM + checkpoint + budget + manifest + WASM hash
+3. Source includes replay verification data (if available)
+4. Source transfers to target (libp2p stream)
+5. Target verifies WASM hash integrity
+6. Target replays last tick to verify checkpoint (if replay data present)
+7. Target resumes agent
+8. Target confirms success
+9. Source terminates local instance
 
 Single-instance invariant maintained throughout.
 

@@ -28,11 +28,12 @@ type MigrationAccept struct {
 type AgentPackage struct {
 	AgentID        string
 	WASMBinary     []byte
+	WASMHash       []byte // SHA-256 of WASMBinary for integrity verification
 	Checkpoint     []byte
 	ManifestData   []byte
 	Budget         int64
 	PricePerSecond int64
-	ReplayData     *ReplayData `json:",omitempty"` // nil when no tick has been executed (backward compatible)
+	ReplayData     *ReplayData `json:",omitempty"`
 }
 
 // ReplayData contains replay verification data for a single tick.

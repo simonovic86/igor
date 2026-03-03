@@ -12,9 +12,9 @@ Igor implements a simple metering-based budget model where agents pay for execut
 
 Budget is denominated in **arbitrary currency units**. There is no specific currency (USD, tokens, etc.) in v0.
 
-- Budget: `float64` (e.g., 1.0, 10.5, 0.000001)
-- Price: `float64` per second (e.g., 0.001)
-- Cost: `float64` (calculated)
+- Budget: `int64` microcents (1 currency unit = 1,000,000 microcents)
+- Price: `int64` microcents per second (e.g., 1000 = 0.001 units/sec)
+- Cost: `int64` microcents (calculated with integer arithmetic, no float precision loss)
 
 ### Price Configuration
 
@@ -22,7 +22,7 @@ Each node sets its own price per second in config:
 
 ```go
 cfg := &config.Config{
-    PricePerSecond: 0.001, // Default
+    PricePerSecond: 1000, // 0.001 units/sec = 1000 microcents/sec
 }
 ```
 
@@ -50,12 +50,11 @@ Every tick execution is metered:
 
 ```go
 start := time.Now()
-agent_tick()  // Execute agent code
+agent_tick()
 elapsed := time.Since(start)
 
-durationSeconds := elapsed.Seconds()
-cost := durationSeconds × pricePerSecond
-budget -= cost
+costMicrocents := elapsed.Microseconds() * pricePerSecond / budget.MicrocentScale
+budget -= costMicrocents
 ```
 
 **Precision:** Nanosecond-level timing (Go's `time.Now()`)
@@ -86,9 +85,9 @@ At this rate, an agent with 1.0 budget can run for:
 ```
 CLI --budget 10.0
     ↓
-LoadAgent(budget=10.0)
+budget.FromFloat(10.0) → 10000000 microcents
     ↓
-instance.Budget = 10.0
+instance.Budget = 10000000
 ```
 
 ### 2. Execution
@@ -105,9 +104,12 @@ Budget is persisted in checkpoint:
 
 ```
 Checkpoint Format:
-[0-7]   budget (float64)
-[8-15]  pricePerSecond (float64)
-[16+]   agent state
+[0]     version (0x02)
+[1-8]   budget (int64 microcents)
+[9-16]  pricePerSecond (int64 microcents)
+[17-24] tickNumber (uint64)
+[25-56] wasmHash (SHA-256)
+[57+]   agent state
 ```
 
 ### 4. Restoration
@@ -117,11 +119,17 @@ When agent resumes (restart or migration):
 ```
 Load checkpoint
     ↓
-Parse bytes 0-7 → budget
-Parse bytes 8-15 → pricePerSecond
+ParseCheckpointHeader(checkpoint)
+    → budget (int64 microcents)
+    → pricePerSecond (int64 microcents)
+    → tickNumber (uint64)
+    → wasmHash ([32]byte)
+    → agentState ([]byte)
+Verify wasmHash matches loaded WASM binary
     ↓
 instance.Budget = budget
 instance.PricePerSecond = pricePerSecond
+instance.TickNumber = tickNumber
 ```
 
 Budget continues from previous value.
@@ -165,7 +173,7 @@ Before each tick:
 
 ```go
 if instance.Budget <= 0 {
-    return fmt.Errorf("budget exhausted: %.6f", instance.Budget)
+    return fmt.Errorf("budget exhausted: %s", budget.Format(instance.Budget))
 }
 ```
 
@@ -176,8 +184,8 @@ No tick executes if budget exhausted.
 After each tick:
 
 ```go
-cost := elapsed.Seconds() × pricePerSecond
-instance.Budget -= cost
+costMicrocents := elapsed.Microseconds() * instance.PricePerSecond / budget.MicrocentScale
+instance.Budget -= costMicrocents
 ```
 
 Budget decreases monotonically.
@@ -202,14 +210,14 @@ The checkpoint preserves the exhausted state, allowing inspection or potential r
 Checkpoints include budget as metadata:
 
 ```
-Binary Layout:
-┌──────────┬────────────────┬─────────────┐
-│  Budget  │ PricePerSecond │ Agent State │
-│ (8 bytes)│   (8 bytes)    │  (N bytes)  │
-└──────────┴────────────────┴─────────────┘
-```
+Binary Layout (57-byte header):
+┌─────────┬──────────┬────────────────┬────────────┬──────────┬─────────────┐
+│ Version │  Budget  │ PricePerSecond │ TickNumber │ WASMHash │ Agent State │
+│ (1 byte)│ (8 bytes)│   (8 bytes)    │ (8 bytes)  │(32 bytes)│  (N bytes)  │
+└─────────┴──────────┴────────────────┴────────────┴──────────┴─────────────┘
 
-**Encoding:** Little-endian IEEE 754 float64
+Encoding: Little-endian integers (int64 microcents for budget/price, uint64 for tick)
+```
 
 ### Survival Scenarios
 

@@ -84,9 +84,8 @@ func agent_tick() {
 
 **Budget Metering:**
 ```go
-durationSeconds := elapsed.Seconds()
-cost := durationSeconds × pricePerSecond
-budget -= cost
+costMicrocents := elapsed.Microseconds() * pricePerSecond / budget.MicrocentScale
+budget -= costMicrocents
 ```
 
 ### Phase 4: Checkpointing
@@ -101,7 +100,7 @@ Read from WASM Memory → Serialize
 - Call `agent_checkpoint()` to get size
 - Call `agent_checkpoint_ptr()` to get pointer
 - Read state from WASM memory
-- Add budget metadata: `[budget:8][price:8][state:N]`
+- Add checkpoint header: `[version:1][budget:8][price:8][tick:8][wasmHash:32][state:N]`
 - Save via storage provider (atomic write)
 
 **Agent Actions:**
@@ -208,18 +207,26 @@ func agent_resume(ptr, size uint32) {
 
 ```
 Offset  Size  Field
-0       8     Budget (float64, little-endian)
-8       8     PricePerSecond (float64, little-endian)
-16      N     Agent State (agent-defined)
+0       1     Version (0x02)
+1       8     Budget (int64 microcents, little-endian)
+9       8     PricePerSecond (int64 microcents, little-endian)
+17      8     TickNumber (uint64, little-endian)
+25      32    WASMHash (SHA-256 of agent binary)
+57      N     Agent State (agent-defined)
 ```
+
+Header: 57 bytes. Budget unit: 1 currency unit = 1,000,000 microcents.
 
 ### Example (Counter Agent)
 
 ```
-Total: 24 bytes
-[0-7]   1.000000 (budget)
-[8-15]  0.001000 (price per second)
-[16-23] 42 (counter value as uint64)
+Total: 65 bytes (57-byte header + 8-byte state)
+[0]     0x02 (version)
+[1-8]   1000000 (budget = 1.0 units in microcents)
+[9-16]  1000 (price = 0.001 units/sec in microcents)
+[17-24] 42 (tick number)
+[25-56] <SHA-256 hash of agent WASM binary>
+[57-64] 42 (counter value as uint64)
 ```
 
 ### Portability
@@ -307,8 +314,8 @@ start := time.Now()
 agent_tick()
 elapsed := time.Since(start)
 
-cost := elapsed.Seconds() × pricePerSecond
-budget -= cost
+costMicrocents := elapsed.Microseconds() * pricePerSecond / budget.MicrocentScale
+budget -= costMicrocents
 ```
 
 ### Exhaustion

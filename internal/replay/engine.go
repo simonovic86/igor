@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/simonovic86/igor/internal/eventlog"
 	"github.com/simonovic86/igor/pkg/manifest"
@@ -33,6 +34,9 @@ type Result struct {
 
 	// FirstDiffByte is the byte offset of the first difference, or -1 if matched.
 	FirstDiffByte int
+
+	// Duration is the wall-clock time spent executing the replay.
+	Duration time.Duration
 
 	// Error is set when replay could not complete (setup failure, WASM trap, etc.).
 	// A non-nil Error means Verified is meaningless.
@@ -63,11 +67,13 @@ func (e *Engine) ReplayTick(
 	tickLog *eventlog.TickLog,
 	expectedState []byte,
 ) *Result {
+	start := time.Now()
 	result := &Result{
 		TickNumber:    tickLog.TickNumber,
 		ExpectedState: expectedState,
 		FirstDiffByte: -1,
 	}
+	defer func() { result.Duration = time.Since(start) }()
 
 	// Create isolated wazero runtime (64MB memory limit, same as production)
 	config := wazero.NewRuntimeConfig().
