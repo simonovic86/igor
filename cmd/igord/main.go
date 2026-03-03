@@ -13,11 +13,13 @@ import (
 
 	"github.com/simonovic86/igor/internal/agent"
 	"github.com/simonovic86/igor/internal/config"
+	"github.com/simonovic86/igor/internal/inspector"
 	"github.com/simonovic86/igor/internal/logging"
 	"github.com/simonovic86/igor/internal/migration"
 	"github.com/simonovic86/igor/internal/p2p"
 	"github.com/simonovic86/igor/internal/replay"
 	"github.com/simonovic86/igor/internal/runtime"
+	"github.com/simonovic86/igor/internal/simulator"
 	"github.com/simonovic86/igor/internal/storage"
 	"github.com/simonovic86/igor/pkg/budget"
 )
@@ -34,7 +36,26 @@ func main() {
 	verifyInterval := flag.Int("verify-interval", 0, "Ticks between self-verification passes (0 = use config default)")
 	replayMode := flag.String("replay-mode", "", "Replay verification mode: off, periodic, on-migrate, full (default: full)")
 	replayCostLog := flag.Bool("replay-cost-log", false, "Log replay compute duration for economic observability")
+	inspectCheckpoint := flag.String("inspect-checkpoint", "", "Path to checkpoint file to inspect")
+	inspectWASM := flag.String("inspect-wasm", "", "Optional WASM binary to verify against checkpoint hash")
+	simulate := flag.Bool("simulate", false, "Run agent in local simulator mode (no P2P)")
+	simTicks := flag.Int("ticks", 0, "Number of ticks to simulate (0 = until budget exhausted)")
+	simVerify := flag.Bool("verify", false, "Per-tick replay verification during simulation")
+	simDeterministic := flag.Bool("deterministic", false, "Use fixed clock and seeded rand for reproducible simulation")
+	simSeed := flag.Uint64("seed", 0, "Random seed for deterministic simulation")
 	flag.Parse()
+
+	// Checkpoint inspector — standalone, no config/P2P/engine needed
+	if *inspectCheckpoint != "" {
+		runInspector(*inspectCheckpoint, *inspectWASM)
+		return
+	}
+
+	// Local simulator — standalone, no config/P2P needed
+	if *simulate && *runAgent != "" {
+		runSimulator(*runAgent, *manifestPath, *budgetFlag, *simTicks, *simVerify, *simDeterministic, *simSeed)
+		return
+	}
 
 	// Create context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -353,4 +374,45 @@ func verifyNextTick(
 		return snap.TickNumber
 	}
 	return lastVerified
+}
+
+// runInspector parses and displays a checkpoint file.
+func runInspector(checkpointPath, wasmPath string) {
+	result, err := inspector.InspectFile(checkpointPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	if wasmPath != "" {
+		if verr := result.VerifyWASM(wasmPath); verr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: %v\n", verr)
+		}
+	}
+	result.Print(os.Stdout)
+}
+
+// runSimulator executes an agent in local simulator mode (no P2P).
+func runSimulator(wasmPath, manifestPath string, budgetVal float64, ticks int, verify, deterministic bool, seed uint64) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logger := logging.NewLogger()
+	cfg := simulator.Config{
+		WASMPath:      wasmPath,
+		ManifestPath:  manifestPath,
+		Budget:        budgetVal,
+		Ticks:         ticks,
+		Verify:        verify,
+		Deterministic: deterministic,
+		RandSeed:      seed,
+	}
+	result, err := simulator.Run(ctx, cfg, logger)
+	if err != nil {
+		logging.Error(logger, "Simulation failed", "error", err)
+		os.Exit(1)
+	}
+	simulator.PrintSummary(result, logger)
+	if len(result.Errors) > 0 {
+		os.Exit(1)
+	}
 }

@@ -13,9 +13,11 @@ Igor v0 has completed **Phase 2 (Survival)** and begun **Phase 3 (Autonomy)**.
 - ✅ **Task 4** - Migration protocol over libp2p
 - ✅ **Task 5** - Rent metering & runtime accounting
 - ✅ **Task 6** - Capability membrane MVP (clock/rand/log hostcalls, manifest, event log, deny-by-default)
+- ✅ **Task 7** - Replay engine (single-tick verification, configurable modes, sliding window)
+- ✅ **Task 8** - Agent SDK & developer experience (SDK, mocks, simulator, inspector, template)
 
 **Phase 2 result:** Agents can survive, migrate, and pay for execution.
-**Phase 3 progress:** Agents interact through runtime-mediated hostcalls with observation recording.
+**Phase 3 progress:** Capability membrane, replay verification, and developer tooling complete. Multi-node mobility testing next.
 
 ---
 
@@ -60,18 +62,19 @@ Igor v0 has completed **Phase 2 (Survival)** and begun **Phase 3 (Autonomy)**.
 
 **Specs:** [REPLAY_ENGINE.md](../runtime/REPLAY_ENGINE.md)
 
-### Task 8: Agent SDK & Developer Experience
+### Task 8: Agent SDK & Developer Experience ✅
 
-**Objective:** Make agent authoring accessible with SDK and tooling.
+**Status:** Complete. Agent SDK, developer tooling, and testing infrastructure fully implemented.
 
-**Scope:**
-- Agent SDK (Go/TinyGo first) wrapping hostcall interface
-- Local simulator (single-process deterministic replay)
-- Capability mocks for testing
-- Agent template / starter project
-- Checkpoint inspector
+**Delivered:**
+- Agent SDK (`sdk/igor/`): `Agent` interface (Init, Tick, Marshal, Unmarshal), hostcall wrappers (ClockNow, RandBytes, Log, Logf), build-tag split for WASM and native builds
+- Capability mocks (`sdk/igor/mock/`): pluggable `MockBackend` for native testing without WASM, deterministic clock/rand, log capture
+- Local simulator (`internal/simulator/`): single-process WASM runner with deterministic hostcalls, per-tick replay verification, checkpoint round-trip verification
+- Checkpoint inspector (`internal/inspector/`): parse and display checkpoint files, WASM hash verification
+- Agent template (`agents/example/`): Survivor agent demonstrating SDK usage, hostcall patterns, and state serialization
+- CLI flags: `--simulate`, `--ticks`, `--verify`, `--deterministic`, `--seed`, `--inspect-checkpoint`, `--inspect-wasm`
 
-**Outcome:** Developers can build agents without manually managing WASM exports, memory, and hostcall signatures.
+**Outcome:** Developers can build agents without manually managing WASM exports, memory, and hostcall signatures. Agents can be tested natively with mocks or as compiled WASM in the simulator.
 
 ### Task 9: Multi-Node Mobility Testing
 
@@ -323,7 +326,7 @@ Igor development follows "done when it's done" philosophy:
 - Correctness over features
 - Learning over shipping
 
-Phase 3 began after Phase 2 validation. Task 6 is complete.
+Phase 3 began after Phase 2 validation. Tasks 6, 7, and 8 are complete.
 
 ---
 
@@ -434,9 +437,8 @@ Phase 2 is **validated** when:
 
 ## Next Immediate Steps
 
-With Phase 3 Tasks 6 (Capability Membrane) and 7 (Replay Engine) complete:
+With Phase 3 Tasks 6 (Capability Membrane), 7 (Replay Engine), and 8 (Agent SDK) complete:
 
-1. **Task 8: Agent SDK** - Hostcall wrappers, lifecycle helpers, developer experience
-2. **Task 9: Multi-Node Mobility Testing** - Chain migration, capability preservation
-3. **Hardening** - Bug fixes, test coverage, documentation accuracy
-4. **Extended testing** - Run agents with hostcalls for hours/days
+1. **Task 9: Multi-Node Mobility Testing** - Chain migration A → B → C → A, capability preservation, budget conservation
+2. **Hardening** - Bug fixes, test coverage, documentation accuracy
+3. **Extended testing** - Run agents with hostcalls for hours/days under load
