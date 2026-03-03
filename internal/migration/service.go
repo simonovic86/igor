@@ -41,6 +41,10 @@ type Service struct {
 	replayCostLog   bool
 	logger          *slog.Logger
 
+	// nodeCapabilities overrides manifest.NodeCapabilities for this node when
+	// non-nil. Enables heterogeneous capability sets across nodes.
+	nodeCapabilities []string
+
 	// Active agents running on this node.
 	// Protected by mu — accessed from main goroutine and libp2p stream handlers.
 	mu           sync.RWMutex
@@ -318,7 +322,11 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		s.sendStartConfirmation(stream, pkg.AgentID, false, "invalid manifest: "+err.Error())
 		return
 	}
-	if err := manifest.ValidateAgainstNode(capManifest, manifest.NodeCapabilities); err != nil {
+	nodeCaps := manifest.NodeCapabilities
+	if s.nodeCapabilities != nil {
+		nodeCaps = s.nodeCapabilities
+	}
+	if err := manifest.ValidateAgainstNode(capManifest, nodeCaps); err != nil {
 		s.logger.Error("Capability check failed", "agent_id", pkg.AgentID, "error", err)
 		s.sendStartConfirmation(stream, pkg.AgentID, false, "capability check failed: "+err.Error())
 		return
@@ -501,4 +509,11 @@ func (s *Service) GetActiveAgents() []string {
 		agents = append(agents, id)
 	}
 	return agents
+}
+
+// SetNodeCapabilities overrides the default node capabilities for this service.
+// When set, incoming migrations validate against these capabilities instead of
+// manifest.NodeCapabilities. Pass nil to restore default behavior.
+func (s *Service) SetNodeCapabilities(caps []string) {
+	s.nodeCapabilities = caps
 }
