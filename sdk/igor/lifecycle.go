@@ -9,9 +9,12 @@ type Agent interface {
 	// only agent_tick should produce observations for replay correctness (CM-4).
 	Init()
 
-	// Tick executes one step of the agent's logic (~1 Hz).
+	// Tick executes one step of the agent's logic.
 	// Must complete within 100ms.
-	Tick()
+	// Return true if there is more work pending (tick again soon, subject to
+	// 10ms minimum interval). Return false to sleep until the next normal
+	// interval (~1 Hz).
+	Tick() bool
 
 	// Marshal serializes the agent's state for checkpointing.
 	// The returned bytes must fully capture the agent's state so that

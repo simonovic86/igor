@@ -24,7 +24,13 @@ type Entry struct {
 type TickLog struct {
 	TickNumber uint64
 	Entries    []Entry
+	arena      []byte // pre-allocated backing store for Entry payloads
+	offset     int    // next free position in arena
 }
+
+// defaultArenaSize is the per-tick arena capacity in bytes.
+// 4 KB covers ~500 typical clock+rand entries without heap fallback.
+const defaultArenaSize = 4096
 
 // DefaultMaxTicks is the maximum number of sealed tick logs retained in history.
 // At 1 Hz tick rate this covers ~17 minutes. Use 0 for unbounded (tests only).
@@ -53,6 +59,7 @@ func (l *EventLog) BeginTick(tickNumber uint64) {
 	l.current = &TickLog{
 		TickNumber: tickNumber,
 		Entries:    nil,
+		arena:      make([]byte, defaultArenaSize),
 	}
 }
 
@@ -65,8 +72,16 @@ func (l *EventLog) Record(id HostcallID, payload []byte) {
 		return
 	}
 
-	p := make([]byte, len(payload))
-	copy(p, payload)
+	var p []byte
+	needed := len(payload)
+	if l.current.offset+needed <= len(l.current.arena) {
+		p = l.current.arena[l.current.offset : l.current.offset+needed]
+		copy(p, payload)
+		l.current.offset += needed
+	} else {
+		p = make([]byte, needed)
+		copy(p, payload)
+	}
 
 	l.current.Entries = append(l.current.Entries, Entry{
 		HostcallID: id,

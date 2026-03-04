@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/simonovic86/igor/internal/eventlog"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
 	"github.com/simonovic86/igor/pkg/budget"
@@ -35,13 +36,14 @@ var counter uint64
 func agent_init() { counter = 0 }
 
 //export agent_tick
-func agent_tick() {
+func agent_tick() uint32 {
 	counter++
 	_ = clockNow()
 	var buf [4]byte
 	randBytes(uint32(uintptr(unsafe.Pointer(&buf[0]))), 4)
 	msg := []byte("tick")
 	logEmit(uint32(uintptr(unsafe.Pointer(&msg[0]))), uint32(len(msg)))
+	return 0
 }
 
 //export agent_checkpoint
@@ -209,7 +211,7 @@ func TestTick_RecordObservations(t *testing.T) {
 		t.Fatalf("Init: %v", err)
 	}
 
-	if err := instance.Tick(ctx); err != nil {
+	if _, err := instance.Tick(ctx); err != nil {
 		t.Fatalf("Tick: %v", err)
 	}
 
@@ -273,7 +275,7 @@ func TestTick_BudgetExhausted(t *testing.T) {
 		t.Fatalf("Init: %v", err)
 	}
 
-	err = instance.Tick(ctx)
+	_, err = instance.Tick(ctx)
 	if err == nil {
 		t.Error("expected error when budget is exhausted")
 	}
@@ -309,7 +311,7 @@ func TestCheckpointAndResume(t *testing.T) {
 
 	// Run a few ticks
 	for i := 0; i < 3; i++ {
-		if err := instance.Tick(ctx); err != nil {
+		if _, err := instance.Tick(ctx); err != nil {
 			t.Fatalf("Tick %d: %v", i+1, err)
 		}
 	}
@@ -399,7 +401,7 @@ func TestReplayWindow_Eviction(t *testing.T) {
 
 	// Run 5 ticks — window should retain only the last 3
 	for i := 0; i < 5; i++ {
-		if err := instance.Tick(ctx); err != nil {
+		if _, err := instance.Tick(ctx); err != nil {
 			t.Fatalf("Tick %d: %v", i+1, err)
 		}
 	}
@@ -414,6 +416,77 @@ func TestReplayWindow_Eviction(t *testing.T) {
 		if instance.ReplayWindow[i].TickNumber != expected {
 			t.Errorf("ReplayWindow[%d].TickNumber: got %d, want %d", i, instance.ReplayWindow[i].TickNumber, expected)
 		}
+	}
+}
+
+func TestReplayWindow_WeightedEviction(t *testing.T) {
+	// Manually construct an instance with a replay window to test
+	// that low-observation snapshots are evicted before high-observation ones.
+	inst := &Instance{
+		replayWindowMax: 3,
+		logger:          newTestLogger(),
+	}
+
+	// Simulate a window of 3 snapshots with varying observation counts.
+	inst.ReplayWindow = []TickSnapshot{
+		{TickNumber: 1, TickLog: &eventlog.TickLog{Entries: make([]eventlog.Entry, 5)}}, // high
+		{TickNumber: 2, TickLog: &eventlog.TickLog{Entries: nil}},                       // zero
+		{TickNumber: 3, TickLog: &eventlog.TickLog{Entries: make([]eventlog.Entry, 3)}}, // medium
+	}
+
+	// Append a 4th snapshot, triggering eviction. The snapshot with tick 2
+	// (zero observations) should be evicted, not the oldest (tick 1).
+	inst.ReplayWindow = append(inst.ReplayWindow, TickSnapshot{
+		TickNumber:    4,
+		TickLog:       &eventlog.TickLog{Entries: make([]eventlog.Entry, 2)},
+		PostStateHash: [32]byte{},
+	})
+
+	// Run eviction logic (same as in Tick)
+	maxSnaps := inst.replayWindowMax
+	if len(inst.ReplayWindow) > maxSnaps {
+		evictIdx := 0
+		evictScore := inst.ReplayWindow[0].observationScore()
+		for j := 1; j < len(inst.ReplayWindow)-1; j++ {
+			score := inst.ReplayWindow[j].observationScore()
+			if score < evictScore {
+				evictScore = score
+				evictIdx = j
+			}
+		}
+		inst.ReplayWindow = append(inst.ReplayWindow[:evictIdx], inst.ReplayWindow[evictIdx+1:]...)
+	}
+
+	if len(inst.ReplayWindow) != 3 {
+		t.Fatalf("expected 3 snapshots, got %d", len(inst.ReplayWindow))
+	}
+
+	// Tick 2 (zero observations) should have been evicted.
+	// Remaining: ticks 1, 3, 4.
+	expectedTicks := []uint64{1, 3, 4}
+	for i, expected := range expectedTicks {
+		if inst.ReplayWindow[i].TickNumber != expected {
+			t.Errorf("ReplayWindow[%d].TickNumber: got %d, want %d", i, inst.ReplayWindow[i].TickNumber, expected)
+		}
+	}
+}
+
+func TestTickSnapshot_ObservationScore(t *testing.T) {
+	tests := []struct {
+		name  string
+		snap  TickSnapshot
+		score int
+	}{
+		{"nil_ticklog", TickSnapshot{TickLog: nil}, 0},
+		{"empty_entries", TickSnapshot{TickLog: &eventlog.TickLog{Entries: nil}}, 0},
+		{"three_entries", TickSnapshot{TickLog: &eventlog.TickLog{Entries: make([]eventlog.Entry, 3)}}, 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.snap.observationScore(); got != tt.score {
+				t.Errorf("observationScore(): got %d, want %d", got, tt.score)
+			}
+		})
 	}
 }
 

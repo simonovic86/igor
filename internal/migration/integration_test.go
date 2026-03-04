@@ -187,7 +187,7 @@ func newMigrationEnv(t *testing.T) *migrationEnv {
 	}
 
 	for i := 0; i < 3; i++ {
-		if err := inst.Tick(ctx); err != nil {
+		if _, err := inst.Tick(ctx); err != nil {
 			t.Fatalf("Tick %d: %v", i+1, err)
 		}
 	}
@@ -278,7 +278,7 @@ func TestMultiNodeMigration(t *testing.T) {
 		}
 		defer inst.Close(env.ctx)
 
-		if err := inst.Tick(env.ctx); err != nil {
+		if _, err := inst.Tick(env.ctx); err != nil {
 			t.Fatalf("target Tick: %v", err)
 		}
 

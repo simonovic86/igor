@@ -39,36 +39,62 @@ func TestConfig_Validate_DefaultsAreValid(t *testing.T) {
 }
 
 func TestConfig_Validate_ZeroPrice(t *testing.T) {
-	cfg := &Config{PricePerSecond: 0, ReplayMode: "full"}
+	cfg := &Config{PricePerSecond: 0, ReplayMode: "full", ReplayOnDivergence: "log"}
 	if err := cfg.Validate(); err == nil {
 		t.Error("expected error for zero PricePerSecond")
 	}
 }
 
 func TestConfig_Validate_NegativePrice(t *testing.T) {
-	cfg := &Config{PricePerSecond: -1, ReplayMode: "full"}
+	cfg := &Config{PricePerSecond: -1, ReplayMode: "full", ReplayOnDivergence: "log"}
 	if err := cfg.Validate(); err == nil {
 		t.Error("expected error for negative PricePerSecond")
 	}
 }
 
 func TestConfig_Validate_InvalidReplayMode(t *testing.T) {
-	cfg := &Config{PricePerSecond: 1000, ReplayMode: "invalid"}
+	cfg := &Config{PricePerSecond: 1000, ReplayMode: "invalid", ReplayOnDivergence: "log"}
 	if err := cfg.Validate(); err == nil {
 		t.Error("expected error for invalid ReplayMode")
 	}
 }
 
 func TestConfig_Validate_NegativeReplayWindow(t *testing.T) {
-	cfg := &Config{PricePerSecond: 1000, ReplayWindowSize: -1, ReplayMode: "full"}
+	cfg := &Config{PricePerSecond: 1000, ReplayWindowSize: -1, ReplayMode: "full", ReplayOnDivergence: "log"}
 	if err := cfg.Validate(); err == nil {
 		t.Error("expected error for negative ReplayWindowSize")
 	}
 }
 
 func TestConfig_Validate_NegativeVerifyInterval(t *testing.T) {
-	cfg := &Config{PricePerSecond: 1000, VerifyInterval: -1, ReplayMode: "full"}
+	cfg := &Config{PricePerSecond: 1000, VerifyInterval: -1, ReplayMode: "full", ReplayOnDivergence: "log"}
 	if err := cfg.Validate(); err == nil {
 		t.Error("expected error for negative VerifyInterval")
+	}
+}
+
+func TestConfig_Validate_InvalidReplayOnDivergence(t *testing.T) {
+	cfg := &Config{PricePerSecond: 1000, ReplayMode: "full", ReplayOnDivergence: "invalid"}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for invalid ReplayOnDivergence")
+	}
+}
+
+func TestConfig_Validate_AllDivergencePolicies(t *testing.T) {
+	for _, policy := range []string{"log", "pause", "intensify", "migrate"} {
+		cfg := &Config{PricePerSecond: 1000, ReplayMode: "full", ReplayOnDivergence: policy}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("policy %q should be valid: %v", policy, err)
+		}
+	}
+}
+
+func TestLoad_DefaultReplayOnDivergence(t *testing.T) {
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.ReplayOnDivergence != "log" {
+		t.Errorf("ReplayOnDivergence: got %q, want %q", cfg.ReplayOnDivergence, "log")
 	}
 }

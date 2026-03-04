@@ -106,7 +106,7 @@ func (env *multiNodeEnv) loadAndInitAgent(t *testing.T, nodeIdx int, budgetVal, 
 	}
 
 	for i := 0; i < ticks; i++ {
-		if err := inst.Tick(env.ctx); err != nil {
+		if _, err := inst.Tick(env.ctx); err != nil {
 			t.Fatalf("Tick %d on node[%d]: %v", i+1, nodeIdx, err)
 		}
 	}
@@ -177,7 +177,7 @@ func (env *multiNodeEnv) tickOnNode(t *testing.T, nodeIdx int, ticks int) int64 
 	}
 
 	for i := 0; i < ticks; i++ {
-		if err := inst.Tick(env.ctx); err != nil {
+		if _, err := inst.Tick(env.ctx); err != nil {
 			t.Fatalf("Tick on node[%d]: %v", nodeIdx, err)
 		}
 	}

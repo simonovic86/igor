@@ -2,6 +2,7 @@ package replay
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"log/slog"
 	"os"
@@ -36,13 +37,14 @@ var counter uint64
 func agent_init() { counter = 0 }
 
 //export agent_tick
-func agent_tick() {
+func agent_tick() uint32 {
 	counter++
 	_ = clockNow()
 	var buf [4]byte
 	randBytes(uint32(uintptr(unsafe.Pointer(&buf[0]))), 4)
 	msg := []byte("tick")
 	logEmit(uint32(uintptr(unsafe.Pointer(&msg[0]))), uint32(len(msg)))
+	return 0
 }
 
 //export agent_checkpoint
@@ -75,7 +77,7 @@ var counter uint64
 func agent_init() { counter = 0 }
 
 //export agent_tick
-func agent_tick() { counter++ }
+func agent_tick() uint32 { counter++; return 0 }
 
 //export agent_checkpoint
 func agent_checkpoint() uint32 { return 8 }
@@ -535,6 +537,105 @@ func TestReplayTick_ExhaustedLog(t *testing.T) {
 		t.Fatal("expected error for exhausted event log")
 	}
 	t.Logf("Got expected error: %v", result.Error)
+}
+
+func TestReplayChain_ThreeTicks(t *testing.T) {
+	ctx := context.Background()
+	env := newLiveTickEnv(t, testAgentSource, fullManifest())
+	defer env.close(ctx)
+
+	env.init(t, ctx)
+
+	initialState := env.checkpoint(t, ctx)
+	chainSnaps := make([]ChainSnapshot, 3)
+	for i := 0; i < 3; i++ {
+		tickLog := env.tick(t, ctx, uint64(i+1))
+		chainSnaps[i] = ChainSnapshot{
+			TickNumber: uint64(i + 1),
+			TickLog:    tickLog,
+		}
+	}
+	finalState := env.checkpoint(t, ctx)
+	finalHash := sha256.Sum256(finalState)
+
+	engine := NewEngine(newTestLogger())
+	result := engine.ReplayChain(ctx, env.wasmBytes(t), fullManifest(), initialState, chainSnaps, finalHash)
+
+	if result.Error != nil {
+		t.Fatalf("chain replay error: %v", result.Error)
+	}
+	if !result.Verified {
+		t.Fatal("chain replay not verified")
+	}
+	if result.TicksReplayed != 3 {
+		t.Errorf("TicksReplayed: got %d, want 3", result.TicksReplayed)
+	}
+}
+
+func TestReplayChain_SingleTick(t *testing.T) {
+	ctx := context.Background()
+	env := newLiveTickEnv(t, testAgentSource, fullManifest())
+	defer env.close(ctx)
+
+	env.init(t, ctx)
+
+	initialState := env.checkpoint(t, ctx)
+	tickLog := env.tick(t, ctx, 1)
+	finalState := env.checkpoint(t, ctx)
+	finalHash := sha256.Sum256(finalState)
+
+	engine := NewEngine(newTestLogger())
+	result := engine.ReplayChain(ctx, env.wasmBytes(t), fullManifest(), initialState, []ChainSnapshot{
+		{TickNumber: 1, TickLog: tickLog},
+	}, finalHash)
+
+	if result.Error != nil {
+		t.Fatalf("chain replay error: %v", result.Error)
+	}
+	if !result.Verified {
+		t.Fatal("chain replay not verified")
+	}
+	if result.TicksReplayed != 1 {
+		t.Errorf("TicksReplayed: got %d, want 1", result.TicksReplayed)
+	}
+}
+
+func TestReplayChain_Divergence(t *testing.T) {
+	ctx := context.Background()
+	env := newLiveTickEnv(t, testAgentSource, fullManifest())
+	defer env.close(ctx)
+
+	env.init(t, ctx)
+
+	initialState := env.checkpoint(t, ctx)
+	chainSnaps := make([]ChainSnapshot, 3)
+	for i := 0; i < 3; i++ {
+		tickLog := env.tick(t, ctx, uint64(i+1))
+		chainSnaps[i] = ChainSnapshot{
+			TickNumber: uint64(i + 1),
+			TickLog:    tickLog,
+		}
+	}
+
+	wrongHash := [32]byte{0xFF}
+
+	engine := NewEngine(newTestLogger())
+	result := engine.ReplayChain(ctx, env.wasmBytes(t), fullManifest(), initialState, chainSnaps, wrongHash)
+
+	if result.Error != nil {
+		t.Fatalf("chain replay error: %v", result.Error)
+	}
+	if result.Verified {
+		t.Fatal("chain replay should not be verified with wrong hash")
+	}
+}
+
+func TestReplayChain_Empty(t *testing.T) {
+	engine := NewEngine(newTestLogger())
+	result := engine.ReplayChain(context.Background(), nil, nil, nil, nil, [32]byte{})
+	if result.Error == nil {
+		t.Fatal("expected error for empty snapshots")
+	}
 }
 
 func TestReplayTick_UnconsumedEntries(t *testing.T) {

@@ -19,7 +19,7 @@ type Survivor struct {
 
 func (s *Survivor) Init() {}
 
-func (s *Survivor) Tick() {
+func (s *Survivor) Tick() bool {
 	s.TickCount++
 
 	now := igor.ClockNow()
@@ -39,25 +39,24 @@ func (s *Survivor) Tick() {
 	if s.TickCount%10 == 0 {
 		igor.Logf("[survivor] milestone: survived %d ticks", s.TickCount)
 	}
+	return false
 }
 
 func (s *Survivor) Marshal() []byte {
-	buf := make([]byte, stateSize)
-	binary.LittleEndian.PutUint64(buf[0:8], s.TickCount)
-	binary.LittleEndian.PutUint64(buf[8:16], uint64(s.BirthNano))
-	binary.LittleEndian.PutUint64(buf[16:24], uint64(s.LastNano))
-	binary.LittleEndian.PutUint32(buf[24:28], s.Luck)
-	return buf
+	return igor.NewEncoder(stateSize).
+		Uint64(s.TickCount).
+		Int64(s.BirthNano).
+		Int64(s.LastNano).
+		Uint32(s.Luck).
+		Finish()
 }
 
 func (s *Survivor) Unmarshal(data []byte) {
-	if len(data) < stateSize {
-		return
-	}
-	s.TickCount = binary.LittleEndian.Uint64(data[0:8])
-	s.BirthNano = int64(binary.LittleEndian.Uint64(data[8:16]))
-	s.LastNano = int64(binary.LittleEndian.Uint64(data[16:24]))
-	s.Luck = binary.LittleEndian.Uint32(data[24:28])
+	d := igor.NewDecoder(data)
+	s.TickCount = d.Uint64()
+	s.BirthNano = d.Int64()
+	s.LastNano = d.Int64()
+	s.Luck = d.Uint32()
 }
 
 func init() { igor.Run(&Survivor{}) }
