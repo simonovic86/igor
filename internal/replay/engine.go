@@ -7,6 +7,7 @@ package replay
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"log/slog"
@@ -403,6 +404,238 @@ func replayCheckpoint(ctx context.Context, mod api.Module) ([]byte, error) {
 	out := make([]byte, len(data))
 	copy(out, data)
 	return out, nil
+}
+
+// ChainSnapshot holds the data needed to replay a single tick within a chain.
+// Defined in the replay package to avoid importing internal/agent.
+type ChainSnapshot struct {
+	TickNumber uint64
+	TickLog    *eventlog.TickLog
+}
+
+// ChainResult describes the outcome of replaying a chain of consecutive ticks.
+type ChainResult struct {
+	Verified           bool
+	TicksReplayed      int
+	FirstTick          uint64
+	LastTick           uint64
+	FinalReplayedState []byte
+	ExpectedFinalHash  [32]byte
+	Duration           time.Duration
+	Error              error
+	FailedAtTick       uint64
+}
+
+// iteratorHolder allows chain replay hostcalls to reference the current tick's
+// entry iterator. The pointer is swapped between ticks without re-registering
+// the host module.
+type iteratorHolder struct {
+	iter *entryIterator
+}
+
+// ReplayChain replays N consecutive ticks in a single WASM instance and
+// compares only the final state hash against expectedFinalHash. This catches
+// accumulated drift that single-tick replay misses.
+func (e *Engine) ReplayChain(
+	ctx context.Context,
+	wasmBytes []byte,
+	capManifest *manifest.CapabilityManifest,
+	initialState []byte,
+	snapshots []ChainSnapshot,
+	expectedFinalHash [32]byte,
+) *ChainResult {
+	start := time.Now()
+	result := &ChainResult{
+		ExpectedFinalHash: expectedFinalHash,
+	}
+	defer func() { result.Duration = time.Since(start) }()
+
+	if len(snapshots) == 0 {
+		result.Error = fmt.Errorf("replay chain: no snapshots provided")
+		return result
+	}
+
+	result.FirstTick = snapshots[0].TickNumber
+	result.LastTick = snapshots[len(snapshots)-1].TickNumber
+
+	// Create a single wazero runtime for the entire chain.
+	config := wazero.NewRuntimeConfig().
+		WithMemoryLimitPages(1024).
+		WithCloseOnContextDone(true).
+		WithCompilationCache(e.cache)
+	rt := wazero.NewRuntimeWithConfig(ctx, config)
+	defer rt.Close(ctx)
+
+	wasi_snapshot_preview1.MustInstantiate(ctx, rt)
+
+	holder := &iteratorHolder{}
+	repErr := &replayError{}
+
+	if err := registerChainReplayHostModule(ctx, rt, capManifest, holder, repErr); err != nil {
+		result.Error = fmt.Errorf("replay chain: register host module: %w", err)
+		return result
+	}
+
+	compiled, err := rt.CompileModule(ctx, wasmBytes)
+	if err != nil {
+		result.Error = fmt.Errorf("replay chain: compile: %w", err)
+		return result
+	}
+
+	mod, err := rt.InstantiateModule(ctx, compiled, wazero.NewModuleConfig().
+		WithName("replay-chain").
+		WithStartFunctions())
+	if err != nil {
+		result.Error = fmt.Errorf("replay chain: instantiate: %w", err)
+		return result
+	}
+	defer mod.Close(ctx)
+
+	if initFn := mod.ExportedFunction("_initialize"); initFn != nil {
+		if _, err := initFn.Call(ctx); err != nil {
+			result.Error = fmt.Errorf("replay chain: _initialize: %w", err)
+			return result
+		}
+	}
+
+	if err := replayResume(ctx, mod, initialState); err != nil {
+		result.Error = fmt.Errorf("replay chain: initial resume: %w", err)
+		return result
+	}
+
+	tickFn := mod.ExportedFunction("agent_tick")
+	if tickFn == nil {
+		result.Error = fmt.Errorf("replay chain: agent_tick not exported")
+		return result
+	}
+
+	for i, snap := range snapshots {
+		if snap.TickLog == nil {
+			holder.iter = &entryIterator{}
+		} else {
+			holder.iter = &entryIterator{entries: snap.TickLog.Entries}
+		}
+		repErr.err = nil
+
+		if _, err := tickFn.Call(ctx); err != nil {
+			result.Error = fmt.Errorf("replay chain: tick %d: %w", snap.TickNumber, err)
+			result.FailedAtTick = snap.TickNumber
+			return result
+		}
+
+		if repErr.err != nil {
+			result.Error = fmt.Errorf("replay chain: tick %d hostcall: %w", snap.TickNumber, repErr.err)
+			result.FailedAtTick = snap.TickNumber
+			return result
+		}
+
+		if holder.iter.remaining() > 0 {
+			result.Error = fmt.Errorf("replay chain: tick %d: %d unconsumed entries",
+				snap.TickNumber, holder.iter.remaining())
+			result.FailedAtTick = snap.TickNumber
+			return result
+		}
+
+		result.TicksReplayed = i + 1
+	}
+
+	finalState, err := replayCheckpoint(ctx, mod)
+	if err != nil {
+		result.Error = fmt.Errorf("replay chain: final checkpoint: %w", err)
+		return result
+	}
+	result.FinalReplayedState = finalState
+
+	replayedHash := sha256.Sum256(finalState)
+	result.Verified = replayedHash == expectedFinalHash
+
+	if result.Verified {
+		e.logger.Info("Chain replay verified",
+			"ticks", result.TicksReplayed,
+			"first_tick", result.FirstTick,
+			"last_tick", result.LastTick,
+		)
+	} else {
+		e.logger.Warn("Chain replay divergence detected",
+			"ticks", result.TicksReplayed,
+			"first_tick", result.FirstTick,
+			"last_tick", result.LastTick,
+		)
+	}
+
+	return result
+}
+
+// registerChainReplayHostModule registers replay hostcalls that read from an
+// iteratorHolder, allowing the iterator to be swapped between ticks.
+func registerChainReplayHostModule(
+	ctx context.Context,
+	rt wazero.Runtime,
+	m *manifest.CapabilityManifest,
+	holder *iteratorHolder,
+	repErr *replayError,
+) error {
+	builder := rt.NewHostModuleBuilder("igor")
+	registered := 0
+
+	if m.Has("clock") {
+		builder.NewFunctionBuilder().
+			WithFunc(func(_ context.Context) int64 {
+				entry, err := holder.iter.next(eventlog.ClockNow)
+				if err != nil {
+					repErr.err = err
+					return 0
+				}
+				if len(entry.Payload) != 8 {
+					repErr.err = fmt.Errorf("clock_now payload length %d, expected 8", len(entry.Payload))
+					return 0
+				}
+				return int64(binary.LittleEndian.Uint64(entry.Payload))
+			}).
+			Export("clock_now")
+		registered++
+	}
+
+	if m.Has("rand") {
+		builder.NewFunctionBuilder().
+			WithFunc(func(_ context.Context, mod api.Module, ptr, length uint32) int32 {
+				entry, err := holder.iter.next(eventlog.RandBytes)
+				if err != nil {
+					repErr.err = err
+					return -1
+				}
+				if uint32(len(entry.Payload)) != length {
+					repErr.err = fmt.Errorf("rand_bytes payload length %d, expected %d", len(entry.Payload), length)
+					return -1
+				}
+				if !mod.Memory().Write(ptr, entry.Payload) {
+					repErr.err = fmt.Errorf("rand_bytes memory write failed")
+					return -4
+				}
+				return 0
+			}).
+			Export("rand_bytes")
+		registered++
+	}
+
+	if m.Has("log") {
+		builder.NewFunctionBuilder().
+			WithFunc(func(_ context.Context, _ api.Module, _, _ uint32) {
+				_, err := holder.iter.next(eventlog.LogEmit)
+				if err != nil {
+					repErr.err = err
+				}
+			}).
+			Export("log_emit")
+		registered++
+	}
+
+	if registered == 0 {
+		return nil
+	}
+
+	_, err := builder.Instantiate(ctx)
+	return err
 }
 
 // firstDiff returns the index of the first differing byte, or -1 if equal.

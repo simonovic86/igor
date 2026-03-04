@@ -41,6 +41,15 @@ type TickSnapshot struct {
 	TickLog       *eventlog.TickLog
 }
 
+// observationScore returns the number of observation entries in this tick.
+// A higher score means the tick is more valuable for replay verification.
+func (snap TickSnapshot) observationScore() int {
+	if snap.TickLog == nil {
+		return 0
+	}
+	return len(snap.TickLog.Entries)
+}
+
 // Instance represents a running agent instance.
 type Instance struct {
 	AgentID        string
@@ -209,16 +218,17 @@ func (i *Instance) Init(ctx context.Context) error {
 // Tick executes one tick of the agent with a timeout and meters execution cost.
 // Per CE-3, the event log records all observation hostcall return values.
 // Pre-tick and post-tick state are captured for replay verification (CM-4).
-func (i *Instance) Tick(ctx context.Context) error {
+// Returns hasMoreWork (true if agent signaled more work pending) and any error.
+func (i *Instance) Tick(ctx context.Context) (bool, error) {
 	// Check budget before execution
 	if i.Budget <= 0 {
-		return fmt.Errorf("budget exhausted: %s", budget.Format(i.Budget))
+		return false, fmt.Errorf("budget exhausted: %s", budget.Format(i.Budget))
 	}
 
 	// Capture pre-tick state for replay verification
 	preState, err := i.captureState(ctx)
 	if err != nil {
-		return fmt.Errorf("pre-tick checkpoint failed: %w", err)
+		return false, fmt.Errorf("pre-tick checkpoint failed: %w", err)
 	}
 
 	// Advance tick counter and begin event log recording
@@ -231,24 +241,31 @@ func (i *Instance) Tick(ctx context.Context) error {
 
 	fn := i.Module.ExportedFunction("agent_tick")
 	if fn == nil {
-		return fmt.Errorf("agent_tick function not found")
+		return false, fmt.Errorf("agent_tick function not found")
 	}
 
 	start := time.Now()
-	_, tickErr := fn.Call(tickCtx)
+	results, tickErr := fn.Call(tickCtx)
 	elapsed := time.Since(start)
 
 	// Seal the event log regardless of tick success/failure
 	sealed := i.EventLog.SealTick()
 
 	if tickErr != nil {
-		return fmt.Errorf("agent_tick failed: %w", tickErr)
+		return false, fmt.Errorf("agent_tick failed: %w", tickErr)
+	}
+
+	// Read adaptive tick hint from agent return value.
+	// Legacy agents (void agent_tick) return no results; treat as "no more work".
+	var hasMoreWork bool
+	if len(results) > 0 {
+		hasMoreWork = results[0] != 0
 	}
 
 	// Capture post-tick state for replay verification
 	postState, err := i.captureState(ctx)
 	if err != nil {
-		return fmt.Errorf("post-tick checkpoint failed: %w", err)
+		return false, fmt.Errorf("post-tick checkpoint failed: %w", err)
 	}
 
 	// Store replay verification snapshot in sliding window.
@@ -264,10 +281,19 @@ func (i *Instance) Tick(ctx context.Context) error {
 		maxSnaps = DefaultReplayWindowSize
 	}
 	if len(i.ReplayWindow) > maxSnaps {
-		kept := i.ReplayWindow[len(i.ReplayWindow)-maxSnaps:]
-		fresh := make([]TickSnapshot, len(kept))
-		copy(fresh, kept)
-		i.ReplayWindow = fresh
+		// Weighted eviction: drop the snapshot with the lowest observation
+		// score. Among ties, prefer evicting the oldest (lowest index).
+		// Never evict the most recently added snapshot (last element).
+		evictIdx := 0
+		evictScore := i.ReplayWindow[0].observationScore()
+		for j := 1; j < len(i.ReplayWindow)-1; j++ {
+			score := i.ReplayWindow[j].observationScore()
+			if score < evictScore {
+				evictScore = score
+				evictIdx = j
+			}
+		}
+		i.ReplayWindow = append(i.ReplayWindow[:evictIdx], i.ReplayWindow[evictIdx+1:]...)
 	}
 
 	// Calculate and deduct execution cost (nanosecond precision, no float, no truncation).
@@ -293,9 +319,10 @@ func (i *Instance) Tick(ctx context.Context) error {
 		"cost", budget.Format(costMicrocents),
 		"budget_remaining", budget.Format(i.Budget),
 		"observations", observationCount,
+		"has_more_work", hasMoreWork,
 	)
 
-	return nil
+	return hasMoreWork, nil
 }
 
 // captureState extracts the agent's current state via checkpoint exports.

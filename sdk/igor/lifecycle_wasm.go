@@ -12,10 +12,13 @@ func agent_init() {
 }
 
 //export agent_tick
-func agent_tick() {
+func agent_tick() uint32 {
 	if registeredAgent != nil {
-		registeredAgent.Tick()
+		if registeredAgent.Tick() {
+			return 1
+		}
 	}
+	return 0
 }
 
 //export agent_checkpoint

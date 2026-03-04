@@ -40,20 +40,29 @@ type Config struct {
 
 	// ReplayCostLog enables logging of replay compute duration for economic observability.
 	ReplayCostLog bool
+
+	// ReplayOnDivergence controls the escalation policy when replay verification
+	// detects state divergence. Valid values:
+	//   "log"       - Log error and continue (default)
+	//   "pause"     - Stop ticking, preserve checkpoint, exit cleanly
+	//   "intensify" - Temporarily reduce VerifyInterval to 1 (verify every tick)
+	//   "migrate"   - Log intent to migrate (full implementation requires peer selection)
+	ReplayOnDivergence string
 }
 
 // Load returns a Config with default values applied.
 func Load() (*Config, error) {
 	cfg := &Config{
-		NodeID:           generateNodeID(),
-		ListenAddress:    "/ip4/0.0.0.0/tcp/4001",
-		PricePerSecond:   1000, // 0.001 currency units = 1000 microcents
-		BootstrapPeers:   []string{},
-		CheckpointDir:    "./checkpoints",
-		ReplayWindowSize: 16,
-		VerifyInterval:   5,
-		ReplayMode:       "full",
-		ReplayCostLog:    false,
+		NodeID:             generateNodeID(),
+		ListenAddress:      "/ip4/0.0.0.0/tcp/4001",
+		PricePerSecond:     1000, // 0.001 currency units = 1000 microcents
+		BootstrapPeers:     []string{},
+		CheckpointDir:      "./checkpoints",
+		ReplayWindowSize:   16,
+		VerifyInterval:     5,
+		ReplayMode:         "full",
+		ReplayCostLog:      false,
+		ReplayOnDivergence: "log",
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
@@ -75,6 +84,10 @@ func (c *Config) Validate() error {
 	validModes := map[string]bool{"off": true, "periodic": true, "on-migrate": true, "full": true}
 	if !validModes[c.ReplayMode] {
 		return fmt.Errorf("ReplayMode must be one of off/periodic/on-migrate/full, got %q", c.ReplayMode)
+	}
+	validPolicies := map[string]bool{"log": true, "pause": true, "intensify": true, "migrate": true}
+	if !validPolicies[c.ReplayOnDivergence] {
+		return fmt.Errorf("ReplayOnDivergence must be one of log/pause/intensify/migrate, got %q", c.ReplayOnDivergence)
 	}
 	return nil
 }

@@ -36,6 +36,7 @@ func main() {
 	verifyInterval := flag.Int("verify-interval", 0, "Ticks between self-verification passes (0 = use config default)")
 	replayMode := flag.String("replay-mode", "", "Replay verification mode: off, periodic, on-migrate, full (default: full)")
 	replayCostLog := flag.Bool("replay-cost-log", false, "Log replay compute duration for economic observability")
+	replayOnDivergence := flag.String("replay-on-divergence", "", "Escalation policy on replay divergence: log, pause, intensify, migrate (default: log)")
 	inspectCheckpoint := flag.String("inspect-checkpoint", "", "Path to checkpoint file to inspect")
 	inspectWASM := flag.String("inspect-wasm", "", "Optional WASM binary to verify against checkpoint hash")
 	simulate := flag.Bool("simulate", false, "Run agent in local simulator mode (no P2P)")
@@ -80,6 +81,9 @@ func main() {
 	}
 	if *replayCostLog {
 		cfg.ReplayCostLog = true
+	}
+	if *replayOnDivergence != "" {
+		cfg.ReplayOnDivergence = *replayOnDivergence
 	}
 
 	// Initialize logging
@@ -235,9 +239,11 @@ func runLocalAgent(
 	// Create replay engine for CM-4 verification
 	replayEngine := replay.NewEngine(logger)
 
-	// Tick loop
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
+	// Adaptive tick loop constants.
+	const (
+		normalTickInterval = 1 * time.Second
+		minTickInterval    = 10 * time.Millisecond
+	)
 
 	checkpointTicker := time.NewTicker(5 * time.Second)
 	defer checkpointTicker.Stop()
@@ -254,6 +260,9 @@ func runLocalAgent(
 		"replay_mode", cfg.ReplayMode,
 	)
 
+	tickTimer := time.NewTimer(normalTickInterval)
+	defer tickTimer.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -268,15 +277,27 @@ func runLocalAgent(
 			}
 			return nil
 
-		case <-ticker.C:
-			if tickErr := safeTick(ctx, instance); tickErr != nil {
+		case <-tickTimer.C:
+			hasMoreWork, tickErr := safeTick(ctx, instance)
+			if tickErr != nil {
 				return handleTickFailure(ctx, instance, tickErr, logger)
+			}
+
+			// Adaptive tick scheduling: fast-path if agent has more work.
+			if hasMoreWork {
+				tickTimer.Reset(minTickInterval)
+			} else {
+				tickTimer.Reset(normalTickInterval)
 			}
 
 			ticksSinceVerify++
 			if periodicVerify && cfg.VerifyInterval > 0 && ticksSinceVerify >= cfg.VerifyInterval {
 				ticksSinceVerify = 0
-				lastVerifiedTick = verifyNextTick(ctx, instance, replayEngine, lastVerifiedTick, cfg.ReplayCostLog, logger)
+				var action divergenceAction
+				lastVerifiedTick, action = verifyNextTick(ctx, instance, replayEngine, lastVerifiedTick, cfg.ReplayCostLog, cfg.ReplayOnDivergence, logger)
+				if stop := handleDivergenceAction(ctx, instance, cfg, action, logger); stop {
+					return nil
+				}
 			}
 
 		case <-checkpointTicker.C:
@@ -304,9 +325,33 @@ func handleTickFailure(ctx context.Context, instance *agent.Instance, tickErr er
 	return tickErr
 }
 
+// handleDivergenceAction acts on the escalation policy returned by verifyNextTick.
+// Returns true if the tick loop should exit.
+func handleDivergenceAction(ctx context.Context, instance *agent.Instance, cfg *config.Config, action divergenceAction, logger *slog.Logger) bool {
+	switch action {
+	case divergencePause:
+		logger.Info("Agent paused due to replay divergence (EI-6), saving checkpoint")
+		if err := instance.SaveCheckpointToStorage(ctx); err != nil {
+			logger.Error("Failed to save checkpoint on pause", "error", err)
+		}
+		return true
+	case divergenceIntensify:
+		logger.Info("Verification frequency intensified to every tick")
+		cfg.VerifyInterval = 1
+	case divergenceMigrate:
+		// Full migration-trigger requires peer selection; fall through to pause.
+		logger.Info("Migration escalation triggered — pausing (peer selection not yet implemented)")
+		if err := instance.SaveCheckpointToStorage(ctx); err != nil {
+			logger.Error("Failed to save checkpoint on migrate-pause", "error", err)
+		}
+		return true
+	}
+	return false
+}
+
 // safeTick executes one tick with panic recovery (EI-6: Safety Over Liveness).
 // A WASM trap or runtime bug must not crash the node.
-func safeTick(ctx context.Context, instance *agent.Instance) (err error) {
+func safeTick(ctx context.Context, instance *agent.Instance) (hasMore bool, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("tick panicked: %v", r)
@@ -315,23 +360,34 @@ func safeTick(ctx context.Context, instance *agent.Instance) (err error) {
 	return instance.Tick(ctx)
 }
 
+// divergenceAction indicates what the tick loop should do after replay verification.
+type divergenceAction int
+
+const (
+	divergenceNone      divergenceAction = iota // no divergence detected
+	divergenceLog                               // log and continue
+	divergencePause                             // stop ticking, preserve checkpoint
+	divergenceIntensify                         // increase verify frequency
+	divergenceMigrate                           // trigger migration
+)
+
 // verifyNextTick replays the oldest unverified tick in the replay window.
-// Returns the tick number of the verified tick (for tracking), or lastVerified
-// if nothing was verified.
-// Replay failures are logged but do not halt execution (EI-6: Safety Over Liveness).
+// Returns the tick number of the verified tick (for tracking) and an escalation
+// action if divergence is detected. Returns divergenceNone when verification passes.
 func verifyNextTick(
 	ctx context.Context,
 	instance *agent.Instance,
 	replayEngine *replay.Engine,
 	lastVerified uint64,
 	logCost bool,
+	policy string,
 	logger *slog.Logger,
-) uint64 {
+) (uint64, divergenceAction) {
 	for _, snap := range instance.ReplayWindow {
 		if snap.TickNumber <= lastVerified {
 			continue
 		}
-		if snap.TickLog == nil {
+		if snap.TickLog == nil || len(snap.TickLog.Entries) == 0 {
 			continue
 		}
 
@@ -350,7 +406,7 @@ func verifyNextTick(
 				"tick", result.TickNumber,
 				"error", result.Error,
 			)
-			return snap.TickNumber
+			return snap.TickNumber, escalationForPolicy(policy)
 		}
 
 		// Hash-based post-state comparison (IMPROVEMENTS #2).
@@ -360,7 +416,7 @@ func verifyNextTick(
 				"tick", result.TickNumber,
 				"state_bytes", len(result.ReplayedState),
 			)
-			return snap.TickNumber
+			return snap.TickNumber, escalationForPolicy(policy)
 		}
 
 		attrs := []any{
@@ -371,9 +427,23 @@ func verifyNextTick(
 			attrs = append(attrs, "replay_duration", result.Duration)
 		}
 		logger.Info("Replay verified", attrs...)
-		return snap.TickNumber
+		return snap.TickNumber, divergenceNone
 	}
-	return lastVerified
+	return lastVerified, divergenceNone
+}
+
+// escalationForPolicy maps a policy string to a divergenceAction.
+func escalationForPolicy(policy string) divergenceAction {
+	switch policy {
+	case "pause":
+		return divergencePause
+	case "intensify":
+		return divergenceIntensify
+	case "migrate":
+		return divergenceMigrate
+	default:
+		return divergenceLog
+	}
 }
 
 // runInspector parses and displays a checkpoint file.

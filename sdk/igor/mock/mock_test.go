@@ -222,13 +222,14 @@ type testAgent struct {
 
 func (a *testAgent) Init() {}
 
-func (a *testAgent) Tick() {
+func (a *testAgent) Tick() bool {
 	a.TickCount++
 	a.LastClock = igor.ClockNow()
 	buf := make([]byte, 4)
 	_ = igor.RandBytes(buf)
 	a.Luck ^= binary.LittleEndian.Uint32(buf)
 	igor.Logf("tick %d", a.TickCount)
+	return false
 }
 
 func (a *testAgent) Marshal() []byte {

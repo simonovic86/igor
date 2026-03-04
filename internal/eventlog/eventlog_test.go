@@ -153,6 +153,35 @@ func TestEventLog_EvictionReleasesMemory(t *testing.T) {
 	}
 }
 
+func TestEventLog_ArenaFallback(t *testing.T) {
+	el := NewEventLog(0)
+	el.BeginTick(1)
+
+	// Record entries that exceed the default arena size (4096 bytes).
+	// Each entry is 1024 bytes, so after 4 entries the arena is full and
+	// subsequent entries fall back to heap allocation.
+	for i := 0; i < 6; i++ {
+		payload := make([]byte, 1024)
+		payload[0] = byte(i)
+		el.Record(ClockNow, payload)
+	}
+
+	entries := el.CurrentEntries()
+	if len(entries) != 6 {
+		t.Fatalf("expected 6 entries, got %d", len(entries))
+	}
+
+	// Verify all payloads are correct regardless of arena vs heap backing.
+	for i, e := range entries {
+		if e.Payload[0] != byte(i) {
+			t.Errorf("entry %d: expected first byte %d, got %d", i, i, e.Payload[0])
+		}
+		if len(e.Payload) != 1024 {
+			t.Errorf("entry %d: expected 1024 bytes, got %d", i, len(e.Payload))
+		}
+	}
+}
+
 func TestEventLog_UnboundedWhenZero(t *testing.T) {
 	el := NewEventLog(0)
 
