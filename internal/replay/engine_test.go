@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/simonovic86/igor/internal/eventlog"
 	"github.com/simonovic86/igor/pkg/manifest"
@@ -635,6 +636,66 @@ func TestReplayChain_Empty(t *testing.T) {
 	result := engine.ReplayChain(context.Background(), nil, nil, nil, nil, [32]byte{})
 	if result.Error == nil {
 		t.Fatal("expected error for empty snapshots")
+	}
+}
+
+// testAgentInfiniteLoop is an agent whose agent_tick never returns.
+const testAgentInfiniteLoop = `package main
+
+import "unsafe"
+
+var counter uint64
+
+//export agent_init
+func agent_init() { counter = 0 }
+
+//export agent_tick
+func agent_tick() uint32 { for { counter++ } }
+
+//export agent_checkpoint
+func agent_checkpoint() uint32 { return 8 }
+
+//export agent_checkpoint_ptr
+func agent_checkpoint_ptr() uint32 {
+	return uint32(uintptr(unsafe.Pointer(&counter)))
+}
+
+//export agent_resume
+func agent_resume(ptr, size uint32) {
+	if size >= 8 {
+		buf := unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), size)
+		counter = *(*uint64)(unsafe.Pointer(&buf[0]))
+	}
+}
+
+func main() {}
+`
+
+func TestReplayTick_Timeout(t *testing.T) {
+	wasmPath := buildAgent(t, testAgentInfiniteLoop)
+	wasmBytes, err := os.ReadFile(wasmPath)
+	if err != nil {
+		t.Fatalf("read WASM: %v", err)
+	}
+
+	initialState := make([]byte, 8)
+	emptyTickLog := &eventlog.TickLog{TickNumber: 1, Entries: nil}
+
+	engine := NewEngine(newTestLogger())
+	defer engine.Close(context.Background())
+
+	start := time.Now()
+	result := engine.ReplayTick(context.Background(), wasmBytes, emptyManifest(), initialState, emptyTickLog, nil)
+	elapsed := time.Since(start)
+
+	if result.Error == nil {
+		t.Fatal("expected error from timeout, got nil")
+	}
+	t.Logf("Replay tick timed out after %v with error: %v", elapsed, result.Error)
+
+	// Should complete within a reasonable bound (timeout is 100ms, allow up to 1s for CI)
+	if elapsed > 1*time.Second {
+		t.Fatalf("replay took too long: %v (expected < 1s)", elapsed)
 	}
 }
 

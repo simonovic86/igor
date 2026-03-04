@@ -118,7 +118,7 @@ func main() {
 	defer engine.Close(ctx)
 
 	// Initialize migration service
-	migrationSvc := migration.NewService(node.Host, engine, storageProvider, cfg.ReplayMode, cfg.ReplayCostLog, logger)
+	migrationSvc := migration.NewService(node.Host, engine, storageProvider, cfg.ReplayMode, cfg.ReplayCostLog, cfg.PricePerSecond, logger)
 
 	// If --migrate-agent flag is provided, perform migration
 	if *migrateAgent != "" {

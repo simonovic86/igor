@@ -40,6 +40,7 @@ type Service struct {
 	replayEngine    *replay.Engine
 	replayMode      string // "off", "periodic", "on-migrate", "full"
 	replayCostLog   bool
+	pricePerSecond  int64 // This node's price per second in microcents
 	logger          *slog.Logger
 
 	// nodeCapabilities overrides manifest.NodeCapabilities for this node when
@@ -59,6 +60,7 @@ func NewService(
 	storage storage.Provider,
 	replayMode string,
 	replayCostLog bool,
+	pricePerSecond int64,
 	logger *slog.Logger,
 ) *Service {
 	svc := &Service{
@@ -68,6 +70,7 @@ func NewService(
 		replayEngine:    replay.NewEngine(logger),
 		replayMode:      replayMode,
 		replayCostLog:   replayCostLog,
+		pricePerSecond:  pricePerSecond,
 		logger:          logger,
 		activeAgents:    make(map[string]*agent.Instance),
 	}
@@ -324,23 +327,16 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		)
 	}
 
-	// CE-5: Verify target node can satisfy agent's declared capabilities before
-	// committing any state. Reject early so no orphaned checkpoint is written.
-	capManifest, err := manifest.ParseCapabilityManifest(pkg.ManifestData)
+	// Parse and validate manifest (capabilities, migration policy, resource limits).
+	fullManifest, err := manifest.ParseManifest(pkg.ManifestData)
 	if err != nil {
 		s.logger.Error("Invalid manifest in migration package", "error", err)
 		s.sendStartConfirmation(stream, pkg.AgentID, false, "invalid manifest: "+err.Error())
 		return
 	}
-	s.mu.RLock()
-	nodeCaps := manifest.NodeCapabilities
-	if s.nodeCapabilities != nil {
-		nodeCaps = s.nodeCapabilities
-	}
-	s.mu.RUnlock()
-	if err := manifest.ValidateAgainstNode(capManifest, nodeCaps); err != nil {
-		s.logger.Error("Capability check failed", "agent_id", pkg.AgentID, "error", err)
-		s.sendStartConfirmation(stream, pkg.AgentID, false, "capability check failed: "+err.Error())
+
+	if rejectMsg := s.validateIncomingManifest(fullManifest, pkg.AgentID); rejectMsg != "" {
+		s.sendStartConfirmation(stream, pkg.AgentID, false, rejectMsg)
 		return
 	}
 
@@ -399,6 +395,55 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 
 	// Send success confirmation
 	s.sendStartConfirmation(stream, pkg.AgentID, true, "")
+}
+
+// validateIncomingManifest checks migration policy, resource limits, and
+// capability requirements. Returns a non-empty rejection message on failure.
+func (s *Service) validateIncomingManifest(m *manifest.Manifest, agentID string) string {
+	// Check migration policy: reject if agent explicitly disables migration.
+	if m.MigrationPolicy != nil && !m.MigrationPolicy.Enabled {
+		s.logger.Error("Migration policy disabled", "agent_id", agentID)
+		return "agent migration policy disabled"
+	}
+
+	// Check migration policy: reject if node price exceeds agent's maximum.
+	if m.MigrationPolicy != nil &&
+		m.MigrationPolicy.MaxPricePerSecond > 0 &&
+		s.pricePerSecond > m.MigrationPolicy.MaxPricePerSecond {
+		s.logger.Error("Node price exceeds agent maximum",
+			"agent_id", agentID,
+			"node_price", s.pricePerSecond,
+			"agent_max", m.MigrationPolicy.MaxPricePerSecond,
+		)
+		return fmt.Sprintf("node price %d exceeds agent max %d",
+			s.pricePerSecond, m.MigrationPolicy.MaxPricePerSecond)
+	}
+
+	// Validate resource limits: reject agents that require more memory than the node provides.
+	if m.ResourceLimits.MaxMemoryBytes > 0 &&
+		m.ResourceLimits.MaxMemoryBytes > manifest.DefaultMaxMemoryBytes {
+		s.logger.Error("Agent memory requirement exceeds node capacity",
+			"agent_id", agentID,
+			"required", m.ResourceLimits.MaxMemoryBytes,
+			"available", manifest.DefaultMaxMemoryBytes,
+		)
+		return fmt.Sprintf("agent requires %d bytes memory, node provides %d",
+			m.ResourceLimits.MaxMemoryBytes, manifest.DefaultMaxMemoryBytes)
+	}
+
+	// CE-5: Verify target node can satisfy agent's declared capabilities.
+	s.mu.RLock()
+	nodeCaps := manifest.NodeCapabilities
+	if s.nodeCapabilities != nil {
+		nodeCaps = s.nodeCapabilities
+	}
+	s.mu.RUnlock()
+	if err := manifest.ValidateAgainstNode(m.Capabilities, nodeCaps); err != nil {
+		s.logger.Error("Capability check failed", "agent_id", agentID, "error", err)
+		return "capability check failed: " + err.Error()
+	}
+
+	return ""
 }
 
 // sendStartConfirmation sends an AgentStarted message.

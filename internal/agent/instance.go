@@ -64,6 +64,7 @@ type Instance struct {
 	Budget         int64 // Remaining budget in microcents (1 currency unit = 1,000,000 microcents)
 	PricePerSecond int64 // Cost per second in microcents
 	Manifest       *manifest.CapabilityManifest
+	FullManifest   *manifest.Manifest // Full manifest with ResourceLimits and MigrationPolicy
 	EventLog       *eventlog.EventLog
 	TickNumber     uint64
 	logger         *slog.Logger
@@ -123,13 +124,22 @@ func loadAgent(
 	manifestData []byte,
 	logger *slog.Logger,
 ) (*Instance, error) {
-	capManifest, err := manifest.ParseCapabilityManifest(manifestData)
+	fullManifest, err := manifest.ParseManifest(manifestData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse manifest: %w", err)
 	}
 
+	capManifest := fullManifest.Capabilities
+
 	if err := manifest.ValidateAgainstNode(capManifest, manifest.NodeCapabilities); err != nil {
 		return nil, fmt.Errorf("manifest validation failed: %w", err)
+	}
+
+	// Validate resource limits: reject agents that require more memory than the node provides.
+	if fullManifest.ResourceLimits.MaxMemoryBytes > 0 &&
+		fullManifest.ResourceLimits.MaxMemoryBytes > manifest.DefaultMaxMemoryBytes {
+		return nil, fmt.Errorf("agent requires %d bytes memory, node provides %d",
+			fullManifest.ResourceLimits.MaxMemoryBytes, manifest.DefaultMaxMemoryBytes)
 	}
 
 	logger.Info("Capability manifest loaded",
@@ -173,6 +183,7 @@ func loadAgent(
 		Budget:         budgetVal,
 		PricePerSecond: pricePerSecond,
 		Manifest:       capManifest,
+		FullManifest:   fullManifest,
 		EventLog:       el,
 		TickNumber:     0,
 		logger:         logger,
