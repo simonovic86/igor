@@ -66,11 +66,10 @@ Confirmation sent from target back to source.
 
 ```go
 type AgentStarted struct {
-    AgentID   string
-    NodeID    string  // Target peer ID
-    StartTime int64   // Unix timestamp
-    Success   bool
-    Error     string  // If Success=false
+    AgentID string
+    NodeID  string  // Target peer ID
+    Success bool
+    Error   string  // If Success=false
 }
 ```
 
@@ -262,10 +261,9 @@ Source Node                              Target Node
 9. **Send confirmation**
    ```go
    json.NewEncoder(stream).Encode(AgentStarted{
-       AgentID:   pkg.AgentID,
-       NodeID:    localNodeID,
-       StartTime: time.Now().Unix(),
-       Success:   true,
+       AgentID: pkg.AgentID,
+       NodeID:  localNodeID,
+       Success: true,
    })
    ```
 

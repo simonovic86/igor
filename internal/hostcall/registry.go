@@ -74,7 +74,7 @@ func (r *Registry) RegisterHostModule(
 	}
 
 	if _, err := builder.Instantiate(ctx); err != nil {
-		return err
+		return fmt.Errorf("failed to instantiate igor host module: %w", err)
 	}
 
 	r.logger.Info("igor host module registered",

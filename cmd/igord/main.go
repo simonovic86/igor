@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -164,6 +165,27 @@ func main() {
 	logger.Info("Igor Node shutting down...")
 }
 
+// loadManifestData reads the manifest file for the given WASM path and flags.
+// Returns empty JSON capabilities if no manifest is found.
+func loadManifestData(wasmPath, manifestPathFlag string, logger *slog.Logger) []byte {
+	mPath := manifestPathFlag
+	if mPath == "" {
+		// Default: look for <agent>.manifest.json alongside the WASM file
+		if strings.HasSuffix(wasmPath, ".wasm") {
+			mPath = strings.TrimSuffix(wasmPath, ".wasm") + ".manifest.json"
+		}
+	}
+	manifestData, err := os.ReadFile(mPath)
+	if err != nil {
+		logger.Info("No manifest file found, using empty capabilities",
+			"expected_path", mPath,
+		)
+		return []byte("{}")
+	}
+	logger.Info("Manifest loaded", "path", mPath)
+	return manifestData
+}
+
 // runLocalAgent loads and executes an agent locally with tick loop and checkpointing.
 func runLocalAgent(
 	ctx context.Context,
@@ -176,22 +198,7 @@ func runLocalAgent(
 	migrationSvc *migration.Service,
 	logger *slog.Logger,
 ) error {
-	// Load manifest from file
-	mPath := manifestPathFlag
-	if mPath == "" {
-		// Default: look for <agent>.manifest.json alongside the WASM file
-		mPath = wasmPath[:len(wasmPath)-len(".wasm")] + ".manifest.json"
-	}
-	manifestData, err := os.ReadFile(mPath)
-	if err != nil {
-		// No manifest file — backward compatible, empty capabilities
-		manifestData = []byte("{}")
-		logger.Info("No manifest file found, using empty capabilities",
-			"expected_path", mPath,
-		)
-	} else {
-		logger.Info("Manifest loaded", "path", mPath)
-	}
+	manifestData := loadManifestData(wasmPath, manifestPathFlag, logger)
 
 	// Load agent with budget and manifest
 	instance, err := agent.LoadAgent(
@@ -238,6 +245,7 @@ func runLocalAgent(
 
 	// Create replay engine for CM-4 verification
 	replayEngine := replay.NewEngine(logger)
+	defer replayEngine.Close(ctx)
 
 	// Adaptive tick loop constants.
 	const (

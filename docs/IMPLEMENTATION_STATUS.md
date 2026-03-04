@@ -2,7 +2,7 @@
 
 Truth matrix mapping spec documents to current code. Source of truth is the code; docs have been updated to match.
 
-Last updated: 2026-03-03
+Last updated: 2026-03-04
 
 ## Checkpoint Format
 
@@ -40,7 +40,7 @@ Last updated: 2026-03-03
 | AgentPackage | ReplayData | Implemented | `pkg/protocol/messages.go` |
 | ReplayData | PreTickState, TickNumber, Entries | Implemented | `pkg/protocol/messages.go` |
 | ReplayEntry | HostcallID, Payload | Implemented | `pkg/protocol/messages.go` |
-| AgentStarted | StartTime | Implemented | `pkg/protocol/messages.go` |
+| AgentStarted | StartTime | Removed | Unused field removed |
 | AgentTransfer | Package, SourceNodeID | Implemented | `pkg/protocol/messages.go` |
 
 ## Replay Verification
@@ -120,3 +120,39 @@ Last updated: 2026-03-03
 | Agent template (Survivor example) | Implemented | `agents/example/` |
 | `--simulate` CLI flag | Implemented | `cmd/igord/main.go` |
 | `--inspect-checkpoint` CLI flag | Implemented | `cmd/igord/main.go` |
+
+## Runtime Optimizations
+
+| Optimization | Status | Code Reference |
+|-------------|--------|----------------|
+| Cached WASM in replay (~300x speedup) | Implemented | `internal/replay/engine.go` `wazero.CompilationCache` |
+| Hash-based post-state comparison | Implemented | `internal/agent/instance.go` `TickSnapshot.PostStateHash` |
+| Observation-weighted snapshot retention | Implemented | `internal/agent/instance.go` `observationScore` eviction |
+| Multi-tick chain verification | Implemented | `internal/replay/engine.go` `ReplayChain` |
+| Replay failure escalation policy | Implemented | `cmd/igord/main.go` `escalationForPolicy`, `--replay-on-divergence` |
+| Adaptive tick rate | Implemented | `cmd/igord/main.go` `hasMoreWork` hint, 10ms minimum interval |
+| SDK checkpoint serialization | Implemented | `sdk/igor/encoder.go` `Encoder`/`Decoder` |
+| Shared runtime engine (migration) | Implemented | `internal/migration/service.go` shares `runtime.Engine` |
+| Event log arena allocation | Implemented | `internal/eventlog/eventlog.go` per-tick arena, 4KB default |
+| Sub-microsecond metering | Implemented | `internal/agent/instance.go` nanosecond cost calculation |
+
+## Hardening (Code Review Fixes)
+
+| Fix | Status | Code Reference |
+|-----|--------|----------------|
+| WASM hash verification: reject malformed hash | Fixed | `internal/migration/service.go` |
+| `errors.Is` for sentinel error comparison | Fixed | `internal/agent/instance.go` `LoadCheckpointFromStorage` |
+| Safe manifest path derivation (no panic) | Fixed | `cmd/igord/main.go`, `internal/migration/service.go` |
+| Replay engine resource cleanup | Fixed | `cmd/igord/main.go` `defer replayEngine.Close` |
+| LatestSnapshot returns value copy | Fixed | `internal/agent/instance.go` `LatestSnapshot` |
+| P2P ping read deadline (10s) | Fixed | `internal/p2p/node.go` `handlePing` |
+| Bootstrap per-peer timeout (30s) | Fixed | `internal/p2p/node.go` `bootstrapPeers` |
+| nodeCapabilities mutex protection | Fixed | `internal/migration/service.go` `SetNodeCapabilities` |
+| `Names()` sorted output | Fixed | `pkg/manifest/manifest.go` |
+| `History()` returns slice copy | Fixed | `internal/eventlog/eventlog.go` |
+| Hostcall registry error wrapping | Fixed | `internal/hostcall/registry.go` |
+| Oversized log_emit warning | Fixed | `internal/hostcall/log.go` |
+| Unused `StartTime` field removed | Fixed | `pkg/protocol/messages.go` |
+| P2P package tests | Added | `internal/p2p/node_test.go` |
+| CLI entry point tests | Added | `cmd/igord/main_test.go` |
+| WASM agent build in CI | Added | `.github/workflows/ci.yml` |

@@ -1,5 +1,7 @@
 package manifest
 
+import "sort"
+
 // Manifest describes an agent's identity, requirements, and policies.
 type Manifest struct {
 	// AgentID is the unique identifier for this agent.
@@ -50,6 +52,7 @@ func (m *CapabilityManifest) Names() []string {
 	for name := range m.Capabilities {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
 }
 

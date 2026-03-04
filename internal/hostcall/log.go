@@ -18,7 +18,12 @@ const maxLogBytes = 1 * 1024 * 1024 // 1 MB
 func (r *Registry) registerLog(builder wazero.HostModuleBuilder) {
 	builder.NewFunctionBuilder().
 		WithFunc(func(_ context.Context, m api.Module, ptr, length uint32) {
-			if length == 0 || length > maxLogBytes {
+			if length == 0 {
+				return
+			}
+			if length > maxLogBytes {
+				r.logger.Warn("log_emit: message too large, dropped",
+					"length", length, "max", maxLogBytes)
 				return
 			}
 			data, ok := m.Memory().Read(ptr, length)
