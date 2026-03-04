@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/simonovic86/igor/internal/eventlog"
 	"github.com/simonovic86/igor/internal/runtime"
@@ -65,7 +66,44 @@ func agent_resume(ptr, size uint32) {
 func main() {}
 `
 
+// testAgentInfiniteLoop is an agent whose agent_tick never returns.
+const testAgentInfiniteLoop = `package main
+
+import "unsafe"
+
+var counter uint64
+
+//export agent_init
+func agent_init() { counter = 0 }
+
+//export agent_tick
+func agent_tick() uint32 { for { counter++ } }
+
+//export agent_checkpoint
+func agent_checkpoint() uint32 { return 8 }
+
+//export agent_checkpoint_ptr
+func agent_checkpoint_ptr() uint32 {
+	return uint32(uintptr(unsafe.Pointer(&counter)))
+}
+
+//export agent_resume
+func agent_resume(ptr, size uint32) {
+	if size >= 8 {
+		buf := unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), size)
+		counter = *(*uint64)(unsafe.Pointer(&buf[0]))
+	}
+}
+
+func main() {}
+`
+
 func buildTestAgent(t *testing.T) string {
+	t.Helper()
+	return buildTestAgentFromSource(t, testAgentSource)
+}
+
+func buildTestAgentFromSource(t *testing.T, source string) string {
 	t.Helper()
 
 	tinygoTool, err := exec.LookPath("tinygo")
@@ -77,7 +115,7 @@ func buildTestAgent(t *testing.T) string {
 	srcPath := filepath.Join(dir, "main.go")
 	wasmPath := filepath.Join(dir, "agent.wasm")
 
-	if err := os.WriteFile(srcPath, []byte(testAgentSource), 0o644); err != nil {
+	if err := os.WriteFile(srcPath, []byte(source), 0o644); err != nil {
 		t.Fatalf("write test agent source: %v", err)
 	}
 
@@ -624,5 +662,114 @@ func TestParseCheckpointHeader_Corruption(t *testing.T) {
 				t.Error("expected error for corrupted checkpoint")
 			}
 		})
+	}
+}
+
+func TestLoadAgent_ExcessiveMemoryRejected(t *testing.T) {
+	wasmPath := buildTestAgent(t)
+	ctx := context.Background()
+	logger := newTestLogger()
+
+	engine, err := runtime.NewEngine(ctx, logger)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+	defer engine.Close(ctx)
+
+	storageProvider, err := storage.NewFSProvider(t.TempDir(), logger)
+	if err != nil {
+		t.Fatalf("NewFSProvider: %v", err)
+	}
+
+	// Manifest declaring 128MB — exceeds the node's 64MB limit.
+	manifest := []byte(`{
+		"capabilities": {"clock":{"version":1},"rand":{"version":1},"log":{"version":1}},
+		"resource_limits": {"max_memory_bytes": 134217728}
+	}`)
+
+	_, err = LoadAgent(ctx, engine, wasmPath, "test-mem", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, logger)
+	if err == nil {
+		t.Error("expected error when agent requires more memory than node provides")
+	}
+}
+
+func TestLoadAgent_ValidMemoryAccepted(t *testing.T) {
+	wasmPath := buildTestAgent(t)
+	ctx := context.Background()
+	logger := newTestLogger()
+
+	engine, err := runtime.NewEngine(ctx, logger)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+	defer engine.Close(ctx)
+
+	storageProvider, err := storage.NewFSProvider(t.TempDir(), logger)
+	if err != nil {
+		t.Fatalf("NewFSProvider: %v", err)
+	}
+
+	// Manifest declaring 32MB — within the node's 64MB limit.
+	manifest := []byte(`{
+		"capabilities": {"clock":{"version":1},"rand":{"version":1},"log":{"version":1}},
+		"resource_limits": {"max_memory_bytes": 33554432}
+	}`)
+
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-mem-ok", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, logger)
+	if err != nil {
+		t.Fatalf("LoadAgent: %v", err)
+	}
+	defer instance.Close(ctx)
+
+	if instance.FullManifest == nil {
+		t.Error("FullManifest should not be nil")
+	}
+	if instance.FullManifest.ResourceLimits.MaxMemoryBytes != 33554432 {
+		t.Errorf("MaxMemoryBytes: got %d, want 33554432", instance.FullManifest.ResourceLimits.MaxMemoryBytes)
+	}
+}
+
+func TestTick_TimeoutEnforcement(t *testing.T) {
+	// Build an agent with an infinite loop in agent_tick.
+	// The 100ms context timeout (enforced via wazero's WithCloseOnContextDone)
+	// should interrupt execution and return an error.
+	wasmPath := buildTestAgentFromSource(t, testAgentInfiniteLoop)
+	ctx := context.Background()
+	logger := newTestLogger()
+
+	engine, err := runtime.NewEngine(ctx, logger)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+	defer engine.Close(ctx)
+
+	storageProvider, err := storage.NewFSProvider(t.TempDir(), logger)
+	if err != nil {
+		t.Fatalf("NewFSProvider: %v", err)
+	}
+
+	// No hostcall imports needed — the infinite-loop agent doesn't use them.
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-timeout", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), nil, logger)
+	if err != nil {
+		t.Fatalf("LoadAgent: %v", err)
+	}
+	defer instance.Close(ctx)
+
+	if err := instance.Init(ctx); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	start := time.Now()
+	_, err = instance.Tick(ctx)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error from timeout, got nil")
+	}
+	t.Logf("Tick timed out after %v with error: %v", elapsed, err)
+
+	// Should complete within a reasonable bound (timeout is 100ms, allow up to 1s for CI)
+	if elapsed > 1*time.Second {
+		t.Fatalf("tick took too long: %v (expected < 1s)", elapsed)
 	}
 }

@@ -170,8 +170,8 @@ func newMigrationEnv(t *testing.T) *migrationEnv {
 	}
 	t.Cleanup(func() { engB.Close(ctx) })
 
-	migA := NewService(hostA, engA, stA, "full", false, logger)
-	migB := NewService(hostB, engB, stB, "full", false, logger)
+	migA := NewService(hostA, engA, stA, "full", false, 1000, logger)
+	migB := NewService(hostB, engB, stB, "full", false, 1000, logger)
 
 	agentID := "integration-test-agent"
 	manifestJSON := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
@@ -213,6 +213,44 @@ func newMigrationEnv(t *testing.T) *migrationEnv {
 		instance:              inst,
 		budgetBeforeMigration: inst.Budget,
 	}
+}
+
+// buildIntegrationTestAgentWithManifest compiles a TinyGo WASM agent and writes
+// a custom manifest sidecar alongside it. Returns the WASM file path.
+func buildIntegrationTestAgentWithManifest(t *testing.T, manifestJSON string) string {
+	t.Helper()
+
+	tinygoTool, err := exec.LookPath("tinygo")
+	if err != nil {
+		t.Skip("tinygo not found, skipping integration test")
+	}
+
+	dir := t.TempDir()
+	srcPath := filepath.Join(dir, "main.go")
+	wasmPath := filepath.Join(dir, "agent.wasm")
+
+	if err := os.WriteFile(srcPath, []byte(integrationTestAgentSource), 0o644); err != nil {
+		t.Fatalf("write agent source: %v", err)
+	}
+
+	goMod := "module testagent\n\ngo 1.24\n"
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+
+	cmd := exec.Command(tinygoTool, "build", "-target=wasi", "-no-debug", "-o", wasmPath, ".")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Skipf("failed to build test WASM agent: %s\n%s", err, out)
+	}
+
+	manifestPath := filepath.Join(dir, "agent.manifest.json")
+	if err := os.WriteFile(manifestPath, []byte(manifestJSON), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	return wasmPath
 }
 
 func (env *migrationEnv) targetAddr() string {
@@ -296,4 +334,161 @@ func TestMultiNodeMigration(t *testing.T) {
 			t.Errorf("counter after tick: got %d, want 4", counter)
 		}
 	})
+}
+
+// newPolicyTestEnv creates a minimal two-node migration environment with a
+// custom manifest. Uses the simpler "off" replay mode for faster tests.
+func newPolicyTestEnv(t *testing.T, manifestJSON string) *migrationEnv {
+	t.Helper()
+	ctx := context.Background()
+	logger := integrationTestLogger()
+
+	wasmPath := buildIntegrationTestAgentWithManifest(t, manifestJSON)
+
+	listenAddr, _ := multiaddr.NewMultiaddr("/ip4/127.0.0.1/tcp/0")
+
+	hostA, err := libp2p.New(libp2p.ListenAddrs(listenAddr))
+	if err != nil {
+		t.Fatalf("create hostA: %v", err)
+	}
+	t.Cleanup(func() { hostA.Close() })
+
+	hostB, err := libp2p.New(libp2p.ListenAddrs(listenAddr))
+	if err != nil {
+		t.Fatalf("create hostB: %v", err)
+	}
+	t.Cleanup(func() { hostB.Close() })
+
+	stA, err := storage.NewFSProvider(t.TempDir(), logger)
+	if err != nil {
+		t.Fatalf("create storageA: %v", err)
+	}
+	stB, err := storage.NewFSProvider(t.TempDir(), logger)
+	if err != nil {
+		t.Fatalf("create storageB: %v", err)
+	}
+
+	engA, err := runtime.NewEngine(ctx, logger)
+	if err != nil {
+		t.Fatalf("create engineA: %v", err)
+	}
+	t.Cleanup(func() { engA.Close(ctx) })
+
+	engB, err := runtime.NewEngine(ctx, logger)
+	if err != nil {
+		t.Fatalf("create engineB: %v", err)
+	}
+	t.Cleanup(func() { engB.Close(ctx) })
+
+	// Target node charges 2000 microcents/sec
+	migA := NewService(hostA, engA, stA, "off", false, 1000, logger)
+	migB := NewService(hostB, engB, stB, "off", false, 2000, logger)
+
+	agentID := "policy-test-agent"
+	inst, err := agent.LoadAgent(ctx, engA, wasmPath, agentID, stA,
+		budget.FromFloat(10.0), budget.FromFloat(0.001), []byte(manifestJSON), logger)
+	if err != nil {
+		t.Fatalf("LoadAgent: %v", err)
+	}
+
+	if err := inst.Init(ctx); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+
+	if _, err := inst.Tick(ctx); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	if err := inst.SaveCheckpointToStorage(ctx); err != nil {
+		t.Fatalf("SaveCheckpointToStorage: %v", err)
+	}
+
+	migA.RegisterAgent(agentID, inst)
+
+	return &migrationEnv{
+		ctx:      ctx,
+		agentID:  agentID,
+		hostA:    hostA,
+		hostB:    hostB,
+		storageA: stA,
+		storageB: stB,
+		engineA:  engA,
+		engineB:  engB,
+		migSvcA:  migA,
+		migSvcB:  migB,
+		wasmPath: wasmPath,
+		instance: inst,
+	}
+}
+
+func TestMigration_PolicyDisabled(t *testing.T) {
+	manifestJSON := `{
+		"capabilities": {"clock":{"version":1},"rand":{"version":1},"log":{"version":1}},
+		"migration_policy": {"enabled": false}
+	}`
+	env := newPolicyTestEnv(t, manifestJSON)
+
+	err := env.migSvcA.MigrateAgent(env.ctx, env.agentID, env.wasmPath, env.targetAddr())
+	if err == nil {
+		t.Fatal("expected error when migration policy is disabled")
+	}
+	t.Logf("Got expected error: %v", err)
+
+	// Target should NOT have the agent
+	if agents := env.migSvcB.GetActiveAgents(); len(agents) != 0 {
+		t.Errorf("target should have no active agents, got %v", agents)
+	}
+}
+
+func TestMigration_PriceTooHigh(t *testing.T) {
+	// Agent allows max 1500 microcents/sec, but target charges 2000
+	manifestJSON := `{
+		"capabilities": {"clock":{"version":1},"rand":{"version":1},"log":{"version":1}},
+		"migration_policy": {"enabled": true, "max_price_per_second": 1500}
+	}`
+	env := newPolicyTestEnv(t, manifestJSON)
+
+	err := env.migSvcA.MigrateAgent(env.ctx, env.agentID, env.wasmPath, env.targetAddr())
+	if err == nil {
+		t.Fatal("expected error when node price exceeds agent max")
+	}
+	t.Logf("Got expected error: %v", err)
+}
+
+func TestMigration_NoPolicyAllowed(t *testing.T) {
+	// No migration_policy — backward compatible, migration should succeed
+	manifestJSON := `{
+		"capabilities": {"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}
+	}`
+	env := newPolicyTestEnv(t, manifestJSON)
+
+	err := env.migSvcA.MigrateAgent(env.ctx, env.agentID, env.wasmPath, env.targetAddr())
+	if err != nil {
+		t.Fatalf("MigrateAgent: %v (expected success with no policy)", err)
+	}
+
+	// Target should have the agent
+	agents := env.migSvcB.GetActiveAgents()
+	if len(agents) != 1 || agents[0] != env.agentID {
+		t.Errorf("target should have agent %q, got %v", env.agentID, agents)
+	}
+}
+
+func TestMigration_PriceWithinLimit(t *testing.T) {
+	// Agent allows max 5000 microcents/sec, target charges 2000 — should succeed
+	manifestJSON := `{
+		"capabilities": {"clock":{"version":1},"rand":{"version":1},"log":{"version":1}},
+		"migration_policy": {"enabled": true, "max_price_per_second": 5000}
+	}`
+	env := newPolicyTestEnv(t, manifestJSON)
+
+	err := env.migSvcA.MigrateAgent(env.ctx, env.agentID, env.wasmPath, env.targetAddr())
+	if err != nil {
+		t.Fatalf("MigrateAgent: %v (expected success with price within limit)", err)
+	}
+
+	agents := env.migSvcB.GetActiveAgents()
+	if len(agents) != 1 || agents[0] != env.agentID {
+		t.Errorf("target should have agent %q, got %v", env.agentID, agents)
+	}
 }

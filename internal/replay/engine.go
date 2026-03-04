@@ -20,6 +20,10 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
+// replayTickTimeout is the maximum duration for a single tick during replay,
+// matching the production tick timeout in internal/agent.
+const replayTickTimeout = 100 * time.Millisecond
+
 // Result describes the outcome of replaying a single tick.
 type Result struct {
 	// Verified is true when the replayed state matches the expected state.
@@ -143,13 +147,16 @@ func (e *Engine) ReplayTick(
 		return result
 	}
 
-	// Execute agent_tick
+	// Execute agent_tick with timeout matching production tick timeout (100ms).
+	// Without this, a malicious or buggy agent could hang replay indefinitely.
 	tickFn := mod.ExportedFunction("agent_tick")
 	if tickFn == nil {
 		result.Error = fmt.Errorf("replay: agent_tick not exported")
 		return result
 	}
-	if _, err := tickFn.Call(ctx); err != nil {
+	tickCtx, tickCancel := context.WithTimeout(ctx, replayTickTimeout)
+	defer tickCancel()
+	if _, err := tickFn.Call(tickCtx); err != nil {
 		result.Error = fmt.Errorf("replay: agent_tick: %w", err)
 		return result
 	}
@@ -517,11 +524,14 @@ func (e *Engine) ReplayChain(
 		}
 		repErr.err = nil
 
-		if _, err := tickFn.Call(ctx); err != nil {
+		tickCtx, tickCancel := context.WithTimeout(ctx, replayTickTimeout)
+		if _, err := tickFn.Call(tickCtx); err != nil {
+			tickCancel()
 			result.Error = fmt.Errorf("replay chain: tick %d: %w", snap.TickNumber, err)
 			result.FailedAtTick = snap.TickNumber
 			return result
 		}
+		tickCancel()
 
 		if repErr.err != nil {
 			result.Error = fmt.Errorf("replay chain: tick %d hostcall: %w", snap.TickNumber, repErr.err)

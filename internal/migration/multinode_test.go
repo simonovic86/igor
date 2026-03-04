@@ -78,7 +78,7 @@ func newMultiNodeEnv(t *testing.T, nodeCount int) *multiNodeEnv {
 		t.Cleanup(func() { eng.Close(ctx) })
 		env.engines[i] = eng
 
-		env.migSvcs[i] = NewService(h, eng, st, "full", false, logger)
+		env.migSvcs[i] = NewService(h, eng, st, "full", false, 1000, logger)
 	}
 
 	return env

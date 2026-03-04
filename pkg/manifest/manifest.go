@@ -2,6 +2,14 @@ package manifest
 
 import "sort"
 
+const (
+	// DefaultMaxMemoryBytes is the default WASM memory limit (64MB).
+	DefaultMaxMemoryBytes = 64 * 1024 * 1024
+
+	// WASMPageSize is the size of a single WASM memory page.
+	WASMPageSize = 65536
+)
+
 // Manifest describes an agent's identity, requirements, and policies.
 type Manifest struct {
 	// AgentID is the unique identifier for this agent.
@@ -15,7 +23,8 @@ type Manifest struct {
 	Capabilities *CapabilityManifest
 
 	// MigrationPolicy defines rules for when and how the agent can migrate.
-	MigrationPolicy MigrationPolicy
+	// nil means no policy specified — migration is allowed by default.
+	MigrationPolicy *MigrationPolicy
 
 	// ResourceLimits defines the maximum resources the agent may consume.
 	ResourceLimits ResourceLimits
@@ -78,4 +87,20 @@ type ResourceLimits struct {
 
 	// MaxStorageBytes is the maximum persistent storage allowed.
 	MaxStorageBytes uint64
+}
+
+// MemoryLimitPages returns the memory limit in WASM pages.
+// Returns the default (1024 pages = 64MB) if MaxMemoryBytes is 0.
+func (r ResourceLimits) MemoryLimitPages() uint32 {
+	if r.MaxMemoryBytes == 0 {
+		return uint32(DefaultMaxMemoryBytes / WASMPageSize)
+	}
+	pages := r.MaxMemoryBytes / WASMPageSize
+	if pages == 0 {
+		pages = 1
+	}
+	if pages > 65536 {
+		pages = 65536
+	}
+	return uint32(pages)
 }
