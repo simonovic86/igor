@@ -5,6 +5,7 @@ package migration
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -82,6 +83,112 @@ func NewService(
 	return svc
 }
 
+// signingKey extracts the Ed25519 private key from the libp2p host's peerstore.
+// Returns nil if the key is unavailable or not Ed25519.
+func (s *Service) signingKey() ed25519.PrivateKey {
+	privKey := s.host.Peerstore().PrivKey(s.host.ID())
+	if privKey == nil {
+		return nil
+	}
+	raw, err := privKey.Raw()
+	if err != nil {
+		s.logger.Warn("Failed to extract raw signing key", "error", err)
+		return nil
+	}
+	if len(raw) != ed25519.PrivateKeySize {
+		return nil
+	}
+	return ed25519.PrivateKey(raw)
+}
+
+// buildMigrationPackage assembles the AgentPackage for migration, including
+// WASM binary, checkpoint, manifest, receipts, and replay data.
+func (s *Service) buildMigrationPackage(
+	ctx context.Context,
+	agentID string,
+	wasmPath string,
+) (protomsg.AgentPackage, *agent.Instance, error) {
+	wasmBinary, err := os.ReadFile(wasmPath)
+	if err != nil {
+		return protomsg.AgentPackage{}, nil, fmt.Errorf("failed to read WASM binary: %w", err)
+	}
+
+	// Load manifest from sidecar file (wasmPath with .json extension)
+	var manifestPath string
+	if strings.HasSuffix(wasmPath, ".wasm") {
+		manifestPath = strings.TrimSuffix(wasmPath, ".wasm") + ".manifest.json"
+	}
+	manifestData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		manifestData = []byte("{}")
+		s.logger.Info("No manifest file found, using empty capabilities",
+			"expected_path", manifestPath,
+		)
+	}
+
+	checkpoint, err := s.storageProvider.LoadCheckpoint(ctx, agentID)
+	if err != nil {
+		return protomsg.AgentPackage{}, nil, fmt.Errorf("failed to load checkpoint: %w", err)
+	}
+
+	s.logger.Info("Checkpoint loaded for migration",
+		"agent_id", agentID,
+		"checkpoint_size", len(checkpoint),
+	)
+
+	var budgetVal, pricePerSecond int64
+	if parsedBudget, parsedPrice, _, _, _, parseErr := agent.ParseCheckpointHeader(checkpoint); parseErr == nil {
+		budgetVal = parsedBudget
+		pricePerSecond = parsedPrice
+		s.logger.Info("Budget metadata extracted",
+			"budget", budget.Format(budgetVal),
+			"price_per_second", budget.Format(pricePerSecond),
+		)
+	} else {
+		s.logger.Warn("Could not parse checkpoint header for budget extraction",
+			"agent_id", agentID,
+			"error", parseErr,
+		)
+	}
+
+	receiptData, err := s.storageProvider.LoadReceipts(ctx, agentID)
+	if err != nil {
+		receiptData = nil
+	}
+
+	wasmHashArr := sha256.Sum256(wasmBinary)
+	pkg := protomsg.AgentPackage{
+		AgentID:        agentID,
+		WASMBinary:     wasmBinary,
+		WASMHash:       wasmHashArr[:],
+		Checkpoint:     checkpoint,
+		ManifestData:   manifestData,
+		Budget:         budgetVal,
+		PricePerSecond: pricePerSecond,
+		Receipts:       receiptData,
+	}
+
+	s.mu.RLock()
+	localInstance, hasInstance := s.activeAgents[agentID]
+	s.mu.RUnlock()
+	if hasInstance {
+		pkg.ReplayData = replayDataFromInstance(localInstance, checkpoint)
+		if pkg.ReplayData != nil {
+			s.logger.Info("Replay data included in migration package",
+				"agent_id", agentID,
+				"tick", pkg.ReplayData.TickNumber,
+				"entries", len(pkg.ReplayData.Entries),
+			)
+		} else {
+			s.logger.Info("No replay data available for migration package",
+				"agent_id", agentID,
+			)
+		}
+	}
+
+	return pkg, localInstance, nil
+}
+
 // MigrateAgent migrates an agent to a target peer.
 func (s *Service) MigrateAgent(
 	ctx context.Context,
@@ -110,84 +217,9 @@ func (s *Service) MigrateAgent(
 		return fmt.Errorf("failed to connect to target peer: %w", err)
 	}
 
-	// Load WASM binary
-	wasmBinary, err := os.ReadFile(wasmPath)
+	pkg, localInstance, err := s.buildMigrationPackage(ctx, agentID, wasmPath)
 	if err != nil {
-		return fmt.Errorf("failed to read WASM binary: %w", err)
-	}
-
-	// Load manifest from sidecar file (wasmPath with .json extension)
-	var manifestPath string
-	if strings.HasSuffix(wasmPath, ".wasm") {
-		manifestPath = strings.TrimSuffix(wasmPath, ".wasm") + ".manifest.json"
-	}
-	manifestData, err := os.ReadFile(manifestPath)
-	if err != nil {
-		// No manifest file — use empty capabilities (backward compatible)
-		manifestData = []byte("{}")
-		s.logger.Info("No manifest file found, using empty capabilities",
-			"expected_path", manifestPath,
-		)
-	}
-
-	// Load checkpoint from storage
-	checkpoint, err := s.storageProvider.LoadCheckpoint(ctx, agentID)
-	if err != nil {
-		return fmt.Errorf("failed to load checkpoint: %w", err)
-	}
-
-	s.logger.Info("Checkpoint loaded for migration",
-		"agent_id", agentID,
-		"checkpoint_size", len(checkpoint),
-	)
-
-	// Extract budget metadata from checkpoint for package visibility
-	var budgetVal, pricePerSecond int64
-	if parsedBudget, parsedPrice, _, _, _, err := agent.ParseCheckpointHeader(checkpoint); err == nil {
-		budgetVal = parsedBudget
-		pricePerSecond = parsedPrice
-		s.logger.Info("Budget metadata extracted",
-			"budget", budget.Format(budgetVal),
-			"price_per_second", budget.Format(pricePerSecond),
-		)
-	} else {
-		s.logger.Warn("Could not parse checkpoint header for budget extraction",
-			"agent_id", agentID,
-			"error", err,
-		)
-	}
-
-	wasmHashArr := sha256.Sum256(wasmBinary)
-	pkg := protomsg.AgentPackage{
-		AgentID:        agentID,
-		WASMBinary:     wasmBinary,
-		WASMHash:       wasmHashArr[:],
-		Checkpoint:     checkpoint,
-		ManifestData:   manifestData,
-		Budget:         budgetVal,
-		PricePerSecond: pricePerSecond,
-	}
-
-	// Include replay verification data from the active instance (if available).
-	// The staleness guard in replayDataFromInstance ensures the replay data
-	// corresponds to the checkpoint we're sending.
-	// Save the instance pointer for compare-and-delete after transfer.
-	s.mu.RLock()
-	localInstance, hasInstance := s.activeAgents[agentID]
-	s.mu.RUnlock()
-	if hasInstance {
-		pkg.ReplayData = replayDataFromInstance(localInstance, checkpoint)
-		if pkg.ReplayData != nil {
-			s.logger.Info("Replay data included in migration package",
-				"agent_id", agentID,
-				"tick", pkg.ReplayData.TickNumber,
-				"entries", len(pkg.ReplayData.Entries),
-			)
-		} else {
-			s.logger.Info("No replay data available for migration package",
-				"agent_id", agentID,
-			)
-		}
+		return err
 	}
 
 	transfer := protomsg.AgentTransfer{
@@ -248,6 +280,11 @@ func (s *Service) MigrateAgent(
 		return fmt.Errorf("migration succeeded but failed to delete local checkpoint: %w", err)
 	}
 	s.logger.Info("Local checkpoint deleted", "agent_id", agentID)
+
+	// Delete local receipts (non-fatal).
+	if err := s.storageProvider.DeleteReceipts(ctx, agentID); err != nil {
+		s.logger.Error("Failed to delete local receipts", "error", err)
+	}
 
 	s.logger.Info("Migration completed successfully", "agent_id", agentID)
 	return nil
@@ -347,6 +384,13 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		return
 	}
 
+	// Save receipts alongside checkpoint (non-fatal).
+	if len(pkg.Receipts) > 0 {
+		if err := s.storageProvider.SaveReceipts(ctx, pkg.AgentID, pkg.Receipts); err != nil {
+			s.logger.Error("Failed to save receipts", "error", err)
+		}
+	}
+
 	instance, err := agent.LoadAgentFromBytes(
 		ctx,
 		s.runtimeEngine,
@@ -356,6 +400,8 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		pkg.Budget,
 		pkg.PricePerSecond,
 		pkg.ManifestData,
+		s.signingKey(),
+		s.host.ID().String(),
 		s.logger,
 	)
 	if err != nil {

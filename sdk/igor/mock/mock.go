@@ -18,6 +18,7 @@
 package mock
 
 import (
+	"fmt"
 	"math/rand/v2"
 	"sync"
 	"time"
@@ -27,10 +28,12 @@ import (
 
 // Runtime provides mock implementations of Igor hostcalls for native testing.
 type Runtime struct {
-	mu      sync.Mutex
-	clock   func() int64
-	randSrc *rand.Rand
-	logs    []string
+	mu       sync.Mutex
+	clock    func() int64
+	randSrc  *rand.Rand
+	logs     []string
+	budget   int64
+	receipts [][]byte
 }
 
 // New creates a mock runtime using the real system clock and crypto-seeded rand.
@@ -125,4 +128,42 @@ func (r *Runtime) LogEmit(msg string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.logs = append(r.logs, msg)
+}
+
+// WalletBalance implements MockBackend.
+func (r *Runtime) WalletBalance() int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.budget
+}
+
+// WalletReceiptCount implements MockBackend.
+func (r *Runtime) WalletReceiptCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.receipts)
+}
+
+// WalletReceipt implements MockBackend.
+func (r *Runtime) WalletReceipt(index int) ([]byte, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if index < 0 || index >= len(r.receipts) {
+		return nil, fmt.Errorf("receipt index %d out of range", index)
+	}
+	return r.receipts[index], nil
+}
+
+// SetBudget sets the mock budget value returned by WalletBalance.
+func (r *Runtime) SetBudget(b int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.budget = b
+}
+
+// AddReceipt adds a serialized receipt for WalletReceipt to return.
+func (r *Runtime) AddReceipt(data []byte) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.receipts = append(r.receipts, data)
 }

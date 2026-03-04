@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
@@ -17,6 +18,7 @@ import (
 	"github.com/simonovic86/igor/internal/storage"
 	"github.com/simonovic86/igor/pkg/budget"
 	"github.com/simonovic86/igor/pkg/manifest"
+	"github.com/simonovic86/igor/pkg/receipt"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 )
@@ -72,10 +74,75 @@ type Instance struct {
 	// Replay verification state: sliding window of recent tick snapshots (CM-4).
 	ReplayWindow    []TickSnapshot // Recent tick snapshots for verification
 	replayWindowMax int            // Maximum snapshots retained (0 = use DefaultReplayWindowSize)
+
+	// Receipt tracking (Phase 4: Economics)
+	Receipts        []receipt.Receipt  // Accumulated payment receipts
+	lastReceiptTick uint64             // Tick number of the last receipt's epoch end
+	epochCost       int64              // Accumulated cost since last receipt
+	signingKey      ed25519.PrivateKey // Node's signing key; nil = receipts disabled
+	nodeID          string             // Node's peer ID string
+}
+
+// walletStateRef is an indirection layer that lets wallet hostcall closures
+// reference the Instance before it is fully constructed. The ref is populated
+// after Instance creation; wallet hostcalls are only invoked during agent_tick.
+type walletStateRef struct {
+	instance *Instance
+}
+
+func (w *walletStateRef) GetBudget() int64 { return w.instance.Budget }
+func (w *walletStateRef) GetReceiptCount() int {
+	return len(w.instance.Receipts)
+}
+func (w *walletStateRef) GetReceiptBytes(index int) ([]byte, error) {
+	return w.instance.GetReceiptBytes(index)
+}
+
+// GetBudget returns the current budget (implements hostcall.WalletState).
+func (i *Instance) GetBudget() int64 {
+	return i.Budget
+}
+
+// GetReceiptCount returns the number of receipts (implements hostcall.WalletState).
+func (i *Instance) GetReceiptCount() int {
+	return len(i.Receipts)
+}
+
+// GetReceiptBytes returns the serialized receipt at the given index.
+func (i *Instance) GetReceiptBytes(index int) ([]byte, error) {
+	if index < 0 || index >= len(i.Receipts) {
+		return nil, fmt.Errorf("receipt index %d out of range [0, %d)", index, len(i.Receipts))
+	}
+	return i.Receipts[index].MarshalBinary(), nil
+}
+
+// CreateReceipt creates and signs a receipt for the current checkpoint epoch.
+// Called after each successful checkpoint save. No-op if signing key is nil.
+func (i *Instance) CreateReceipt() error {
+	if i.signingKey == nil {
+		return nil
+	}
+	r := receipt.Receipt{
+		AgentID:        i.AgentID,
+		NodeID:         i.nodeID,
+		EpochStart:     i.lastReceiptTick + 1,
+		EpochEnd:       i.TickNumber,
+		CostMicrocents: i.epochCost,
+		BudgetAfter:    i.Budget,
+		Timestamp:      time.Now().UnixNano(),
+	}
+	if err := r.Sign(i.signingKey); err != nil {
+		return fmt.Errorf("sign receipt: %w", err)
+	}
+	i.Receipts = append(i.Receipts, r)
+	i.lastReceiptTick = i.TickNumber
+	i.epochCost = 0
+	return nil
 }
 
 // LoadAgent loads and compiles a WASM agent from a file path.
 // manifestData is the JSON capability manifest; nil or empty means no capabilities.
+// signingKey and nodeID enable payment receipt signing; pass nil/empty to disable.
 func LoadAgent(
 	ctx context.Context,
 	engine *runtime.Engine,
@@ -85,6 +152,8 @@ func LoadAgent(
 	budgetVal int64,
 	pricePerSecond int64,
 	manifestData []byte,
+	signingKey ed25519.PrivateKey,
+	nodeID string,
 	logger *slog.Logger,
 ) (*Instance, error) {
 	logger.Info("Loading agent", "agent_id", agentID, "path", wasmPath)
@@ -94,11 +163,12 @@ func LoadAgent(
 		return nil, fmt.Errorf("failed to read WASM file: %w", err)
 	}
 
-	return loadAgent(ctx, engine, wasmBytes, agentID, storageProvider, budgetVal, pricePerSecond, manifestData, logger)
+	return loadAgent(ctx, engine, wasmBytes, agentID, storageProvider, budgetVal, pricePerSecond, manifestData, signingKey, nodeID, logger)
 }
 
 // LoadAgentFromBytes loads and compiles a WASM agent from raw bytes.
 // Used by the migration service to avoid writing WASM to a temporary file.
+// signingKey and nodeID enable payment receipt signing; pass nil/empty to disable.
 func LoadAgentFromBytes(
 	ctx context.Context,
 	engine *runtime.Engine,
@@ -108,9 +178,11 @@ func LoadAgentFromBytes(
 	budgetVal int64,
 	pricePerSecond int64,
 	manifestData []byte,
+	signingKey ed25519.PrivateKey,
+	nodeID string,
 	logger *slog.Logger,
 ) (*Instance, error) {
-	return loadAgent(ctx, engine, wasmBytes, agentID, storageProvider, budgetVal, pricePerSecond, manifestData, logger)
+	return loadAgent(ctx, engine, wasmBytes, agentID, storageProvider, budgetVal, pricePerSecond, manifestData, signingKey, nodeID, logger)
 }
 
 func loadAgent(
@@ -122,6 +194,8 @@ func loadAgent(
 	budgetVal int64,
 	pricePerSecond int64,
 	manifestData []byte,
+	signingKey ed25519.PrivateKey,
+	nodeID string,
 	logger *slog.Logger,
 ) (*Instance, error) {
 	fullManifest, err := manifest.ParseManifest(manifestData)
@@ -149,7 +223,13 @@ func loadAgent(
 
 	el := eventlog.NewEventLog(eventlog.DefaultMaxTicks)
 
+	// Create a wallet state ref that will be populated after the Instance is created.
+	// The wallet hostcall closures capture this ref; it is only dereferenced during
+	// agent_tick (not during loading), so the nil instance is safe at this point.
+	wsRef := &walletStateRef{}
+
 	registry := hostcall.NewRegistry(logger, el)
+	registry.SetWalletState(wsRef)
 	if err := registry.RegisterHostModule(ctx, engine.Runtime(), capManifest); err != nil {
 		return nil, fmt.Errorf("failed to register host module: %w", err)
 	}
@@ -187,7 +267,13 @@ func loadAgent(
 		EventLog:       el,
 		TickNumber:     0,
 		logger:         logger,
+		signingKey:     signingKey,
+		nodeID:         nodeID,
 	}
+
+	// Now that the instance exists, wire the wallet state ref so wallet
+	// hostcalls can access budget and receipts during agent_tick.
+	wsRef.instance = instance
 
 	if err := instance.verifyExports(); err != nil {
 		return nil, fmt.Errorf("agent lifecycle validation failed: %w", err)
@@ -318,6 +404,7 @@ func (i *Instance) Tick(ctx context.Context) (bool, error) {
 		costMicrocents = nanos * i.PricePerSecond / 1_000_000_000
 	}
 	i.Budget -= costMicrocents
+	i.epochCost += costMicrocents
 
 	observationCount := 0
 	if sealed != nil {
@@ -492,6 +579,17 @@ func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 		return fmt.Errorf("failed to save checkpoint: %w", err)
 	}
 
+	// Create and persist payment receipt for this epoch (non-fatal on failure).
+	if err := i.CreateReceipt(); err != nil {
+		i.logger.Error("Failed to create receipt", "error", err)
+	}
+	if len(i.Receipts) > 0 {
+		data := receipt.MarshalReceipts(i.Receipts)
+		if err := i.Storage.SaveReceipts(ctx, i.AgentID, data); err != nil {
+			i.logger.Error("Failed to save receipts", "error", err)
+		}
+	}
+
 	return nil
 }
 
@@ -528,6 +626,21 @@ func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 		"price_per_second", budget.Format(restoredPrice),
 		"tick_number", restoredTick,
 	)
+
+	// Load receipts from storage (non-fatal: missing receipts is normal for old checkpoints).
+	receiptData, receiptErr := i.Storage.LoadReceipts(ctx, i.AgentID)
+	if receiptErr == nil {
+		receipts, parseErr := receipt.UnmarshalReceipts(receiptData)
+		if parseErr != nil {
+			i.logger.Warn("Failed to parse receipts", "error", parseErr)
+		} else {
+			i.Receipts = receipts
+			if len(receipts) > 0 {
+				i.lastReceiptTick = receipts[len(receipts)-1].EpochEnd
+			}
+			i.logger.Info("Receipts restored", "count", len(receipts))
+		}
+	}
 
 	// Resume agent from state
 	if err := i.Resume(ctx, state); err != nil {

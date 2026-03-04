@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"flag"
 	"fmt"
@@ -148,7 +149,7 @@ func main() {
 	// If --run-agent flag is provided, run agent locally
 	if *runAgent != "" {
 		budgetMicrocents := budget.FromFloat(*budgetFlag)
-		if err := runLocalAgent(ctx, cfg, engine, storageProvider, *runAgent, budgetMicrocents, *manifestPath, migrationSvc, logger); err != nil {
+		if err := runLocalAgent(ctx, cfg, engine, storageProvider, *runAgent, budgetMicrocents, *manifestPath, migrationSvc, node, logger); err != nil {
 			logger.Error("Failed to run agent", "error", err)
 			os.Exit(1)
 		}
@@ -186,6 +187,20 @@ func loadManifestData(wasmPath, manifestPathFlag string, logger *slog.Logger) []
 	return manifestData
 }
 
+// extractSigningKey returns the Ed25519 private key and peer ID from the node,
+// or nil/"" if the key is not available or not Ed25519.
+func extractSigningKey(node *p2p.Node) (ed25519.PrivateKey, string) {
+	privKey := node.Host.Peerstore().PrivKey(node.Host.ID())
+	if privKey == nil {
+		return nil, ""
+	}
+	raw, err := privKey.Raw()
+	if err != nil || len(raw) != ed25519.PrivateKeySize {
+		return nil, ""
+	}
+	return ed25519.PrivateKey(raw), node.Host.ID().String()
+}
+
 // runLocalAgent loads and executes an agent locally with tick loop and checkpointing.
 func runLocalAgent(
 	ctx context.Context,
@@ -196,9 +211,12 @@ func runLocalAgent(
 	budgetMicrocents int64,
 	manifestPathFlag string,
 	migrationSvc *migration.Service,
+	node *p2p.Node,
 	logger *slog.Logger,
 ) error {
 	manifestData := loadManifestData(wasmPath, manifestPathFlag, logger)
+
+	signingKey, nodeID := extractSigningKey(node)
 
 	// Load agent with budget and manifest
 	instance, err := agent.LoadAgent(
@@ -210,6 +228,8 @@ func runLocalAgent(
 		budgetMicrocents,
 		cfg.PricePerSecond,
 		manifestData,
+		signingKey,
+		nodeID,
 		logger,
 	)
 	if err != nil {

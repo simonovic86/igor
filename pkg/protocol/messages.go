@@ -10,6 +10,7 @@ type AgentPackage struct {
 	Budget         int64
 	PricePerSecond int64
 	ReplayData     *ReplayData `json:",omitempty"`
+	Receipts       []byte      `json:",omitempty"` // Serialized payment receipts
 }
 
 // ReplayData contains replay verification data for a single tick.

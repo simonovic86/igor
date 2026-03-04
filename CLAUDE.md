@@ -48,7 +48,7 @@ Atomic writes via temp file → fsync → rename.
 - `cmd/igord/` — CLI entry point, flag parsing, tick loop orchestration
 - `internal/agent/` — Agent lifecycle: load WASM, init, tick, checkpoint, resume, budget deduction
 - `internal/runtime/` — wazero sandbox: 64MB memory limit, WASI with fs/net disabled
-- `internal/hostcall/` — `igor` host module: clock, rand, log hostcall implementations
+- `internal/hostcall/` — `igor` host module: clock, rand, log, wallet hostcall implementations
 - `internal/eventlog/` — Per-tick observation event log for deterministic replay
 - `internal/replay/` — Deterministic single-tick replay verification engine
 - `internal/migration/` — P2P migration over libp2p stream protocol `/igor/migrate/1.0.0`
@@ -56,7 +56,8 @@ Atomic writes via temp file → fsync → rename.
 - `internal/p2p/` — libp2p host setup, bootstrap peers, protocol handlers
 - `pkg/manifest/` — Capability manifest parsing and validation
 - `pkg/protocol/` — Message types: `AgentPackage`, `AgentTransfer`, `AgentStarted`
-- `sdk/igor/` — Agent SDK: hostcall wrappers (ClockNow, RandBytes, Log), lifecycle plumbing (Agent interface)
+- `pkg/receipt/` — Payment receipt data structure, Ed25519 signing, binary serialization
+- `sdk/igor/` — Agent SDK: hostcall wrappers (ClockNow, RandBytes, Log, WalletBalance), lifecycle plumbing (Agent interface)
 
 ### Migration flow
 Source checkpoints → packages (WASM + checkpoint + budget) → transfers over libp2p → target instantiates + resumes → target confirms → source terminates + deletes local checkpoint. Single-instance invariant maintained throughout.

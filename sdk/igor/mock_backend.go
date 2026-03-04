@@ -6,6 +6,9 @@ type MockBackend interface {
 	ClockNow() int64
 	RandBytes(buf []byte) error
 	LogEmit(msg string)
+	WalletBalance() int64
+	WalletReceiptCount() int
+	WalletReceipt(index int) ([]byte, error)
 }
 
 // activeMock is set by mock.Enable() and cleared by mock.Disable().

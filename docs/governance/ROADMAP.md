@@ -1,8 +1,8 @@
 # Igor v0 Roadmap
 
-## Current Status: Phase 3 Complete
+## Current Status: Phase 4 In Progress
 
-Igor v0 has completed **Phase 2 (Survival)** and **Phase 3 (Autonomy)**.
+Igor v0 has completed **Phase 2 (Survival)**, **Phase 3 (Autonomy)**, and started **Phase 4 (Economics)** with Task 10 (Payment Receipt Signing).
 
 ### Completed Tasks
 
@@ -95,23 +95,21 @@ Igor v0 has completed **Phase 2 (Survival)** and **Phase 3 (Autonomy)**.
 
 **Goal:** Implement cryptographic payment proofs and pricing mechanisms.
 
-### Task 10: Payment Receipt Signing
+### Task 10: Payment Receipt Signing ✅
 
-**Objective:** Nodes provide cryptographic proof of execution.
+**Status:** Complete. Cryptographic payment receipts fully implemented.
 
-**Scope:**
-- Node signs receipts with peer key
-- Receipt includes execution time, cost, and epoch
-- Agent verifies receipts via wallet hostcalls
-- Store receipts for audit trail
+**Delivered:**
+- Receipt data structure with Ed25519 signing (`pkg/receipt/`)
+- `wallet_balance`, `wallet_receipt_count`, `wallet_receipt` hostcalls (`internal/hostcall/wallet.go`)
+- Receipt storage persistence (`internal/storage/` — SaveReceipts/LoadReceipts/DeleteReceipts)
+- Receipt creation per checkpoint epoch with cost tracking (`internal/agent/instance.go`)
+- Receipts travel with agents during migration (`internal/migration/service.go`)
+- Wallet replay support for deterministic verification (`internal/replay/engine.go`)
+- SDK wrappers and mocks for agent development (`sdk/igor/`)
+- Simulator wallet hostcall support (`internal/simulator/hostcalls.go`)
 
-**Components:**
-- Receipt data structure tied to checkpoints/epochs
-- Signing with libp2p identity
-- `wallet.*` hostcall implementation
-- Receipt storage
-
-**Outcome:** Auditable payment trail with hostcall-mediated access.
+**Outcome:** Auditable payment trail with hostcall-mediated access. Agents introspect budget and receipts. Receipts signed by node peer key, verified by anyone with the public key.
 
 ### Task 11: Node Pricing & Economic Settlement
 
@@ -438,8 +436,8 @@ Phase 2 is **validated** when:
 
 ## Next Immediate Steps
 
-Phase 3 complete. Next:
+Phase 3 complete. Phase 4 in progress (Task 10 complete). Next:
 
-1. **Hardening** - Bug fixes, test coverage, documentation accuracy
-2. **Extended testing** - Run agents with hostcalls for hours/days under load
-3. **Task 10: Payment Receipt Signing** - Cryptographic proof of execution, wallet hostcalls
+1. **Task 11: Node Pricing & Economic Settlement** - Price advertisement, budget adapters, settlement interface
+2. **Extended testing** - Run agents with wallet hostcalls under load
+3. **Hardening** - Bug fixes, test coverage, documentation accuracy

@@ -156,7 +156,7 @@ func TestLoadAgent_WithManifest(t *testing.T) {
 
 	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
 
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-agent", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, logger)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-agent", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestLoadAgent_EmptyManifest(t *testing.T) {
 
 	// Empty manifest — backward compatible, but agent imports hostcalls
 	// so instantiation should fail (deny by default)
-	_, err = LoadAgent(ctx, engine, wasmPath, "test-empty", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), []byte("{}"), logger)
+	_, err = LoadAgent(ctx, engine, wasmPath, "test-empty", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), []byte("{}"), nil, "", logger)
 	if err == nil {
 		t.Error("expected error when agent imports undeclared capabilities")
 	}
@@ -216,7 +216,7 @@ func TestLoadAgent_InvalidManifest(t *testing.T) {
 		t.Fatalf("NewFSProvider: %v", err)
 	}
 
-	_, err = LoadAgent(ctx, engine, wasmPath, "test-bad-manifest", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), []byte("not json"), logger)
+	_, err = LoadAgent(ctx, engine, wasmPath, "test-bad-manifest", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), []byte("not json"), nil, "", logger)
 	if err == nil {
 		t.Error("expected error for invalid JSON manifest")
 	}
@@ -239,7 +239,7 @@ func TestTick_RecordObservations(t *testing.T) {
 	}
 
 	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-tick", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, logger)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-tick", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestTick_BudgetExhausted(t *testing.T) {
 	}
 
 	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-budget", storageProvider, 0, budget.FromFloat(0.01), manifest, logger)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-budget", storageProvider, 0, budget.FromFloat(0.01), manifest, nil, "", logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestCheckpointAndResume(t *testing.T) {
 
 	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
 	priceMicrocents := budget.FromFloat(0.5)
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-ckpt", storageProvider, budget.FromFloat(10.0), priceMicrocents, manifest, logger)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-ckpt", storageProvider, budget.FromFloat(10.0), priceMicrocents, manifest, nil, "", logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}
@@ -425,7 +425,7 @@ func TestReplayWindow_Eviction(t *testing.T) {
 	}
 
 	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-evict", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, logger)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-evict", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}
@@ -687,7 +687,7 @@ func TestLoadAgent_ExcessiveMemoryRejected(t *testing.T) {
 		"resource_limits": {"max_memory_bytes": 134217728}
 	}`)
 
-	_, err = LoadAgent(ctx, engine, wasmPath, "test-mem", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, logger)
+	_, err = LoadAgent(ctx, engine, wasmPath, "test-mem", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", logger)
 	if err == nil {
 		t.Error("expected error when agent requires more memory than node provides")
 	}
@@ -715,7 +715,7 @@ func TestLoadAgent_ValidMemoryAccepted(t *testing.T) {
 		"resource_limits": {"max_memory_bytes": 33554432}
 	}`)
 
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-mem-ok", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, logger)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-mem-ok", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}
@@ -749,7 +749,7 @@ func TestTick_TimeoutEnforcement(t *testing.T) {
 	}
 
 	// No hostcall imports needed — the infinite-loop agent doesn't use them.
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-timeout", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), nil, logger)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-timeout", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), nil, nil, "", logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}

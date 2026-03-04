@@ -16,8 +16,9 @@ import (
 
 // Registry builds and manages the igor host module for a single agent.
 type Registry struct {
-	logger   *slog.Logger
-	eventLog *eventlog.EventLog
+	logger      *slog.Logger
+	eventLog    *eventlog.EventLog
+	walletState WalletState // optional; nil = wallet hostcalls not available
 }
 
 // NewRegistry creates a hostcall registry bound to the given event log.
@@ -26,6 +27,12 @@ func NewRegistry(logger *slog.Logger, eventLog *eventlog.EventLog) *Registry {
 		logger:   logger,
 		eventLog: eventLog,
 	}
+}
+
+// SetWalletState installs the wallet state provider for wallet.* hostcalls.
+// Must be called before RegisterHostModule if the agent declares "wallet" capability.
+func (r *Registry) SetWalletState(ws WalletState) {
+	r.walletState = ws
 }
 
 // RegisterHostModule builds and instantiates the "igor" WASM host module
@@ -61,6 +68,11 @@ func (r *Registry) RegisterHostModule(
 
 	if m.Has("log") {
 		r.registerLog(builder)
+		registered++
+	}
+
+	if m.Has("wallet") && r.walletState != nil {
+		r.registerWallet(builder, r.walletState)
 		registered++
 	}
 
