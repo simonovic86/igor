@@ -268,6 +268,11 @@ func registerReplayHostModule(
 		registered++
 	}
 
+	if m.Has("wallet") {
+		registerReplayWallet(builder, iter, repErr)
+		registered++
+	}
+
 	if registered == 0 {
 		return nil
 	}
@@ -343,6 +348,71 @@ func registerReplayLog(
 			}
 		}).
 		Export("log_emit")
+}
+
+// registerReplayWallet registers wallet_balance, wallet_receipt_count, and
+// wallet_receipt that return recorded values from the event log.
+func registerReplayWallet(
+	builder wazero.HostModuleBuilder,
+	iter *entryIterator,
+	repErr *replayError,
+) {
+	// wallet_balance() -> i64
+	builder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context) int64 {
+			entry, err := iter.next(eventlog.WalletBalance)
+			if err != nil {
+				repErr.err = err
+				return 0
+			}
+			if len(entry.Payload) != 8 {
+				repErr.err = fmt.Errorf(
+					"wallet_balance payload length %d, expected 8", len(entry.Payload),
+				)
+				return 0
+			}
+			return int64(binary.LittleEndian.Uint64(entry.Payload))
+		}).
+		Export("wallet_balance")
+
+	// wallet_receipt_count() -> i32
+	builder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context) int32 {
+			entry, err := iter.next(eventlog.WalletReceiptCount)
+			if err != nil {
+				repErr.err = err
+				return 0
+			}
+			if len(entry.Payload) != 4 {
+				repErr.err = fmt.Errorf(
+					"wallet_receipt_count payload length %d, expected 4", len(entry.Payload),
+				)
+				return 0
+			}
+			return int32(binary.LittleEndian.Uint32(entry.Payload))
+		}).
+		Export("wallet_receipt_count")
+
+	// wallet_receipt(index i32, buf_ptr i32, buf_len i32) -> i32
+	builder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context, m api.Module, _ int32, ptr, length uint32) int32 {
+			entry, err := iter.next(eventlog.WalletReceipt)
+			if err != nil {
+				repErr.err = err
+				return -1
+			}
+			if uint32(len(entry.Payload)) > length {
+				repErr.err = fmt.Errorf("wallet_receipt payload %d exceeds buffer %d",
+					len(entry.Payload), length)
+				return -4
+			}
+			if !m.Memory().Write(ptr, entry.Payload) {
+				repErr.err = fmt.Errorf("wallet_receipt memory write failed")
+				return -4
+			}
+			return int32(len(entry.Payload))
+		}).
+		Export("wallet_receipt")
 }
 
 // replayResume restores agent state in the replay module.
@@ -640,12 +710,77 @@ func registerChainReplayHostModule(
 		registered++
 	}
 
+	if m.Has("wallet") {
+		registerChainReplayWallet(builder, holder, repErr)
+		registered++
+	}
+
 	if registered == 0 {
 		return nil
 	}
 
 	_, err := builder.Instantiate(ctx)
 	return err
+}
+
+// registerChainReplayWallet registers wallet replay hostcalls that read from
+// the iteratorHolder, allowing the iterator to be swapped between ticks.
+func registerChainReplayWallet(
+	builder wazero.HostModuleBuilder,
+	holder *iteratorHolder,
+	repErr *replayError,
+) {
+	// wallet_balance() -> i64
+	builder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context) int64 {
+			entry, err := holder.iter.next(eventlog.WalletBalance)
+			if err != nil {
+				repErr.err = err
+				return 0
+			}
+			if len(entry.Payload) != 8 {
+				repErr.err = fmt.Errorf("wallet_balance payload length %d, expected 8", len(entry.Payload))
+				return 0
+			}
+			return int64(binary.LittleEndian.Uint64(entry.Payload))
+		}).
+		Export("wallet_balance")
+
+	// wallet_receipt_count() -> i32
+	builder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context) int32 {
+			entry, err := holder.iter.next(eventlog.WalletReceiptCount)
+			if err != nil {
+				repErr.err = err
+				return 0
+			}
+			if len(entry.Payload) != 4 {
+				repErr.err = fmt.Errorf("wallet_receipt_count payload length %d, expected 4", len(entry.Payload))
+				return 0
+			}
+			return int32(binary.LittleEndian.Uint32(entry.Payload))
+		}).
+		Export("wallet_receipt_count")
+
+	// wallet_receipt(index i32, buf_ptr i32, buf_len i32) -> i32
+	builder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context, mod api.Module, _ int32, ptr, length uint32) int32 {
+			entry, err := holder.iter.next(eventlog.WalletReceipt)
+			if err != nil {
+				repErr.err = err
+				return -1
+			}
+			if uint32(len(entry.Payload)) > length {
+				repErr.err = fmt.Errorf("wallet_receipt payload %d exceeds buffer %d", len(entry.Payload), length)
+				return -4
+			}
+			if !mod.Memory().Write(ptr, entry.Payload) {
+				repErr.err = fmt.Errorf("wallet_receipt memory write failed")
+				return -4
+			}
+			return int32(len(entry.Payload))
+		}).
+		Export("wallet_receipt")
 }
 
 // firstDiff returns the index of the first differing byte, or -1 if equal.

@@ -22,6 +22,7 @@ type deterministicHostcalls struct {
 	randSrc    *rand.Rand
 	eventLog   *eventlog.EventLog
 	logger     *slog.Logger
+	budget     int64
 }
 
 func newDeterministicHostcalls(
@@ -59,6 +60,11 @@ func (d *deterministicHostcalls) registerHostModule(
 
 	if m.Has("log") {
 		d.registerLog(builder)
+		registered++
+	}
+
+	if m.Has("wallet") {
+		d.registerWallet(builder)
 		registered++
 	}
 
@@ -117,4 +123,37 @@ func (d *deterministicHostcalls) registerLog(builder wazero.HostModuleBuilder) {
 			d.logger.Info("[agent]", "msg", string(data))
 		}).
 		Export("log_emit")
+}
+
+func (d *deterministicHostcalls) registerWallet(builder wazero.HostModuleBuilder) {
+	// wallet_balance() -> i64
+	builder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context) int64 {
+			d.mu.Lock()
+			balance := d.budget
+			d.mu.Unlock()
+			payload := binary.LittleEndian.AppendUint64(nil, uint64(balance))
+			d.eventLog.Record(eventlog.WalletBalance, payload)
+			return balance
+		}).
+		Export("wallet_balance")
+
+	// wallet_receipt_count() -> i32
+	builder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context) int32 {
+			// Simulator has no receipts
+			payload := binary.LittleEndian.AppendUint32(nil, 0)
+			d.eventLog.Record(eventlog.WalletReceiptCount, payload)
+			return 0
+		}).
+		Export("wallet_receipt_count")
+
+	// wallet_receipt(index i32, buf_ptr i32, buf_len i32) -> i32
+	builder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context, _ api.Module, _ int32, _, _ uint32) int32 {
+			// Simulator has no receipts — always return error
+			d.eventLog.Record(eventlog.WalletReceipt, nil)
+			return -1
+		}).
+		Export("wallet_receipt")
 }

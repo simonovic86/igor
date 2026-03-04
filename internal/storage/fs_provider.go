@@ -155,10 +155,114 @@ func (p *FSProvider) DeleteCheckpoint(
 	return nil
 }
 
+// SaveReceipts persists an agent's serialized receipt chain atomically.
+func (p *FSProvider) SaveReceipts(
+	ctx context.Context,
+	agentID string,
+	data []byte,
+) error {
+	rPath, err := p.receiptPath(agentID)
+	if err != nil {
+		return err
+	}
+	tempPath := rPath + ".tmp"
+
+	tempFile, err := os.Create(tempPath)
+	if err != nil {
+		return fmt.Errorf("failed to create temp receipts: %w", err)
+	}
+
+	defer func() {
+		if err != nil {
+			os.Remove(tempPath)
+		}
+	}()
+
+	if _, err = tempFile.Write(data); err != nil {
+		tempFile.Close()
+		return fmt.Errorf("failed to write receipts: %w", err)
+	}
+
+	if err = tempFile.Sync(); err != nil {
+		tempFile.Close()
+		return fmt.Errorf("failed to fsync receipts: %w", err)
+	}
+
+	if err = tempFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp receipts: %w", err)
+	}
+
+	if err = os.Rename(tempPath, rPath); err != nil {
+		return fmt.Errorf("failed to rename receipts: %w", err)
+	}
+
+	p.logger.Info("Receipts saved",
+		"agent_id", agentID,
+		"path", rPath,
+		"size_bytes", len(data),
+	)
+	return nil
+}
+
+// LoadReceipts retrieves an agent's serialized receipt chain.
+func (p *FSProvider) LoadReceipts(
+	ctx context.Context,
+	agentID string,
+) ([]byte, error) {
+	rPath, err := p.receiptPath(agentID)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := os.ReadFile(rPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrReceiptsNotFound
+		}
+		return nil, fmt.Errorf("failed to read receipts: %w", err)
+	}
+
+	p.logger.Info("Receipts loaded",
+		"agent_id", agentID,
+		"path", rPath,
+		"size_bytes", len(data),
+	)
+	return data, nil
+}
+
+// DeleteReceipts removes an agent's receipt chain.
+func (p *FSProvider) DeleteReceipts(
+	ctx context.Context,
+	agentID string,
+) error {
+	rPath, err := p.receiptPath(agentID)
+	if err != nil {
+		return err
+	}
+
+	err = os.Remove(rPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete receipts: %w", err)
+	}
+
+	p.logger.Info("Receipts deleted", "agent_id", agentID, "path", rPath)
+	return nil
+}
+
 // checkpointPath returns the filesystem path for an agent's checkpoint.
 // Returns an error if the agentID would escape the base directory (path traversal).
 func (p *FSProvider) checkpointPath(agentID string) (string, error) {
 	path := filepath.Join(p.baseDir, agentID+".checkpoint")
+	cleaned := filepath.Clean(path)
+	if !strings.HasPrefix(cleaned, filepath.Clean(p.baseDir)+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid agent ID: path traversal detected")
+	}
+	return cleaned, nil
+}
+
+// receiptPath returns the filesystem path for an agent's receipts.
+func (p *FSProvider) receiptPath(agentID string) (string, error) {
+	path := filepath.Join(p.baseDir, agentID+".receipts")
 	cleaned := filepath.Clean(path)
 	if !strings.HasPrefix(cleaned, filepath.Clean(p.baseDir)+string(filepath.Separator)) {
 		return "", fmt.Errorf("invalid agent ID: path traversal detected")

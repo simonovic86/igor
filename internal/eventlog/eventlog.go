@@ -9,9 +9,12 @@ import "sync"
 type HostcallID uint16
 
 const (
-	ClockNow  HostcallID = 1
-	RandBytes HostcallID = 2
-	LogEmit   HostcallID = 3
+	ClockNow           HostcallID = 1
+	RandBytes          HostcallID = 2
+	LogEmit            HostcallID = 3
+	WalletBalance      HostcallID = 4
+	WalletReceiptCount HostcallID = 5
+	WalletReceipt      HostcallID = 6
 )
 
 // Entry is a single observation recorded during a tick.

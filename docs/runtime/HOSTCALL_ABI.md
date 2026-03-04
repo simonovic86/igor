@@ -83,16 +83,19 @@ Provides HTTP-like request/response capability. Side-effect hostcall — gated o
 
 **Not implemented in current phase.** Included to demonstrate namespace reservation and design direction.
 
-### wallet — Economic Operations (Future: Phase 4+)
+### wallet — Economic Operations
 
-Provides budget introspection and payment operations.
+Provides budget introspection and receipt access. All wallet hostcalls are observations — recorded in event log for replay (CE-3).
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `wallet_balance` | `() -> (i64)` | Returns current budget in smallest unit. Observation. |
-| `wallet_transfer` | `(dest_ptr: i32, dest_len: i32, amount: i64) -> (i32)` | Transfers funds. Side effect. |
+| `wallet_balance` | `() -> (i64)` | Returns current budget in microcents. Observation. |
+| `wallet_receipt_count` | `() -> (i32)` | Returns number of receipts accumulated by the agent. Observation. |
+| `wallet_receipt` | `(index: i32, buf_ptr: i32, buf_len: i32) -> (i32)` | Copies receipt at `index` into buffer. Returns bytes written, -1 on invalid index, -4 if buffer too small. Observation. |
 
-**Not implemented in current phase.** Included to demonstrate namespace reservation.
+**Replay behavior:** During replay, returns the recorded values from the event log.
+
+**Receipts:** Created by the runtime after each checkpoint epoch. Each receipt is signed by the node's Ed25519 peer key and attests to the execution cost for a range of ticks. Receipts travel with the agent during migration for audit trail continuity.
 
 ---
 

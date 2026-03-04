@@ -96,7 +96,7 @@ func (env *multiNodeEnv) loadAndInitAgent(t *testing.T, nodeIdx int, budgetVal, 
 	logger := multiNodeLogger()
 
 	inst, err := agent.LoadAgent(env.ctx, env.engines[nodeIdx], env.wasmPath, env.agentID,
-		env.storages[nodeIdx], budgetVal, price, env.manifestJSON, logger)
+		env.storages[nodeIdx], budgetVal, price, env.manifestJSON, nil, "", logger)
 	if err != nil {
 		t.Fatalf("LoadAgent on node[%d]: %v", nodeIdx, err)
 	}

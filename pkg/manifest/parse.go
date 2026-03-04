@@ -7,8 +7,7 @@ import (
 )
 
 // NodeCapabilities lists capabilities available on the current node.
-// MVP supports: clock, rand, log.
-var NodeCapabilities = []string{"clock", "rand", "log"}
+var NodeCapabilities = []string{"clock", "rand", "log", "wallet"}
 
 // ParseCapabilityManifest parses a capability manifest from JSON bytes.
 // An empty or nil input returns an empty manifest (no capabilities declared).

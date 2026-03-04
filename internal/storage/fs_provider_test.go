@@ -154,6 +154,56 @@ func TestNewFSProvider_CleansStaleTemp(t *testing.T) {
 	}
 }
 
+func TestSaveAndLoadReceipts(t *testing.T) {
+	p := newTestProvider(t)
+	ctx := context.Background()
+
+	data := []byte("receipt-data-bytes")
+	if err := p.SaveReceipts(ctx, "agent-r1", data); err != nil {
+		t.Fatalf("SaveReceipts: %v", err)
+	}
+
+	loaded, err := p.LoadReceipts(ctx, "agent-r1")
+	if err != nil {
+		t.Fatalf("LoadReceipts: %v", err)
+	}
+	if !bytes.Equal(loaded, data) {
+		t.Errorf("loaded receipts mismatch: got %q, want %q", loaded, data)
+	}
+}
+
+func TestLoadReceipts_NotFound(t *testing.T) {
+	p := newTestProvider(t)
+	ctx := context.Background()
+
+	_, err := p.LoadReceipts(ctx, "nonexistent")
+	if err != ErrReceiptsNotFound {
+		t.Errorf("expected ErrReceiptsNotFound, got %v", err)
+	}
+}
+
+func TestDeleteReceipts_Idempotent(t *testing.T) {
+	p := newTestProvider(t)
+	ctx := context.Background()
+
+	// Delete non-existent should succeed
+	if err := p.DeleteReceipts(ctx, "nonexistent"); err != nil {
+		t.Errorf("DeleteReceipts should be idempotent, got %v", err)
+	}
+
+	// Save then delete
+	if err := p.SaveReceipts(ctx, "agent-rd", []byte("data")); err != nil {
+		t.Fatalf("SaveReceipts: %v", err)
+	}
+	if err := p.DeleteReceipts(ctx, "agent-rd"); err != nil {
+		t.Fatalf("DeleteReceipts: %v", err)
+	}
+	_, err := p.LoadReceipts(ctx, "agent-rd")
+	if err != ErrReceiptsNotFound {
+		t.Errorf("expected ErrReceiptsNotFound after delete, got %v", err)
+	}
+}
+
 func TestNewFSProvider_CreatesDir(t *testing.T) {
 	dir := t.TempDir()
 	subDir := dir + "/sub/nested"

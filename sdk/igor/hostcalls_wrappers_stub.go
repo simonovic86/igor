@@ -43,3 +43,30 @@ func Log(msg string) {
 func Logf(format string, args ...any) {
 	Log(fmt.Sprintf(format, args...))
 }
+
+// WalletBalance returns the agent's current budget in microcents.
+// In non-WASM builds, dispatches to the registered MockBackend.
+func WalletBalance() int64 {
+	if activeMock != nil {
+		return activeMock.WalletBalance()
+	}
+	panic("igor: WalletBalance requires WASM runtime or mock (see sdk/igor/mock)")
+}
+
+// WalletReceiptCount returns the number of payment receipts available.
+// In non-WASM builds, dispatches to the registered MockBackend.
+func WalletReceiptCount() int {
+	if activeMock != nil {
+		return activeMock.WalletReceiptCount()
+	}
+	panic("igor: WalletReceiptCount requires WASM runtime or mock (see sdk/igor/mock)")
+}
+
+// WalletReceipt reads the receipt at the given index.
+// In non-WASM builds, dispatches to the registered MockBackend.
+func WalletReceipt(index int) ([]byte, error) {
+	if activeMock != nil {
+		return activeMock.WalletReceipt(index)
+	}
+	panic("igor: WalletReceipt requires WASM runtime or mock (see sdk/igor/mock)")
+}
