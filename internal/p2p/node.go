@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"time"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -77,6 +78,12 @@ func (n *Node) registerHandlers() {
 // handlePing handles incoming ping requests.
 func (n *Node) handlePing(s network.Stream) {
 	defer s.Close()
+
+	// Set read deadline to prevent slow/malicious peers from holding the connection.
+	if err := s.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		n.Logger.Error("Failed to set ping read deadline", "error", err)
+		return
+	}
 
 	remotePeer := s.Conn().RemotePeer()
 	n.Logger.Info("Received ping", "from_peer", remotePeer.String())
@@ -158,7 +165,9 @@ func (n *Node) bootstrapPeers(ctx context.Context, peers []string) {
 	n.Logger.Info("Attempting to connect to bootstrap peers", "count", len(peers))
 
 	for _, peerAddr := range peers {
-		err := n.PingPeer(ctx, peerAddr)
+		peerCtx, peerCancel := context.WithTimeout(ctx, 30*time.Second)
+		err := n.PingPeer(peerCtx, peerAddr)
+		peerCancel()
 		if err != nil {
 			n.Logger.Error("Failed to bootstrap peer",
 				"address", peerAddr,

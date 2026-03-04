@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -489,7 +490,7 @@ func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 	// Load from storage provider
 	checkpoint, err := i.Storage.LoadCheckpoint(ctx, i.AgentID)
 	if err != nil {
-		if err == storage.ErrCheckpointNotFound {
+		if errors.Is(err, storage.ErrCheckpointNotFound) {
 			// No checkpoint exists - this is normal for new agents
 			i.logger.Info("No existing checkpoint found", "agent_id", i.AgentID)
 			return nil
@@ -564,13 +565,15 @@ func (i *Instance) SetReplayWindowSize(n int) {
 	i.replayWindowMax = n
 }
 
-// LatestSnapshot returns the most recent tick snapshot, or nil if no ticks
-// have been executed. Used by migration to extract replay data.
+// LatestSnapshot returns a copy of the most recent tick snapshot, or nil if no
+// ticks have been executed. Returns a copy to avoid pointer invalidation when
+// the replay window evicts entries.
 func (i *Instance) LatestSnapshot() *TickSnapshot {
 	if len(i.ReplayWindow) == 0 {
 		return nil
 	}
-	return &i.ReplayWindow[len(i.ReplayWindow)-1]
+	snap := i.ReplayWindow[len(i.ReplayWindow)-1]
+	return &snap
 }
 
 // Close releases agent resources.

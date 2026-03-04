@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -113,7 +114,10 @@ func (s *Service) MigrateAgent(
 	}
 
 	// Load manifest from sidecar file (wasmPath with .json extension)
-	manifestPath := wasmPath[:len(wasmPath)-len(".wasm")] + ".manifest.json"
+	var manifestPath string
+	if strings.HasSuffix(wasmPath, ".wasm") {
+		manifestPath = strings.TrimSuffix(wasmPath, ".wasm") + ".manifest.json"
+	}
 	manifestData, err := os.ReadFile(manifestPath)
 	if err != nil {
 		// No manifest file — use empty capabilities (backward compatible)
@@ -287,14 +291,20 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		"price_per_second", budget.Format(pkg.PricePerSecond),
 	)
 
-	// Verify WASM binary integrity
-	if len(pkg.WASMHash) == 32 {
-		computed := sha256.Sum256(pkg.WASMBinary)
-		if computed != [32]byte(pkg.WASMHash) {
-			s.logger.Error("WASM hash mismatch — rejecting migration", "agent_id", pkg.AgentID)
-			s.sendStartConfirmation(stream, pkg.AgentID, false, "WASM binary hash mismatch")
-			return
-		}
+	// Verify WASM binary integrity — reject if hash is missing or malformed
+	if len(pkg.WASMHash) != 32 {
+		s.logger.Error("WASM hash missing or malformed — rejecting migration",
+			"agent_id", pkg.AgentID,
+			"hash_len", len(pkg.WASMHash),
+		)
+		s.sendStartConfirmation(stream, pkg.AgentID, false, "WASM hash missing or invalid length")
+		return
+	}
+	computed := sha256.Sum256(pkg.WASMBinary)
+	if computed != [32]byte(pkg.WASMHash) {
+		s.logger.Error("WASM hash mismatch — rejecting migration", "agent_id", pkg.AgentID)
+		s.sendStartConfirmation(stream, pkg.AgentID, false, "WASM binary hash mismatch")
+		return
 	}
 
 	// Replay verification: verify checkpoint integrity before accepting (CM-4)
@@ -322,10 +332,12 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		s.sendStartConfirmation(stream, pkg.AgentID, false, "invalid manifest: "+err.Error())
 		return
 	}
+	s.mu.RLock()
 	nodeCaps := manifest.NodeCapabilities
 	if s.nodeCapabilities != nil {
 		nodeCaps = s.nodeCapabilities
 	}
+	s.mu.RUnlock()
 	if err := manifest.ValidateAgainstNode(capManifest, nodeCaps); err != nil {
 		s.logger.Error("Capability check failed", "agent_id", pkg.AgentID, "error", err)
 		s.sendStartConfirmation(stream, pkg.AgentID, false, "capability check failed: "+err.Error())
@@ -529,5 +541,7 @@ func (s *Service) deleteOrphanedCheckpoint(ctx context.Context, agentID string) 
 // When set, incoming migrations validate against these capabilities instead of
 // manifest.NodeCapabilities. Pass nil to restore default behavior.
 func (s *Service) SetNodeCapabilities(caps []string) {
+	s.mu.Lock()
 	s.nodeCapabilities = caps
+	s.mu.Unlock()
 }
