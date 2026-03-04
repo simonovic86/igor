@@ -126,9 +126,11 @@ func (l *EventLog) CurrentEntries() []Entry {
 	return l.current.Entries
 }
 
-// History returns all sealed tick logs.
+// History returns a copy of all sealed tick logs.
 func (l *EventLog) History() []*TickLog {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.history
+	out := make([]*TickLog, len(l.history))
+	copy(out, l.history)
+	return out
 }

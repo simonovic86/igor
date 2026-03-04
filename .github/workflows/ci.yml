@@ -48,3 +48,6 @@ jobs:
         run: |
           ls -lh bin/igord
           file bin/igord
+
+      - name: Build WASM agent
+        run: make agent

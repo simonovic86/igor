@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Igor
 
-Igor is a decentralized runtime for autonomous, survivable software agents. Agents are WASM binaries that checkpoint their state, migrate between peer nodes over libp2p, and pay for execution from internal budgets. Phase 2 (Survival) is complete — agents run, checkpoint, migrate, resume, and meter cost. Research-stage, not production-ready.
+Igor is a decentralized runtime for autonomous, survivable software agents. Agents are WASM binaries that checkpoint their state, migrate between peer nodes over libp2p, and pay for execution from internal budgets. Phase 3 (Autonomy) is complete — agents run, checkpoint, migrate, resume, meter cost, enforce capability membranes, replay-verify, and support multi-node chain migration. Phase 4 (Economics) is next. Research-stage, not production-ready.
 
 **Stack:** Go 1.25 · wazero (pure Go WASM, no CGo) · libp2p-go · TinyGo (agent compilation)
 

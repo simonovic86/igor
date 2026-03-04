@@ -38,9 +38,8 @@ type AgentTransfer struct {
 // AgentStarted is the confirmation message sent by the target node after
 // receiving a migration. Sent for both success and failure.
 type AgentStarted struct {
-	AgentID   string
-	NodeID    string
-	StartTime int64
-	Success   bool
-	Error     string
+	AgentID string
+	NodeID  string
+	Success bool
+	Error   string
 }
