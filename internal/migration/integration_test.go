@@ -180,7 +180,7 @@ func newMigrationEnv(t *testing.T) *migrationEnv {
 	manifestJSON := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
 
 	inst, err := agent.LoadAgent(ctx, engA, wasmPath, agentID, stA,
-		budget.FromFloat(10.0), budget.FromFloat(0.001), manifestJSON, nil, "", logger)
+		budget.FromFloat(10.0), budget.FromFloat(0.001), manifestJSON, nil, "", nil, logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}
@@ -389,7 +389,7 @@ func newPolicyTestEnv(t *testing.T, manifestJSON string) *migrationEnv {
 
 	agentID := "policy-test-agent"
 	inst, err := agent.LoadAgent(ctx, engA, wasmPath, agentID, stA,
-		budget.FromFloat(10.0), budget.FromFloat(0.001), []byte(manifestJSON), nil, "", logger)
+		budget.FromFloat(10.0), budget.FromFloat(0.001), []byte(manifestJSON), nil, "", nil, logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}

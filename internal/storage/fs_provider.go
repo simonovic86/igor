@@ -262,9 +262,113 @@ func (p *FSProvider) checkpointPath(agentID string) (string, error) {
 	return cleaned, nil
 }
 
+// SaveIdentity persists an agent's serialized cryptographic identity atomically.
+func (p *FSProvider) SaveIdentity(
+	ctx context.Context,
+	agentID string,
+	data []byte,
+) error {
+	idPath, err := p.identityPath(agentID)
+	if err != nil {
+		return err
+	}
+	tempPath := idPath + ".tmp"
+
+	tempFile, err := os.Create(tempPath)
+	if err != nil {
+		return fmt.Errorf("failed to create temp identity: %w", err)
+	}
+
+	defer func() {
+		if err != nil {
+			os.Remove(tempPath)
+		}
+	}()
+
+	if _, err = tempFile.Write(data); err != nil {
+		tempFile.Close()
+		return fmt.Errorf("failed to write identity: %w", err)
+	}
+
+	if err = tempFile.Sync(); err != nil {
+		tempFile.Close()
+		return fmt.Errorf("failed to fsync identity: %w", err)
+	}
+
+	if err = tempFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp identity: %w", err)
+	}
+
+	if err = os.Rename(tempPath, idPath); err != nil {
+		return fmt.Errorf("failed to rename identity: %w", err)
+	}
+
+	p.logger.Info("Identity saved",
+		"agent_id", agentID,
+		"path", idPath,
+		"size_bytes", len(data),
+	)
+	return nil
+}
+
+// LoadIdentity retrieves an agent's serialized cryptographic identity.
+func (p *FSProvider) LoadIdentity(
+	ctx context.Context,
+	agentID string,
+) ([]byte, error) {
+	idPath, err := p.identityPath(agentID)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := os.ReadFile(idPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrIdentityNotFound
+		}
+		return nil, fmt.Errorf("failed to read identity: %w", err)
+	}
+
+	p.logger.Info("Identity loaded",
+		"agent_id", agentID,
+		"path", idPath,
+		"size_bytes", len(data),
+	)
+	return data, nil
+}
+
+// DeleteIdentity removes an agent's cryptographic identity.
+func (p *FSProvider) DeleteIdentity(
+	ctx context.Context,
+	agentID string,
+) error {
+	idPath, err := p.identityPath(agentID)
+	if err != nil {
+		return err
+	}
+
+	err = os.Remove(idPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete identity: %w", err)
+	}
+
+	p.logger.Info("Identity deleted", "agent_id", agentID, "path", idPath)
+	return nil
+}
+
 // receiptPath returns the filesystem path for an agent's receipts.
 func (p *FSProvider) receiptPath(agentID string) (string, error) {
 	path := filepath.Join(p.baseDir, agentID+".receipts")
+	cleaned := filepath.Clean(path)
+	if !strings.HasPrefix(cleaned, filepath.Clean(p.baseDir)+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid agent ID: path traversal detected")
+	}
+	return cleaned, nil
+}
+
+// identityPath returns the filesystem path for an agent's identity.
+func (p *FSProvider) identityPath(agentID string) (string, error) {
+	path := filepath.Join(p.baseDir, agentID+".identity")
 	cleaned := filepath.Clean(path)
 	if !strings.HasPrefix(cleaned, filepath.Clean(p.baseDir)+string(filepath.Separator)) {
 		return "", fmt.Errorf("invalid agent ID: path traversal detected")

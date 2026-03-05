@@ -23,6 +23,8 @@ import (
 	"github.com/simonovic86/igor/internal/storage"
 	"github.com/simonovic86/igor/internal/wasmutil"
 	"github.com/simonovic86/igor/pkg/budget"
+	"github.com/simonovic86/igor/pkg/identity"
+	"github.com/simonovic86/igor/pkg/lineage"
 	"github.com/simonovic86/igor/pkg/manifest"
 	"github.com/simonovic86/igor/pkg/receipt"
 	"github.com/tetratelabs/wazero"
@@ -32,15 +34,35 @@ import (
 const (
 	checkpointVersionV2   byte = 0x02
 	checkpointVersionV3   byte = 0x03
-	checkpointVersion     byte = checkpointVersionV3 // current version for writing
+	checkpointVersionV4   byte = 0x04
+	checkpointVersion     byte = checkpointVersionV4 // current version for writing
 	checkpointHeaderLenV2 int  = 57                  // 1 + 8 + 8 + 8 + 32
 	checkpointHeaderLenV3 int  = 81                  // 57 + 8 (majorVersion) + 8 (leaseGeneration) + 8 (leaseExpiry)
-	checkpointHeaderLen   int  = checkpointHeaderLenV3
+	checkpointHeaderLenV4 int  = 209                 // 81 + 32 (prevHash) + 32 (agentPubKey) + 64 (signature)
+	checkpointHeaderLen   int  = checkpointHeaderLenV4
 
 	// DefaultReplayWindowSize is the number of recent tick snapshots retained
 	// for sliding replay verification (CM-4).
 	DefaultReplayWindowSize = 16
 )
+
+// CheckpointHeader holds all parsed checkpoint metadata.
+// Returned by ParseCheckpointHeader for clean access to all fields.
+type CheckpointHeader struct {
+	Version        byte
+	Budget         int64
+	PricePerSecond int64
+	TickNumber     uint64
+	WASMHash       [32]byte
+	Epoch          authority.Epoch
+	LeaseExpiry    int64 // Unix nanoseconds; 0 = no lease
+	// V4 lineage fields (zero values for v0x02/v0x03)
+	PrevHash    [32]byte
+	AgentPubKey ed25519.PublicKey
+	Signature   [64]byte
+	HasLineage  bool // true if v0x04+
+	HeaderLen   int
+}
 
 // TickSnapshot holds replay verification data for a single tick.
 // Stored in the Instance's replay window for CM-4 sliding verification.
@@ -95,6 +117,10 @@ type Instance struct {
 
 	// Lease-based authority (Phase 5: Hardening)
 	Lease *authority.Lease // Lease state; nil = leases disabled
+
+	// Agent cryptographic identity (Task 13: Signed Checkpoint Lineage)
+	AgentIdentity      *identity.AgentIdentity // Agent's Ed25519 keypair; nil = lineage disabled
+	PrevCheckpointHash [32]byte                // SHA-256 of last saved checkpoint; zero = genesis
 }
 
 // walletStateRef is an indirection layer that lets wallet hostcall closures
@@ -176,6 +202,7 @@ func LoadAgent(
 	manifestData []byte,
 	signingKey ed25519.PrivateKey,
 	nodeID string,
+	agentIdentity *identity.AgentIdentity,
 	logger *slog.Logger,
 ) (*Instance, error) {
 	logger.Info("Loading agent", "agent_id", agentID, "path", wasmPath)
@@ -185,12 +212,13 @@ func LoadAgent(
 		return nil, fmt.Errorf("failed to read WASM file: %w", err)
 	}
 
-	return loadAgent(ctx, engine, wasmBytes, agentID, storageProvider, budgetVal, pricePerSecond, manifestData, signingKey, nodeID, logger)
+	return loadAgent(ctx, engine, wasmBytes, agentID, storageProvider, budgetVal, pricePerSecond, manifestData, signingKey, nodeID, agentIdentity, logger)
 }
 
 // LoadAgentFromBytes loads and compiles a WASM agent from raw bytes.
 // Used by the migration service to avoid writing WASM to a temporary file.
 // signingKey and nodeID enable payment receipt signing; pass nil/empty to disable.
+// agentIdentity enables signed checkpoint lineage; pass nil to disable.
 func LoadAgentFromBytes(
 	ctx context.Context,
 	engine *runtime.Engine,
@@ -202,9 +230,10 @@ func LoadAgentFromBytes(
 	manifestData []byte,
 	signingKey ed25519.PrivateKey,
 	nodeID string,
+	agentIdentity *identity.AgentIdentity,
 	logger *slog.Logger,
 ) (*Instance, error) {
-	return loadAgent(ctx, engine, wasmBytes, agentID, storageProvider, budgetVal, pricePerSecond, manifestData, signingKey, nodeID, logger)
+	return loadAgent(ctx, engine, wasmBytes, agentID, storageProvider, budgetVal, pricePerSecond, manifestData, signingKey, nodeID, agentIdentity, logger)
 }
 
 func loadAgent(
@@ -218,6 +247,7 @@ func loadAgent(
 	manifestData []byte,
 	signingKey ed25519.PrivateKey,
 	nodeID string,
+	agentIdentity *identity.AgentIdentity,
 	logger *slog.Logger,
 ) (*Instance, error) {
 	fullManifest, err := manifest.ParseManifest(manifestData)
@@ -293,6 +323,7 @@ func loadAgent(
 		logger:         logger,
 		signingKey:     signingKey,
 		nodeID:         nodeID,
+		AgentIdentity:  agentIdentity,
 	}
 
 	// Now that the instance exists, wire state refs so hostcall closures
@@ -566,6 +597,7 @@ func (i *Instance) Resume(ctx context.Context, state []byte) error {
 
 // SaveCheckpointToStorage checkpoints the agent and saves to storage provider.
 // The checkpoint includes budget metadata, tick number, and agent state.
+// When AgentIdentity is set, writes v0x04 with signed lineage; otherwise v0x03.
 func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 	// Checkpoint agent state
 	state, err := i.Checkpoint(ctx)
@@ -573,25 +605,10 @@ func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 		return fmt.Errorf("failed to checkpoint agent: %w", err)
 	}
 
-	// Format v0x03: [version:1][budget:8][price:8][tick:8][wasmHash:32][majorVersion:8][leaseGeneration:8][leaseExpiry:8][state:N]
-	checkpoint := make([]byte, checkpointHeaderLen+len(state))
-	checkpoint[0] = checkpointVersion
-	binary.LittleEndian.PutUint64(checkpoint[1:9], uint64(i.Budget))
-	binary.LittleEndian.PutUint64(checkpoint[9:17], uint64(i.PricePerSecond))
-	binary.LittleEndian.PutUint64(checkpoint[17:25], i.TickNumber)
-	copy(checkpoint[25:57], i.WASMHash[:])
-	// Lease epoch metadata (zero values if leases disabled)
-	var majorVersion, leaseGeneration uint64
-	var leaseExpiry int64
-	if i.Lease != nil {
-		majorVersion = i.Lease.Epoch.MajorVersion
-		leaseGeneration = i.Lease.Epoch.LeaseGeneration
-		leaseExpiry = i.Lease.Expiry.UnixNano()
+	checkpoint, err := i.buildCheckpoint(state)
+	if err != nil {
+		return fmt.Errorf("failed to build checkpoint: %w", err)
 	}
-	binary.LittleEndian.PutUint64(checkpoint[57:65], majorVersion)
-	binary.LittleEndian.PutUint64(checkpoint[65:73], leaseGeneration)
-	binary.LittleEndian.PutUint64(checkpoint[73:81], uint64(leaseExpiry))
-	copy(checkpoint[81:], state)
 
 	// Save to storage provider
 	if err := i.Storage.SaveCheckpoint(ctx, i.AgentID, checkpoint); err != nil {
@@ -619,6 +636,63 @@ func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 	return nil
 }
 
+// buildCheckpoint constructs the checkpoint binary from current instance state.
+// When AgentIdentity is set, produces v0x04 with signed lineage; otherwise v0x03.
+func (i *Instance) buildCheckpoint(state []byte) ([]byte, error) {
+	// Lease epoch metadata (zero values if leases disabled)
+	var majorVersion, leaseGeneration uint64
+	var leaseExpiryNanos int64
+	if i.Lease != nil {
+		majorVersion = i.Lease.Epoch.MajorVersion
+		leaseGeneration = i.Lease.Epoch.LeaseGeneration
+		leaseExpiryNanos = i.Lease.Expiry.UnixNano()
+	}
+
+	if i.AgentIdentity == nil {
+		// V3 format (no lineage)
+		checkpoint := make([]byte, checkpointHeaderLenV3+len(state))
+		checkpoint[0] = checkpointVersionV3
+		binary.LittleEndian.PutUint64(checkpoint[1:9], uint64(i.Budget))
+		binary.LittleEndian.PutUint64(checkpoint[9:17], uint64(i.PricePerSecond))
+		binary.LittleEndian.PutUint64(checkpoint[17:25], i.TickNumber)
+		copy(checkpoint[25:57], i.WASMHash[:])
+		binary.LittleEndian.PutUint64(checkpoint[57:65], majorVersion)
+		binary.LittleEndian.PutUint64(checkpoint[65:73], leaseGeneration)
+		binary.LittleEndian.PutUint64(checkpoint[73:81], uint64(leaseExpiryNanos))
+		copy(checkpoint[81:], state)
+		return checkpoint, nil
+	}
+
+	// V4 format: [v3 fields][prevHash:32][agentPubKey:32][signature:64][state:N]
+	checkpoint := make([]byte, checkpointHeaderLenV4+len(state))
+	checkpoint[0] = checkpointVersionV4
+	binary.LittleEndian.PutUint64(checkpoint[1:9], uint64(i.Budget))
+	binary.LittleEndian.PutUint64(checkpoint[9:17], uint64(i.PricePerSecond))
+	binary.LittleEndian.PutUint64(checkpoint[17:25], i.TickNumber)
+	copy(checkpoint[25:57], i.WASMHash[:])
+	binary.LittleEndian.PutUint64(checkpoint[57:65], majorVersion)
+	binary.LittleEndian.PutUint64(checkpoint[65:73], leaseGeneration)
+	binary.LittleEndian.PutUint64(checkpoint[73:81], uint64(leaseExpiryNanos))
+	copy(checkpoint[81:113], i.PrevCheckpointHash[:])
+	copy(checkpoint[113:145], i.AgentIdentity.PublicKey)
+	// Signature slot (145:209) is initially zero
+
+	// Build signing domain: everything except the 64-byte signature slot
+	signingDomain := lineage.BuildSigningDomain(checkpoint[:145], state)
+
+	sig, err := lineage.SignCheckpoint(signingDomain, i.AgentIdentity.PrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("sign checkpoint: %w", err)
+	}
+	copy(checkpoint[145:209], sig[:])
+	copy(checkpoint[209:], state)
+
+	// Update PrevCheckpointHash for next checkpoint in the chain
+	i.PrevCheckpointHash = lineage.ContentHash(checkpoint)
+
+	return checkpoint, nil
+}
+
 // LoadCheckpointFromStorage loads checkpoint from storage and resumes agent.
 // The checkpoint includes budget metadata, tick number, and agent state.
 func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
@@ -633,25 +707,35 @@ func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 		return fmt.Errorf("failed to load checkpoint: %w", err)
 	}
 
-	restoredBudget, restoredPrice, restoredTick, storedHash, epoch, _, state, err := ParseCheckpointHeader(checkpoint)
+	hdr, state, err := ParseCheckpointHeader(checkpoint)
 	if err != nil {
 		return fmt.Errorf("invalid checkpoint: %w", err)
 	}
 
-	if storedHash != i.WASMHash {
+	if hdr.WASMHash != i.WASMHash {
 		return fmt.Errorf("WASM hash mismatch: checkpoint was created by a different binary")
 	}
 
-	i.Budget = restoredBudget
-	i.PricePerSecond = restoredPrice
-	i.TickNumber = restoredTick
+	// Verify signed lineage if checkpoint is v0x04+
+	if hdr.HasLineage {
+		signingDomain := lineage.BuildSigningDomain(checkpoint[:145], state)
+		if !lineage.VerifyCheckpoint(signingDomain, hdr.AgentPubKey, hdr.Signature) {
+			return fmt.Errorf("checkpoint signature verification failed")
+		}
+		// Set PrevCheckpointHash so the next save chains correctly
+		i.PrevCheckpointHash = lineage.ContentHash(checkpoint)
+	}
+
+	i.Budget = hdr.Budget
+	i.PricePerSecond = hdr.PricePerSecond
+	i.TickNumber = hdr.TickNumber
 
 	i.logger.Info("Checkpoint restored",
 		"agent_id", i.AgentID,
-		"budget", budget.Format(restoredBudget),
-		"price_per_second", budget.Format(restoredPrice),
-		"tick_number", restoredTick,
-		"epoch", epoch,
+		"budget", budget.Format(hdr.Budget),
+		"price_per_second", budget.Format(hdr.PricePerSecond),
+		"tick_number", hdr.TickNumber,
+		"epoch", hdr.Epoch,
 	)
 
 	// Load receipts from storage (non-fatal: missing receipts is normal for old checkpoints).
@@ -677,12 +761,12 @@ func (i *Instance) LoadCheckpointFromStorage(ctx context.Context) error {
 	return nil
 }
 
-// ParseCheckpointHeader parses a checkpoint header (v0x02 or v0x03).
-// Returns budget, pricePerSecond, tickNumber, wasmHash, epoch, leaseExpiry (unix nanos), agentState, and any error.
-// v0x02 checkpoints return a zero epoch and zero leaseExpiry.
-func ParseCheckpointHeader(checkpoint []byte) (budgetVal int64, price int64, tick uint64, wasmHash [32]byte, epoch authority.Epoch, leaseExpiry int64, state []byte, err error) {
+// ParseCheckpointHeader parses a checkpoint header (v0x02, v0x03, or v0x04).
+// Returns the parsed header and agent state bytes.
+// v0x02 checkpoints return zero epoch/leaseExpiry; v0x02/v0x03 return zero lineage fields.
+func ParseCheckpointHeader(checkpoint []byte) (*CheckpointHeader, []byte, error) {
 	if len(checkpoint) < 1 {
-		return 0, 0, 0, [32]byte{}, authority.Epoch{}, 0, nil, fmt.Errorf("checkpoint empty")
+		return nil, nil, fmt.Errorf("checkpoint empty")
 	}
 
 	var headerLen int
@@ -691,47 +775,56 @@ func ParseCheckpointHeader(checkpoint []byte) (budgetVal int64, price int64, tic
 		headerLen = checkpointHeaderLenV2
 	case checkpointVersionV3:
 		headerLen = checkpointHeaderLenV3
+	case checkpointVersionV4:
+		headerLen = checkpointHeaderLenV4
 	default:
-		return 0, 0, 0, [32]byte{}, authority.Epoch{}, 0, nil, fmt.Errorf("unsupported checkpoint version: %d", checkpoint[0])
+		return nil, nil, fmt.Errorf("unsupported checkpoint version: %d", checkpoint[0])
 	}
 
 	if len(checkpoint) < headerLen {
-		return 0, 0, 0, [32]byte{}, authority.Epoch{}, 0, nil, fmt.Errorf("checkpoint too short: %d bytes (need %d)", len(checkpoint), headerLen)
+		return nil, nil, fmt.Errorf("checkpoint too short: %d bytes (need %d)", len(checkpoint), headerLen)
 	}
 
 	budgetParsed := int64(binary.LittleEndian.Uint64(checkpoint[1:9]))
 	priceParsed := int64(binary.LittleEndian.Uint64(checkpoint[9:17]))
 	if budgetParsed < 0 {
-		return 0, 0, 0, [32]byte{}, authority.Epoch{}, 0, nil, fmt.Errorf("checkpoint contains negative budget: %d", budgetParsed)
+		return nil, nil, fmt.Errorf("checkpoint contains negative budget: %d", budgetParsed)
 	}
 	if priceParsed < 0 {
-		return 0, 0, 0, [32]byte{}, authority.Epoch{}, 0, nil, fmt.Errorf("checkpoint contains negative price: %d", priceParsed)
+		return nil, nil, fmt.Errorf("checkpoint contains negative price: %d", priceParsed)
 	}
 
-	var hash [32]byte
-	copy(hash[:], checkpoint[25:57])
+	hdr := &CheckpointHeader{
+		Version:        checkpoint[0],
+		Budget:         budgetParsed,
+		PricePerSecond: priceParsed,
+		TickNumber:     binary.LittleEndian.Uint64(checkpoint[17:25]),
+		HeaderLen:      headerLen,
+	}
+	copy(hdr.WASMHash[:], checkpoint[25:57])
 
-	var parsedEpoch authority.Epoch
-	var parsedLeaseExpiry int64
-	if checkpoint[0] == checkpointVersionV3 {
-		parsedEpoch.MajorVersion = binary.LittleEndian.Uint64(checkpoint[57:65])
-		parsedEpoch.LeaseGeneration = binary.LittleEndian.Uint64(checkpoint[65:73])
-		parsedLeaseExpiry = int64(binary.LittleEndian.Uint64(checkpoint[73:81]))
+	// V3+ fields: epoch and lease expiry
+	if checkpoint[0] >= checkpointVersionV3 {
+		hdr.Epoch.MajorVersion = binary.LittleEndian.Uint64(checkpoint[57:65])
+		hdr.Epoch.LeaseGeneration = binary.LittleEndian.Uint64(checkpoint[65:73])
+		hdr.LeaseExpiry = int64(binary.LittleEndian.Uint64(checkpoint[73:81]))
 	}
 
-	return budgetParsed,
-		priceParsed,
-		binary.LittleEndian.Uint64(checkpoint[17:25]),
-		hash,
-		parsedEpoch,
-		parsedLeaseExpiry,
-		checkpoint[headerLen:],
-		nil
+	// V4+ fields: lineage (prevHash, agentPubKey, signature)
+	if checkpoint[0] >= checkpointVersionV4 {
+		copy(hdr.PrevHash[:], checkpoint[81:113])
+		hdr.AgentPubKey = make([]byte, ed25519.PublicKeySize)
+		copy(hdr.AgentPubKey, checkpoint[113:145])
+		copy(hdr.Signature[:], checkpoint[145:209])
+		hdr.HasLineage = true
+	}
+
+	return hdr, checkpoint[headerLen:], nil
 }
 
 // ExtractAgentState extracts the agent state portion from a checkpoint.
 func ExtractAgentState(checkpoint []byte) ([]byte, error) {
-	_, _, _, _, _, _, state, err := ParseCheckpointHeader(checkpoint)
+	_, state, err := ParseCheckpointHeader(checkpoint)
 	return state, err
 }
 

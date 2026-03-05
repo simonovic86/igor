@@ -38,9 +38,11 @@ Run the node manually:
 Agents export 5 WASM functions: `agent_init`, `agent_tick`, `agent_checkpoint`, `agent_checkpoint_ptr`, `agent_resume`. TinyGo agents provide `malloc` automatically. The runtime drives a 1 Hz tick loop. Each tick is budgeted: `cost = elapsed_seconds × price_per_second`. Checkpoints save every 5 seconds. Tick timeout: 100ms.
 
 ### Checkpoint format (binary, little-endian)
-`[version: 1 byte (0x02)][budget: 8 bytes int64 microcents][pricePerSecond: 8 bytes int64 microcents][tickNumber: 8 bytes uint64][wasmHash: 32 bytes SHA-256][agent state: N bytes]`
+Current version is v0x04 (209-byte header). Supports reading v0x02 (57 bytes) and v0x03 (81 bytes).
 
-Header is 57 bytes. Budget uses int64 microcents (1 currency unit = 1,000,000 microcents). WASM hash binds the checkpoint to the binary that created it; mismatch on resume is rejected.
+`[version: 1 byte (0x04)][budget: 8 bytes int64 microcents][pricePerSecond: 8 bytes int64 microcents][tickNumber: 8 bytes uint64][wasmHash: 32 bytes SHA-256][majorVersion: 8 bytes uint64][leaseGeneration: 8 bytes uint64][leaseExpiry: 8 bytes uint64][prevHash: 32 bytes SHA-256][agentPubKey: 32 bytes Ed25519][signature: 64 bytes Ed25519][agent state: N bytes]`
+
+Header is 209 bytes. Budget uses int64 microcents (1 currency unit = 1,000,000 microcents). WASM hash binds the checkpoint to the binary that created it; mismatch on resume is rejected. prevHash chains checkpoints into a tamper-evident lineage. Signature covers everything except the signature field itself.
 
 Atomic writes via temp file → fsync → rename.
 
@@ -57,6 +59,8 @@ Atomic writes via temp file → fsync → rename.
 - `pkg/manifest/` — Capability manifest parsing and validation
 - `pkg/protocol/` — Message types: `AgentPackage`, `AgentTransfer`, `AgentStarted`
 - `pkg/receipt/` — Payment receipt data structure, Ed25519 signing, binary serialization
+- `pkg/identity/` — Agent Ed25519 keypair management for signed checkpoint lineage
+- `pkg/lineage/` — Signed checkpoint types, content hashing, signature verification
 - `sdk/igor/` — Agent SDK: hostcall wrappers (ClockNow, RandBytes, Log, WalletBalance), lifecycle plumbing (Agent interface)
 
 ### Migration flow

@@ -4,6 +4,7 @@
 package inspector
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"github.com/simonovic86/igor/internal/agent"
 	"github.com/simonovic86/igor/internal/authority"
 	"github.com/simonovic86/igor/pkg/budget"
+	"github.com/simonovic86/igor/pkg/lineage"
 )
 
 // Result holds parsed checkpoint information.
@@ -34,6 +36,13 @@ type Result struct {
 	TotalSize       int
 	WASMVerified    *bool
 	WASMPath        string
+	// V4 lineage fields
+	HasLineage     bool
+	PrevHash       [32]byte
+	PrevHashHex    string
+	AgentPubKey    ed25519.PublicKey
+	AgentPubKeyHex string
+	SignatureValid *bool // nil = not verified, true/false after verification
 }
 
 // InspectFile parses a checkpoint file and returns structured results.
@@ -47,26 +56,39 @@ func InspectFile(path string) (*Result, error) {
 
 // Inspect parses raw checkpoint bytes.
 func Inspect(data []byte) (*Result, error) {
-	budgetVal, price, tick, wasmHash, epoch, leaseExpiry, state, err := agent.ParseCheckpointHeader(data)
+	hdr, state, err := agent.ParseCheckpointHeader(data)
 	if err != nil {
 		return nil, fmt.Errorf("parse checkpoint: %w", err)
 	}
 
-	return &Result{
-		Version:         data[0],
-		Budget:          budgetVal,
-		BudgetFormatted: budget.Format(budgetVal),
-		PricePerSecond:  price,
-		PriceFormatted:  budget.Format(price),
-		TickNumber:      tick,
-		WASMHash:        wasmHash,
-		WASMHashHex:     hex.EncodeToString(wasmHash[:]),
-		Epoch:           epoch,
-		LeaseExpiry:     leaseExpiry,
+	r := &Result{
+		Version:         hdr.Version,
+		Budget:          hdr.Budget,
+		BudgetFormatted: budget.Format(hdr.Budget),
+		PricePerSecond:  hdr.PricePerSecond,
+		PriceFormatted:  budget.Format(hdr.PricePerSecond),
+		TickNumber:      hdr.TickNumber,
+		WASMHash:        hdr.WASMHash,
+		WASMHashHex:     hex.EncodeToString(hdr.WASMHash[:]),
+		Epoch:           hdr.Epoch,
+		LeaseExpiry:     hdr.LeaseExpiry,
 		StateSize:       len(state),
 		State:           state,
 		TotalSize:       len(data),
-	}, nil
+		HasLineage:      hdr.HasLineage,
+	}
+
+	if hdr.HasLineage {
+		r.PrevHash = hdr.PrevHash
+		r.PrevHashHex = hex.EncodeToString(hdr.PrevHash[:])
+		r.AgentPubKey = hdr.AgentPubKey
+		r.AgentPubKeyHex = hex.EncodeToString(hdr.AgentPubKey)
+		signingDomain := lineage.BuildSigningDomain(data[:145], state)
+		valid := lineage.VerifyCheckpoint(signingDomain, hdr.AgentPubKey, hdr.Signature)
+		r.SignatureValid = &valid
+	}
+
+	return r, nil
 }
 
 // VerifyWASM checks if a WASM binary matches the checkpoint's stored hash.
@@ -102,6 +124,19 @@ func (r *Result) Print(w io.Writer) {
 		} else {
 			fmt.Fprintf(w, "Lease Expiry:     (none)\n")
 		}
+	}
+	if r.HasLineage {
+		fmt.Fprintf(w, "Agent Identity:   %s\n", r.AgentPubKeyHex)
+		fmt.Fprintf(w, "Previous Hash:    %s\n", r.PrevHashHex)
+		if r.SignatureValid != nil {
+			if *r.SignatureValid {
+				fmt.Fprintf(w, "Signature:        VALID\n")
+			} else {
+				fmt.Fprintf(w, "Signature:        INVALID\n")
+			}
+		}
+		fmt.Fprintf(w, "Header Size:      209 bytes\n")
+	} else if r.Version >= 0x03 {
 		fmt.Fprintf(w, "Header Size:      81 bytes\n")
 	} else {
 		fmt.Fprintf(w, "Header Size:      57 bytes\n")

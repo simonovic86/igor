@@ -254,18 +254,18 @@ func TestParseCheckpointHeader(t *testing.T) {
 	// bytes 25-57: wasmHash (leave zeroed for this test)
 	copy(checkpoint[57:], state)
 
-	budgetVal, price, tick, _, _, _, s, err := agent.ParseCheckpointHeader(checkpoint)
+	hdr, s, err := agent.ParseCheckpointHeader(checkpoint)
 	if err != nil {
 		t.Fatalf("ParseCheckpointHeader: %v", err)
 	}
-	if budgetVal != 7000000 {
-		t.Errorf("budget: got %d, want 7000000", budgetVal)
+	if hdr.Budget != 7000000 {
+		t.Errorf("budget: got %d, want 7000000", hdr.Budget)
 	}
-	if price != 20000 {
-		t.Errorf("price: got %d, want 20000", price)
+	if hdr.PricePerSecond != 20000 {
+		t.Errorf("price: got %d, want 20000", hdr.PricePerSecond)
 	}
-	if tick != 99 {
-		t.Errorf("tick: got %d, want 99", tick)
+	if hdr.TickNumber != 99 {
+		t.Errorf("tick: got %d, want 99", hdr.TickNumber)
 	}
 	if len(s) != 2 || s[0] != 0xAA || s[1] != 0xBB {
 		t.Errorf("state mismatch: got %v", s)

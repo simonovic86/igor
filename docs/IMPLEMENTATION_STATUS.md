@@ -83,9 +83,9 @@ Last updated: 2026-03-05
 | WASM hash verification on migration | Implemented | `internal/migration/service.go` |
 | OA-2 authority lifecycle states | Not implemented | States (ACTIVE_OWNER, HANDOFF_INITIATED, HANDOFF_PENDING, RETIRED, RECOVERY_REQUIRED) exist as spec concepts only. Migration tracks ownership implicitly via `activeAgents` map presence. Requires Task 12. |
 | EI-11 divergent lineage detection | Not implemented | No distributed protocol for detecting concurrent instances across nodes. RECOVERY_REQUIRED state transition is specified but not implemented. Requires Tasks 12-13. |
-| Signed checkpoint lineage | Not implemented | Roadmap Task 13 |
-| Lease-based authority epochs | Not implemented | Roadmap Task 12 |
-| Cryptographic agent identity | Not implemented | Roadmap Phase 5 |
+| Signed checkpoint lineage | Implemented | Task 13: `pkg/lineage/`, checkpoint v0x04 with signed hash chain. See [SIGNED_LINEAGE.md](runtime/SIGNED_LINEAGE.md). |
+| Lease-based authority epochs | Implemented | Task 12: `internal/authority/`, checkpoint v0x03 with epoch metadata. See [LEASE_EPOCH.md](runtime/LEASE_EPOCH.md). |
+| Cryptographic agent identity | Implemented | Task 13: `pkg/identity/`, Ed25519 agent keypairs with persistent storage. |
 
 ## Migration
 
