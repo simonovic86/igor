@@ -1,8 +1,8 @@
 # Igor v0 Roadmap
 
-## Current Status: Phase 4 In Progress
+## Current Status: Phase 5 In Progress
 
-Igor v0 has completed **Phase 2 (Survival)**, **Phase 3 (Autonomy)**, and started **Phase 4 (Economics)** with Task 10 (Payment Receipt Signing).
+Igor v0 has completed **Phase 2 (Survival)**, **Phase 3 (Autonomy)**, **Phase 4 (Economics)**, and started **Phase 5 (Hardening)** with Tasks 12–14.
 
 ### Completed Tasks
 
@@ -111,23 +111,17 @@ Igor v0 has completed **Phase 2 (Survival)**, **Phase 3 (Autonomy)**, and starte
 
 **Outcome:** Auditable payment trail with hostcall-mediated access. Agents introspect budget and receipts. Receipts signed by node peer key, verified by anyone with the public key.
 
-### Task 11: Node Pricing & Economic Settlement
+### Task 11: Node Pricing & Economic Settlement ✅
 
-**Objective:** Implement economic settlement interface with external payment rails.
+**Status:** Complete. Pricing discovery and settlement infrastructure implemented.
 
-**Scope:**
-- Nodes advertise pricing via libp2p gossip
-- Agents query prices through hostcalls
-- Budget adapter interface (mock + real EVM settlement)
-- Runtime tick gating on budget validity
+**Delivered:**
+- Price discovery protocol over libp2p stream `/igor/pricing/1.0.0` (`internal/pricing/`)
+- Budget adapter interface with mock implementation (`internal/settlement/`)
+- Runtime tick gating on budget validity (`internal/agent/instance.go`)
+- Bulk peer price scanning for migration decisions (`internal/pricing/service.go`)
 
-**Components:**
-- Price advertisement protocol
-- Budget adapter (pluggable: mock, EVM L2/stablecoin)
-- Settlement interface
-- Economic receipt infrastructure
-
-**Outcome:** Agents can survive/die economically with real payment rails.
+**Outcome:** Nodes advertise prices, agents query prices, budget adapters gate execution.
 
 ---
 
@@ -135,43 +129,50 @@ Igor v0 has completed **Phase 2 (Survival)**, **Phase 3 (Autonomy)**, and starte
 
 **Goal:** Production-grade reliability and security.
 
-### Task 12: Lease-Based Authority Epochs
+### Task 12: Lease-Based Authority Epochs ✅
 
-**Objective:** Time-bound execution authority with leases for automated failure detection.
+**Status:** Complete. Lease-based authority with epoch versioning fully implemented.
 
-**Scope:**
-- Lease grant/renewal/expiry integrated with authority state machine
-- Epoch advancement (major version on transfer, lease generation on renewal)
+**Delivered:**
+- Lease grant/renewal/expiry integrated with authority state machine (`internal/authority/`)
+- Epoch advancement: major version on transfer, lease generation on renewal
 - Anti-clone enforcement: expired leases cannot resume ticking
-- Lease metadata in checkpoint
+- Lease metadata in checkpoint format (v0x04)
+- CLI flags: `--lease-duration`, `--lease-grace`
 
 **Specs:** [LEASE_EPOCH.md](../runtime/LEASE_EPOCH.md)
 
 **Outcome:** Automated detection of unresponsive nodes; liveness guarantee on top of existing safety.
 
-### Task 13: Signed Checkpoint Lineage
+### Task 13: Signed Checkpoint Lineage ✅
 
-**Objective:** Cryptographic identity for agents and signed checkpoint chains.
+**Status:** Complete. Agent cryptographic identity and signed checkpoint chains implemented.
 
-**Scope:**
-- Ed25519 agent keypairs
-- Signed checkpoint lineage (each checkpoint signed by agent identity)
-- WASM binary hash verification
-- Checkpoint content-addressed storage (IPFS/CID compatible)
+**Delivered:**
+- Ed25519 agent keypairs with persistent storage (`pkg/identity/`)
+- Signed checkpoint lineage: each checkpoint signed by agent identity (`pkg/lineage/`)
+- WASM binary hash verification in checkpoint header
+- Content hashing for tamper-evident checkpoint chains
+- Checkpoint format v0x04 with prevHash, agentPubKey, signature fields
 
 **Outcome:** Verifiable checkpoint lineage; foundation for trustless operation.
 
-### Task 14: Migration Failure Recovery
+### Task 14: Migration Failure Recovery ✅
 
-**Objective:** Handle migration failures gracefully with lease-aware recovery.
+**Status:** Complete. Robust migration with retry, fallback, and lease-aware recovery.
 
-**Scope:**
-- Retry failed migrations with exponential backoff
-- Lease-aware recovery: expired lease triggers re-election
-- Fallback to alternative nodes
-- Cross-node replay verification for migrated checkpoints
+**Delivered:**
+- Peer registry with health tracking and candidate selection (`internal/registry/`)
+- Retry policy with error classification: retriable, fatal, ambiguous (`internal/migration/retry.go`)
+- Exponential backoff with configurable max attempts and delay
+- `MigrateAgentWithRetry`: orchestrates retry loop with fallback to alternative peers
+- FS-2 safety: ambiguous transfer (sent but no confirmation) enters RECOVERY_REQUIRED, no retry to different target
+- Lease state transitions: `RevertHandoff()` (HANDOFF_INITIATED → ACTIVE_OWNER), `Recover()` (RECOVERY_REQUIRED → ACTIVE_OWNER at epoch major+1)
+- Lease recovery in tick loop: RECOVERY_REQUIRED state auto-recovers
+- `DivergenceMigrate` escalation wired to `MigrateAgentWithRetry`
+- CLI flags: `--migration-retries`, `--migration-retry-delay`
 
-**Outcome:** Robust migration under adverse conditions.
+**Outcome:** Robust migration under adverse conditions with single-instance invariant preserved.
 
 ### Task 15: Permissionless Hardening
 
@@ -430,14 +431,14 @@ Phase 2 is **validated** when:
 - No critical bugs remain
 - Documentation is comprehensive
 
-**Status: Phase 2 validated. Phase 3 in progress.**
+**Status: Phase 2 validated. Phase 5 in progress.**
 
 ---
 
 ## Next Immediate Steps
 
-Phase 3 complete. Phase 4 in progress (Task 10 complete). Next:
+Phase 4 complete. Phase 5 in progress (Tasks 12–14 complete). Next:
 
-1. **Task 11: Node Pricing & Economic Settlement** - Price advertisement, budget adapters, settlement interface
-2. **Extended testing** - Run agents with wallet hostcalls under load
+1. **Task 15: Permissionless Hardening** - Sybil resistance, host attestation, anti-withholding
+2. **Extended testing** - Run agents with migration retry under adverse conditions
 3. **Hardening** - Bug fixes, test coverage, documentation accuracy

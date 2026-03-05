@@ -52,6 +52,8 @@ func main() {
 	simSeed := flag.Uint64("seed", 0, "Random seed for deterministic simulation")
 	leaseDuration := flag.Duration("lease-duration", 60*time.Second, "Lease validity period (0 = disabled)")
 	leaseGrace := flag.Duration("lease-grace", 10*time.Second, "Grace period after lease expiry")
+	migrationRetries := flag.Int("migration-retries", 0, "Max retries per migration target (0 = use config default)")
+	migrationRetryDelay := flag.Duration("migration-retry-delay", 0, "Initial backoff delay between migration retries (0 = use config default)")
 	flag.Parse()
 
 	// Checkpoint inspector — standalone, no config/P2P/engine needed
@@ -78,23 +80,8 @@ func main() {
 	}
 
 	// Apply CLI overrides
-	if *replayWindow > 0 {
-		cfg.ReplayWindowSize = *replayWindow
-	}
-	if *verifyInterval > 0 {
-		cfg.VerifyInterval = *verifyInterval
-	}
-	if *replayMode != "" {
-		cfg.ReplayMode = *replayMode
-	}
-	if *replayCostLog {
-		cfg.ReplayCostLog = true
-	}
-	if *replayOnDivergence != "" {
-		cfg.ReplayOnDivergence = *replayOnDivergence
-	}
-	cfg.LeaseDuration = *leaseDuration
-	cfg.LeaseGracePeriod = *leaseGrace
+	applyCLIOverrides(cfg, *replayWindow, *verifyInterval, *replayMode, *replayCostLog,
+		*replayOnDivergence, *leaseDuration, *leaseGrace, *migrationRetries, *migrationRetryDelay)
 
 	// Initialize logging
 	logger := logging.NewLogger()
@@ -276,31 +263,21 @@ func runLocalAgent(
 			return nil
 
 		case <-tickTimer.C:
-			// Pre-tick lease validation (EI-6: safety over liveness)
-			if leaseErr := runner.CheckAndRenewLease(instance, logger); leaseErr != nil {
-				return runner.HandleLeaseExpiry(ctx, instance, leaseErr, logger)
+			result, err := handleTick(ctx, instance, cfg, replayEngine, periodicVerify,
+				&ticksSinceVerify, &lastVerifiedTick, logger)
+			if err != nil {
+				return err
 			}
-
-			hasMoreWork, tickErr := runner.SafeTick(ctx, instance)
-			if tickErr != nil {
-				return runner.HandleTickFailure(ctx, instance, tickErr, logger)
-			}
-
-			// Adaptive tick scheduling: fast-path if agent has more work.
-			if hasMoreWork {
-				tickTimer.Reset(minTickInterval)
-			} else {
+			switch result {
+			case tickRecovered:
 				tickTimer.Reset(normalTickInterval)
-			}
-
-			ticksSinceVerify++
-			if periodicVerify && cfg.VerifyInterval > 0 && ticksSinceVerify >= cfg.VerifyInterval {
-				ticksSinceVerify = 0
-				var action runner.DivergenceAction
-				lastVerifiedTick, action = runner.VerifyNextTick(ctx, instance, replayEngine, lastVerifiedTick, cfg.ReplayCostLog, cfg.ReplayOnDivergence, logger)
-				if stop := runner.HandleDivergenceAction(ctx, instance, cfg, action, logger); stop {
-					return nil
-				}
+				continue
+			case tickStopped:
+				return nil
+			case tickFastPath:
+				tickTimer.Reset(minTickInterval)
+			default:
+				tickTimer.Reset(normalTickInterval)
 			}
 
 		case <-checkpointTicker.C:
@@ -352,6 +329,87 @@ func initLocalAgent(
 		)
 	}
 	return nil
+}
+
+// tickResult indicates the outcome of a single tick iteration.
+type tickResult int
+
+const (
+	tickNormal    tickResult = iota // Normal tick, use standard interval.
+	tickFastPath                    // Agent has more work, use fast interval.
+	tickRecovered                   // Lease recovered, continue immediately.
+	tickStopped                     // Divergence action requires stopping.
+)
+
+// handleTick processes a single tick: lease check, agent tick, verification.
+func handleTick(
+	ctx context.Context,
+	instance *agent.Instance,
+	cfg *config.Config,
+	replayEngine *replay.Engine,
+	periodicVerify bool,
+	ticksSinceVerify *int,
+	lastVerifiedTick *uint64,
+	logger *slog.Logger,
+) (tickResult, error) {
+	// Pre-tick lease validation (EI-6: safety over liveness)
+	if leaseErr := runner.CheckAndRenewLease(instance, logger); leaseErr != nil {
+		if instance.Lease != nil && instance.Lease.State == authority.StateRecoveryRequired {
+			if recoverErr := runner.AttemptLeaseRecovery(ctx, instance, logger); recoverErr == nil {
+				return tickRecovered, nil
+			}
+		}
+		return tickNormal, runner.HandleLeaseExpiry(ctx, instance, leaseErr, logger)
+	}
+
+	hasMoreWork, tickErr := runner.SafeTick(ctx, instance)
+	if tickErr != nil {
+		return tickNormal, runner.HandleTickFailure(ctx, instance, tickErr, logger)
+	}
+
+	*ticksSinceVerify++
+	if periodicVerify && cfg.VerifyInterval > 0 && *ticksSinceVerify >= cfg.VerifyInterval {
+		*ticksSinceVerify = 0
+		var action runner.DivergenceAction
+		*lastVerifiedTick, action = runner.VerifyNextTick(ctx, instance, replayEngine, *lastVerifiedTick, cfg.ReplayCostLog, cfg.ReplayOnDivergence, logger)
+		if stop := runner.HandleDivergenceAction(ctx, instance, cfg, action, nil, logger); stop {
+			return tickStopped, nil
+		}
+	}
+
+	if hasMoreWork {
+		return tickFastPath, nil
+	}
+	return tickNormal, nil
+}
+
+// applyCLIOverrides applies command-line flag values to the configuration.
+func applyCLIOverrides(cfg *config.Config, replayWindow, verifyInterval int, replayMode string,
+	replayCostLog bool, replayOnDivergence string, leaseDuration, leaseGrace time.Duration,
+	migrationRetries int, migrationRetryDelay time.Duration) {
+	if replayWindow > 0 {
+		cfg.ReplayWindowSize = replayWindow
+	}
+	if verifyInterval > 0 {
+		cfg.VerifyInterval = verifyInterval
+	}
+	if replayMode != "" {
+		cfg.ReplayMode = replayMode
+	}
+	if replayCostLog {
+		cfg.ReplayCostLog = true
+	}
+	if replayOnDivergence != "" {
+		cfg.ReplayOnDivergence = replayOnDivergence
+	}
+	cfg.LeaseDuration = leaseDuration
+	cfg.LeaseGracePeriod = leaseGrace
+	if migrationRetries > 0 {
+		cfg.MigrationMaxRetries = migrationRetries
+	}
+	if migrationRetryDelay > 0 {
+		cfg.MigrationRetryDelay = migrationRetryDelay
+	}
 }
 
 // runInspector parses and displays a checkpoint file.

@@ -133,3 +133,42 @@ func (s *Service) QueryPeerPrice(ctx context.Context, peerAddr string) (*PriceRe
 
 	return &resp, nil
 }
+
+// ScanPeerPrices queries prices from multiple peers concurrently.
+// Returns results for peers that respond within the timeout; individual
+// peer errors are logged but do not fail the scan.
+func (s *Service) ScanPeerPrices(ctx context.Context, peerAddrs []string) []PriceResponse {
+	type result struct {
+		resp PriceResponse
+		err  error
+	}
+
+	results := make(chan result, len(peerAddrs))
+
+	for _, addr := range peerAddrs {
+		go func(peerAddr string) {
+			peerCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+
+			resp, err := s.QueryPeerPrice(peerCtx, peerAddr)
+			if err != nil {
+				s.logger.Debug("Price scan: peer unreachable",
+					"peer", peerAddr,
+					"error", err,
+				)
+				results <- result{err: err}
+				return
+			}
+			results <- result{resp: *resp}
+		}(addr)
+	}
+
+	var responses []PriceResponse
+	for range peerAddrs {
+		r := <-results
+		if r.err == nil {
+			responses = append(responses, r.resp)
+		}
+	}
+	return responses
+}

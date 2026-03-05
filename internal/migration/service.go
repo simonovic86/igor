@@ -194,7 +194,8 @@ func (s *Service) buildMigrationPackage(
 	return pkg, localInstance, nil
 }
 
-// MigrateAgent migrates an agent to a target peer.
+// MigrateAgent migrates an agent to a target peer. This is the simple,
+// non-retrying version used by the CLI --migrate-agent command.
 func (s *Service) MigrateAgent(
 	ctx context.Context,
 	agentID string,
@@ -206,6 +207,38 @@ func (s *Service) MigrateAgent(
 		"target", targetPeerAddr,
 	)
 
+	// Transition local lease to HANDOFF_INITIATED before anything else.
+	s.mu.RLock()
+	if li, ok := s.activeAgents[agentID]; ok && li.Lease != nil {
+		if err := li.Lease.TransitionToHandoff(); err != nil {
+			s.mu.RUnlock()
+			return fmt.Errorf("lease handoff transition: %w", err)
+		}
+	}
+	s.mu.RUnlock()
+
+	pkg, localInstance, err := s.buildMigrationPackage(ctx, agentID, wasmPath)
+	if err != nil {
+		return err
+	}
+
+	if err := s.migrateToTarget(ctx, agentID, targetPeerAddr, pkg); err != nil {
+		return err
+	}
+
+	s.finalizeMigration(ctx, agentID, localInstance)
+	return nil
+}
+
+// migrateToTarget performs the actual migration transfer to a specific peer.
+// Does NOT manage lease transitions — the caller handles that.
+// Returns ErrTransferSent-wrapped errors for the ambiguous case (FS-2).
+func (s *Service) migrateToTarget(
+	ctx context.Context,
+	agentID string,
+	targetPeerAddr string,
+	pkg protomsg.AgentPackage,
+) error {
 	// Parse target multiaddr
 	maddr, err := multiaddr.NewMultiaddr(targetPeerAddr)
 	if err != nil {
@@ -220,21 +253,6 @@ func (s *Service) MigrateAgent(
 	// Connect to target peer
 	if err := s.host.Connect(ctx, *addrInfo); err != nil {
 		return fmt.Errorf("failed to connect to target peer: %w", err)
-	}
-
-	// Transition local lease to HANDOFF_INITIATED before building package
-	s.mu.RLock()
-	if li, ok := s.activeAgents[agentID]; ok && li.Lease != nil {
-		if err := li.Lease.TransitionToHandoff(); err != nil {
-			s.mu.RUnlock()
-			return fmt.Errorf("lease handoff transition: %w", err)
-		}
-	}
-	s.mu.RUnlock()
-
-	pkg, localInstance, err := s.buildMigrationPackage(ctx, agentID, wasmPath)
-	if err != nil {
-		return err
 	}
 
 	transfer := protomsg.AgentTransfer{
@@ -255,13 +273,14 @@ func (s *Service) MigrateAgent(
 		return fmt.Errorf("failed to send transfer: %w", err)
 	}
 
-	s.logger.Info("Transfer sent", "agent_id", agentID)
+	s.logger.Info("Transfer sent", "agent_id", agentID, "target", targetPeerAddr)
 
-	// Read confirmation
+	// Read confirmation — if this fails, we're in the FS-2 ambiguous case:
+	// the target MAY have the agent.
 	decoder := json.NewDecoder(stream)
 	var started protomsg.AgentStarted
 	if err := decoder.Decode(&started); err != nil {
-		return fmt.Errorf("failed to read confirmation: %w", err)
+		return fmt.Errorf("failed to read confirmation: %w", ErrTransferSent)
 	}
 
 	if !started.Success {
@@ -272,7 +291,12 @@ func (s *Service) MigrateAgent(
 		"agent_id", agentID,
 		"target_node", started.NodeID,
 	)
+	return nil
+}
 
+// finalizeMigration retires the lease, terminates the local instance,
+// and cleans up local storage after a successful migration.
+func (s *Service) finalizeMigration(ctx context.Context, agentID string, localInstance *agent.Instance) {
 	// Transition source lease to RETIRED after target confirms
 	if localInstance != nil && localInstance.Lease != nil {
 		if err := localInstance.Lease.TransitionToRetired(); err != nil {
@@ -284,8 +308,6 @@ func (s *Service) MigrateAgent(
 	// map still holds the same instance we read earlier. A concurrent incoming
 	// migration could have registered a different instance for this agent ID;
 	// deleting that would violate EI-1 (Single Active Instance).
-	// Close is held under the lock to prevent concurrent access to a closing
-	// instance (wazero Module.Close is fast — it just marks the module closed).
 	s.mu.Lock()
 	if localInstance != nil && s.activeAgents[agentID] == localInstance {
 		delete(s.activeAgents, agentID)
@@ -297,11 +319,141 @@ func (s *Service) MigrateAgent(
 	s.mu.Unlock()
 
 	if err := s.cleanupLocalAgent(ctx, agentID); err != nil {
-		return err
+		s.logger.Error("Migration finalization error", "error", err)
 	}
 
 	s.logger.Info("Migration completed successfully", "agent_id", agentID)
-	return nil
+}
+
+// MigrateAgentWithRetry attempts migration with retry and fallback to
+// alternative peers from the registry. Returns the address of the successful
+// target, or an error if all attempts fail.
+//
+// The retry loop respects FS-2 (Migration Continuity): if the transfer is
+// sent but no confirmation is received, the agent enters RECOVERY_REQUIRED
+// rather than retrying to a different target (dual authority risk).
+func (s *Service) MigrateAgentWithRetry(
+	ctx context.Context,
+	agentID string,
+	wasmPath string,
+	primaryTarget string,
+	candidates []string, // alternative peer multiaddrs, ordered by preference
+	retryCfg RetryConfig,
+) (successTarget string, err error) {
+	s.logger.Info("Starting migration with retry",
+		"agent_id", agentID,
+		"primary", primaryTarget,
+		"candidates", len(candidates),
+		"max_attempts", retryCfg.MaxAttempts,
+	)
+
+	// Transition local lease to HANDOFF_INITIATED (once, before any attempts).
+	s.mu.RLock()
+	li, hasAgent := s.activeAgents[agentID]
+	s.mu.RUnlock()
+	if hasAgent && li.Lease != nil {
+		if err := li.Lease.TransitionToHandoff(); err != nil {
+			return "", fmt.Errorf("lease handoff transition: %w", err)
+		}
+	}
+
+	// Build migration package (once — checkpoint is frozen at this point).
+	pkg, localInstance, err := s.buildMigrationPackage(ctx, agentID, wasmPath)
+	if err != nil {
+		s.revertHandoff(agentID)
+		return "", err
+	}
+
+	// Build ordered target list.
+	targets := make([]string, 0, 1+len(candidates))
+	if primaryTarget != "" {
+		targets = append(targets, primaryTarget)
+	}
+	for _, c := range candidates {
+		if c != primaryTarget {
+			targets = append(targets, c)
+		}
+	}
+
+	if len(targets) == 0 {
+		s.revertHandoff(agentID)
+		return "", fmt.Errorf("no migration targets available")
+	}
+
+	// Try each target with retries.
+	for _, target := range targets {
+		for attempt := range retryCfg.MaxAttempts {
+			s.logger.Info("Migration attempt",
+				"agent_id", agentID,
+				"target", target,
+				"attempt", attempt+1,
+				"max_attempts", retryCfg.MaxAttempts,
+			)
+
+			migrateErr := s.migrateToTarget(ctx, agentID, target, pkg)
+			if migrateErr == nil {
+				s.finalizeMigration(ctx, agentID, localInstance)
+				return target, nil
+			}
+
+			s.logger.Error("Migration attempt failed",
+				"target", target,
+				"attempt", attempt+1,
+				"error", migrateErr,
+			)
+
+			// FS-2: transfer sent but no confirmation — ambiguous case.
+			// Target MAY have the agent. Must not retry to a different target.
+			if IsAmbiguous(migrateErr) {
+				s.logger.Error("Transfer sent but no confirmation (FS-2) — entering RECOVERY_REQUIRED",
+					"agent_id", agentID,
+				)
+				if hasAgent && li.Lease != nil {
+					li.Lease.State = authority.StateRecoveryRequired
+				}
+				return "", fmt.Errorf("migration ambiguous (transfer sent, no confirmation): %w", migrateErr)
+			}
+
+			// Fatal errors skip remaining retries for this target.
+			if !IsRetriable(migrateErr) {
+				s.logger.Info("Non-retriable error, skipping target",
+					"target", target,
+				)
+				break
+			}
+
+			// Wait before retry (unless this was the last attempt for this target).
+			if attempt < retryCfg.MaxAttempts-1 {
+				delay := BackoffDelay(retryCfg, attempt)
+				s.logger.Info("Waiting before retry", "delay", delay)
+				select {
+				case <-ctx.Done():
+					s.revertHandoff(agentID)
+					return "", ctx.Err()
+				case <-time.After(delay):
+				}
+			}
+		}
+	}
+
+	// All targets exhausted — revert handoff so the agent can resume ticking.
+	s.revertHandoff(agentID)
+	return "", fmt.Errorf("migration failed: all targets exhausted for agent %s", agentID)
+}
+
+// revertHandoff transitions the lease from HANDOFF_INITIATED back to
+// ACTIVE_OWNER so the agent can resume ticking locally.
+func (s *Service) revertHandoff(agentID string) {
+	s.mu.RLock()
+	li, ok := s.activeAgents[agentID]
+	s.mu.RUnlock()
+	if ok && li.Lease != nil {
+		if err := li.Lease.RevertHandoff(); err != nil {
+			s.logger.Warn("Failed to revert handoff", "agent_id", agentID, "error", err)
+		} else {
+			s.logger.Info("Handoff reverted, agent can resume ticking", "agent_id", agentID)
+		}
+	}
 }
 
 // cleanupLocalAgent deletes local checkpoint, receipts, and identity after
