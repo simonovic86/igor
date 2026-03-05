@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Igor
 
-Igor is a decentralized runtime for autonomous, survivable software agents. Agents are WASM binaries that checkpoint their state, migrate between peer nodes over libp2p, and pay for execution from internal budgets. Phase 3 (Autonomy) is complete — agents run, checkpoint, migrate, resume, meter cost, enforce capability membranes, replay-verify, and support multi-node chain migration. Phase 4 (Economics) is next. Research-stage, not production-ready.
+Igor is a decentralized runtime for autonomous, survivable software agents. Agents are WASM binaries that checkpoint their state, migrate between peer nodes over libp2p, and pay for execution from internal budgets. Phases 2–4 are complete, Phase 5 (Hardening) is complete — agents run, checkpoint, migrate, resume, meter cost, enforce capability membranes, replay-verify, support multi-node chain migration, sign checkpoint lineage, recover from migration failures, and enforce lease-based authority. Task 15 (Permissionless Hardening) is next. Research-stage, not production-ready.
 
 **Stack:** Go 1.25 · wazero (pure Go WASM, no CGo) · libp2p-go · TinyGo (agent compilation)
 
@@ -20,6 +20,7 @@ make vet             # go vet
 make fmt             # gofmt + goimports
 make check           # fmt-check + vet + lint + test (same as precommit)
 make run-agent       # Build + run example agent with budget 1.0
+make demo            # Build + run bridge reconciliation demo
 make clean           # Remove bin/, checkpoints/, agent.wasm
 ```
 
@@ -35,7 +36,7 @@ Run the node manually:
 ## Architecture
 
 ### Execution model
-Agents export 5 WASM functions: `agent_init`, `agent_tick`, `agent_checkpoint`, `agent_checkpoint_ptr`, `agent_resume`. TinyGo agents provide `malloc` automatically. The runtime drives a 1 Hz tick loop. Each tick is budgeted: `cost = elapsed_seconds × price_per_second`. Checkpoints save every 5 seconds. Tick timeout: 100ms.
+Agents export 5 WASM functions: `agent_init`, `agent_tick`, `agent_checkpoint`, `agent_checkpoint_ptr`, `agent_resume`. TinyGo agents provide `malloc` automatically. The runtime drives an adaptive tick loop: 1 Hz default, 10ms fast path when `agent_tick` returns 1 (more work pending). Each tick is budgeted: `cost = elapsed_nanoseconds × price_per_second / 1e9`. Checkpoints save every 5 seconds. Tick timeout: 100ms.
 
 ### Checkpoint format (binary, little-endian)
 Current version is v0x04 (209-byte header). Supports reading v0x02 (57 bytes) and v0x03 (81 bytes).
@@ -52,8 +53,11 @@ Atomic writes via temp file → fsync → rename.
 - `internal/runtime/` — wazero sandbox: 64MB memory limit, WASI with fs/net disabled
 - `internal/hostcall/` — `igor` host module: clock, rand, log, wallet hostcall implementations
 - `internal/eventlog/` — Per-tick observation event log for deterministic replay
-- `internal/replay/` — Deterministic single-tick replay verification engine
-- `internal/migration/` — P2P migration over libp2p stream protocol `/igor/migrate/1.0.0`
+- `internal/replay/` — Deterministic replay verification: single-tick (`ReplayTick`) and chain (`ReplayChain`)
+- `internal/runner/` — Tick loop orchestration, divergence escalation policies, lease management
+- `internal/authority/` — Lease-based authority epochs, state machine (Active→Expired→RecoveryRequired)
+- `internal/migration/` — P2P migration over libp2p stream protocol `/igor/migrate/1.0.0`, retry with backoff
+- `internal/registry/` — Peer registry with health tracking for migration target selection
 - `internal/storage/` — `CheckpointProvider` interface + filesystem implementation
 - `internal/p2p/` — libp2p host setup, bootstrap peers, protocol handlers
 - `pkg/manifest/` — Capability manifest parsing and validation
@@ -61,10 +65,18 @@ Atomic writes via temp file → fsync → rename.
 - `pkg/receipt/` — Payment receipt data structure, Ed25519 signing, binary serialization
 - `pkg/identity/` — Agent Ed25519 keypair management for signed checkpoint lineage
 - `pkg/lineage/` — Signed checkpoint types, content hashing, signature verification
-- `sdk/igor/` — Agent SDK: hostcall wrappers (ClockNow, RandBytes, Log, WalletBalance), lifecycle plumbing (Agent interface)
+- `sdk/igor/` — Agent SDK: hostcall wrappers (ClockNow, RandBytes, Log, WalletBalance), lifecycle plumbing (Agent interface), Encoder/Decoder with Raw/FixedBytes/ReadInto for checkpoint serialization
 
 ### Migration flow
-Source checkpoints → packages (WASM + checkpoint + budget) → transfers over libp2p → target instantiates + resumes → target confirms → source terminates + deletes local checkpoint. Single-instance invariant maintained throughout.
+Source checkpoints → packages (WASM + checkpoint + budget) → transfers over libp2p → target instantiates + resumes → target confirms → source terminates + deletes local checkpoint. Single-instance invariant maintained throughout. Failures classified as retriable/fatal/ambiguous; ambiguous transfers enter RECOVERY_REQUIRED state (EI-6). Retry with exponential backoff; peer registry tracks health for target selection.
+
+### Key CLI flags
+- `--replay-mode off|periodic|on-migrate|full` — when to run replay verification (default: full)
+- `--replay-on-divergence log|pause|intensify|migrate` — escalation policy on divergence (default: log)
+- `--verify-interval N` — ticks between verification passes (default: 5)
+- `--lease-duration 60s` — authority lease validity period (default: 60s, 0 = disabled)
+- `--simulate` — run agent in local simulator mode (no P2P)
+- `--inspect-checkpoint <path>` — parse and display checkpoint file
 
 ## Specification Layers
 

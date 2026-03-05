@@ -8,12 +8,12 @@ Last updated: 2026-03-05
 
 | Aspect | Status | Code Reference |
 |--------|--------|----------------|
-| Version byte (0x02) | Implemented | `internal/agent/instance.go` `checkpointVersion` |
+| Version byte (0x04, reads 0x02/0x03) | Implemented | `internal/agent/instance.go` `checkpointVersion` |
 | Budget as int64 microcents | Implemented | `internal/agent/instance.go` `Instance.Budget` |
 | PricePerSecond as int64 microcents | Implemented | `internal/agent/instance.go` `Instance.PricePerSecond` |
 | TickNumber in header | Implemented | `internal/agent/instance.go` offset 17-25 |
 | WASM SHA-256 hash in header | Implemented | `internal/agent/instance.go` offset 25-57, `Instance.WASMHash` |
-| 57-byte header | Implemented | `internal/agent/instance.go` `checkpointHeaderLen` |
+| 209-byte header (v0x04) | Implemented | `internal/agent/instance.go` `checkpointHeaderLenV4` |
 | Atomic writes (temp+fsync+rename) | Implemented | `internal/storage/fs_provider.go` |
 | Hash verification on resume | Implemented | `internal/agent/instance.go` `LoadCheckpointFromStorage` |
 | v1 backward compatibility | Removed | Single format, no version negotiation |
@@ -81,8 +81,8 @@ Last updated: 2026-03-05
 | WASM hash verification on resume | Implemented | `internal/agent/instance.go` `LoadCheckpointFromStorage` |
 | WASM hash in migration package | Implemented | `pkg/protocol/messages.go` `WASMHash` |
 | WASM hash verification on migration | Implemented | `internal/migration/service.go` |
-| OA-2 authority lifecycle states | Not implemented | States (ACTIVE_OWNER, HANDOFF_INITIATED, HANDOFF_PENDING, RETIRED, RECOVERY_REQUIRED) exist as spec concepts only. Migration tracks ownership implicitly via `activeAgents` map presence. Requires Task 12. |
-| EI-11 divergent lineage detection | Not implemented | No distributed protocol for detecting concurrent instances across nodes. RECOVERY_REQUIRED state transition is specified but not implemented. Requires Tasks 12-13. |
+| OA-2 authority lifecycle states | Partial | Lease-based authority (Task 12) provides ACTIVE/EXPIRED/RECOVERY_REQUIRED states via `internal/authority/`. Full OA-2 ownership model (HANDOFF_INITIATED, HANDOFF_PENDING, RETIRED) tracked implicitly through migration handoff. |
+| EI-11 divergent lineage detection | Partial | RECOVERY_REQUIRED state implemented in `internal/authority/`. Signed checkpoint lineage (Task 13) enables tamper detection. Full cross-node distributed detection requires Task 15 (Permissionless Hardening). |
 | Signed checkpoint lineage | Implemented | Task 13: `pkg/lineage/`, checkpoint v0x04 with signed hash chain. See [SIGNED_LINEAGE.md](runtime/SIGNED_LINEAGE.md). |
 | Lease-based authority epochs | Implemented | Task 12: `internal/authority/`, checkpoint v0x03 with epoch metadata. See [LEASE_EPOCH.md](runtime/LEASE_EPOCH.md). |
 | Cryptographic agent identity | Implemented | Task 13: `pkg/identity/`, Ed25519 agent keypairs with persistent storage. |
@@ -135,7 +135,7 @@ Last updated: 2026-03-05
 | Replay failure escalation policy | Implemented | `internal/runner/runner.go` `EscalationForPolicy`, `--replay-on-divergence` |
 | Adaptive tick rate | Implemented | `cmd/igord/main.go` `hasMoreWork` hint, 10ms minimum interval |
 | `migrate` escalation policy | Partial | `internal/runner/runner.go` `DivergenceMigrate`. Falls through to pause because peer selection is not yet implemented. Users setting `--replay-on-divergence=migrate` get pause behavior. |
-| SDK checkpoint serialization | Implemented | `sdk/igor/encoder.go` `Encoder`/`Decoder` |
+| SDK checkpoint serialization | Implemented | `sdk/igor/encoding.go` `Encoder`/`Decoder` |
 | Shared runtime engine (migration) | Implemented | `internal/migration/service.go` shares `runtime.Engine` |
 | Event log arena allocation | Implemented | `internal/eventlog/eventlog.go` per-tick arena, 4KB default |
 | Sub-microsecond metering | Implemented | `internal/agent/instance.go` nanosecond cost calculation |

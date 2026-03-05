@@ -72,6 +72,14 @@ func (e *Encoder) Bool(v bool) *Encoder {
 	return e
 }
 
+// Raw appends raw bytes without a length prefix.
+// Use for fixed-size fields (e.g., [16]byte arrays) where the size is
+// known at decode time. For variable-length data, use Bytes instead.
+func (e *Encoder) Raw(b []byte) *Encoder {
+	e.buf = append(e.buf, b...)
+	return e
+}
+
 // Finish returns the encoded bytes.
 func (e *Encoder) Finish() []byte {
 	return e.buf
@@ -156,6 +164,33 @@ func (d *Decoder) Bool() bool {
 	v := d.data[d.pos] != 0
 	d.pos++
 	return v
+}
+
+// FixedBytes reads exactly n bytes and returns a new slice.
+// Use for fixed-size fields encoded with Raw. Unlike Bytes, there is
+// no length prefix — the caller must know the expected size.
+func (d *Decoder) FixedBytes(n int) []byte {
+	if d.err != nil || d.pos+n > len(d.data) {
+		d.err = errShortRead
+		return nil
+	}
+	v := make([]byte, n)
+	copy(v, d.data[d.pos:d.pos+n])
+	d.pos += n
+	return v
+}
+
+// ReadInto reads exactly len(dst) bytes into the provided slice.
+// Convenience method for fixed-size array fields like [16]byte:
+//
+//	d.ReadInto(r.CaseID[:])
+func (d *Decoder) ReadInto(dst []byte) {
+	if d.err != nil || d.pos+len(dst) > len(d.data) {
+		d.err = errShortRead
+		return
+	}
+	copy(dst, d.data[d.pos:d.pos+len(dst)])
+	d.pos += len(dst)
 }
 
 // Err returns the first error encountered during decoding, or nil.

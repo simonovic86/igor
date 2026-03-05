@@ -2,14 +2,15 @@
 
 ## Overview
 
-Igor agents implement a deterministic lifecycle with four required functions:
+Igor agents implement a deterministic lifecycle with five required functions:
 
 1. `agent_init()` - One-time initialization
-2. `agent_tick()` - Periodic execution
-3. `agent_checkpoint()` - State serialization
-4. `agent_resume(ptr, len)` - State restoration
+2. `agent_tick()` - Periodic execution (returns `uint32`: nonzero = has more work)
+3. `agent_checkpoint()` - Returns state size
+4. `agent_checkpoint_ptr()` - Returns pointer to state
+5. `agent_resume(ptr, len)` - State restoration
 
-All agents must export these functions for the runtime to call.
+All agents must export these functions for the runtime to call. TinyGo agents using the SDK (`sdk/igor`) get all five exports automatically.
 
 ## Lifecycle Phases
 
@@ -84,7 +85,7 @@ func agent_tick() {
 
 **Budget Metering:**
 ```go
-costMicrocents := elapsed.Microseconds() * pricePerSecond / budget.MicrocentScale
+costMicrocents := elapsed.Nanoseconds() * pricePerSecond / 1_000_000_000
 budget -= costMicrocents
 ```
 
@@ -100,7 +101,7 @@ Read from WASM Memory → Serialize
 - Call `agent_checkpoint()` to get size
 - Call `agent_checkpoint_ptr()` to get pointer
 - Read state from WASM memory
-- Add checkpoint header: `[version:1][budget:8][price:8][tick:8][wasmHash:32][state:N]`
+- Add checkpoint header (209 bytes v0x04): version, budget, price, tick, WASM hash, lease metadata, lineage hash, signature
 - Save via storage provider (atomic write)
 
 **Agent Actions:**
@@ -207,26 +208,38 @@ func agent_resume(ptr, size uint32) {
 
 ```
 Offset  Size  Field
-0       1     Version (0x02)
+0       1     Version (0x04)
 1       8     Budget (int64 microcents, little-endian)
 9       8     PricePerSecond (int64 microcents, little-endian)
 17      8     TickNumber (uint64, little-endian)
 25      32    WASMHash (SHA-256 of agent binary)
-57      N     Agent State (agent-defined)
+57      8     MajorVersion (uint64, little-endian)
+65      8     LeaseGeneration (uint64, little-endian)
+73      8     LeaseExpiry (uint64, little-endian)
+81      32    PrevHash (SHA-256 of previous checkpoint)
+113     32    AgentPubKey (Ed25519 public key)
+145     64    Signature (Ed25519 over header minus signature)
+209     N     Agent State (agent-defined)
 ```
 
-Header: 57 bytes. Budget unit: 1 currency unit = 1,000,000 microcents.
+Header: 209 bytes (v0x04). Supports reading v0x02 (57 bytes) and v0x03 (81 bytes). Budget unit: 1 currency unit = 1,000,000 microcents.
 
 ### Example (Counter Agent)
 
 ```
-Total: 65 bytes (57-byte header + 8-byte state)
-[0]     0x02 (version)
-[1-8]   1000000 (budget = 1.0 units in microcents)
-[9-16]  1000 (price = 0.001 units/sec in microcents)
-[17-24] 42 (tick number)
-[25-56] <SHA-256 hash of agent WASM binary>
-[57-64] 42 (counter value as uint64)
+Total: 217 bytes (209-byte header + 8-byte state)
+[0]       0x04 (version)
+[1-8]     1000000 (budget = 1.0 units in microcents)
+[9-16]    1000 (price = 0.001 units/sec in microcents)
+[17-24]   42 (tick number)
+[25-56]   <SHA-256 hash of agent WASM binary>
+[57-64]   1 (major version)
+[65-72]   1 (lease generation)
+[73-80]   <lease expiry timestamp>
+[81-112]  <SHA-256 of previous checkpoint>
+[113-144] <Ed25519 public key>
+[145-208] <Ed25519 signature>
+[209-216] 42 (counter value as uint64)
 ```
 
 ### Portability
@@ -314,7 +327,7 @@ start := time.Now()
 agent_tick()
 elapsed := time.Since(start)
 
-costMicrocents := elapsed.Microseconds() * pricePerSecond / budget.MicrocentScale
+costMicrocents := elapsed.Nanoseconds() * pricePerSecond / 1_000_000_000
 budget -= costMicrocents
 ```
 
@@ -371,7 +384,7 @@ type Survivor struct {
 
 func (s *Survivor) Init() {}
 
-func (s *Survivor) Tick() {
+func (s *Survivor) Tick() bool {
     s.TickCount++
     now := igor.ClockNow()
     if s.BirthNano == 0 { s.BirthNano = now }
@@ -381,6 +394,7 @@ func (s *Survivor) Tick() {
     s.Luck ^= binary.LittleEndian.Uint32(buf)
     igor.Logf("[survivor] tick %d | age %ds | luck 0x%08x",
         s.TickCount, (s.LastNano-s.BirthNano)/1e9, s.Luck)
+    return false
 }
 
 func (s *Survivor) Marshal() []byte   { /* 28-byte LE encoding */ }

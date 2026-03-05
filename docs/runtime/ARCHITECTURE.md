@@ -79,12 +79,12 @@ Agents interact with the outside world exclusively through runtime-provided host
 
 | Namespace | Type | Purpose | Phase |
 |-----------|------|---------|-------|
-| `clock` | Observation | Wall-clock time | 3 |
-| `rand` | Observation | Cryptographic randomness | 3 |
-| `kv` | Mixed | Per-agent key-value storage | 3 |
-| `log` | Observation | Structured logging | 3 |
-| `net` | Side effect | Network requests | 3+ |
-| `wallet` | Mixed | Budget introspection, transfers | 4+ |
+| `clock` | Observation | Wall-clock time | Implemented |
+| `rand` | Observation | Cryptographic randomness | Implemented |
+| `kv` | Mixed | Per-agent key-value storage | Not implemented |
+| `log` | Observation | Structured logging | Implemented |
+| `net` | Side effect | Network requests | Not implemented |
+| `wallet` | Mixed | Budget introspection, transfers | Implemented |
 
 Agents declare required capabilities in a manifest. The runtime grants only declared capabilities (deny by default, CM-3). All observation hostcalls are recorded in an event log for deterministic replay (CM-4, CE-3).
 
@@ -141,7 +141,7 @@ type AgentPackage struct {
     AgentID        string      // Unique identifier
     WASMBinary     []byte      // Compiled module (~190KB)
     WASMHash       []byte      // SHA-256 of WASMBinary
-    Checkpoint     []byte      // 57-byte header + agent state
+    Checkpoint     []byte      // 209-byte header (v0x04) + agent state
     ManifestData   []byte      // Capability manifest JSON
     Budget         int64       // Remaining budget in microcents
     PricePerSecond int64       // Cost per second in microcents
@@ -162,11 +162,11 @@ start := time.Now()
 agent_tick()
 elapsed := time.Since(start)
 
-costMicrocents := elapsed.Microseconds() * pricePerSecond / budget.MicrocentScale
+costMicrocents := elapsed.Nanoseconds() * pricePerSecond / 1_000_000_000
 budget -= costMicrocents
 ```
 
-Precision: nanosecond-level via Go's monotonic clock.
+Precision: nanosecond-level via Go's monotonic clock. Overflow guard caps cost at remaining budget.
 
 ### Budget Enforcement
 
@@ -191,15 +191,20 @@ When budget exhausts:
 
 ### Budget Persistence
 
-Checkpoints include budget and identity as metadata (57-byte header):
+Checkpoints include budget, identity, and lineage as metadata (209-byte header for v0x04):
 
 ```
-Byte Layout:
-┌─────────┬──────────┬─────────────┬────────────┬──────────┬────────────┐
-│ Version │  Budget  │ PricePerSec │ TickNumber │ WASMHash │ Agent State│
-│ (1 byte)│ (8 bytes)│  (8 bytes)  │ (8 bytes)  │(32 bytes)│ (N bytes)  │
-└─────────┴──────────┴─────────────┴────────────┴──────────┴────────────┘
- 0         1          9             17           25         57
+Byte Layout (v0x04):
+┌─────────┬──────────┬─────────────┬────────────┬──────────┬──────────────┐
+│ Version │  Budget  │ PricePerSec │ TickNumber │ WASMHash │ MajorVersion │
+│ (1 byte)│ (8 bytes)│  (8 bytes)  │ (8 bytes)  │(32 bytes)│  (8 bytes)   │
+├─────────┴──────────┼─────────────┼────────────┼──────────┼──────────────┤
+│ LeaseGeneration    │ LeaseExpiry │  PrevHash  │ PubKey   │  Signature   │
+│    (8 bytes)       │  (8 bytes)  │ (32 bytes) │(32 bytes)│  (64 bytes)  │
+├────────────────────┴─────────────┴────────────┴──────────┴──────────────┤
+│ Agent State (N bytes)                                                   │
+└─────────────────────────────────────────────────────────────────────────┘
+ Header: 209 bytes. Supports reading v0x02 (57 bytes) and v0x03 (81 bytes).
 ```
 
 Little-endian encoding. Budget and price are int64 microcents (1 unit = 1,000,000 microcents).

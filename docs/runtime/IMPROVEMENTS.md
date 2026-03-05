@@ -44,13 +44,15 @@ type TickSnapshot struct {
 
 **Impact:** Halves snapshot memory usage. State comparison becomes constant-time.
 
-### 3. Observation-Weighted Snapshot Retention
+### 3. Observation-Weighted Snapshot Retention ✅
+
+**Status:** Implemented in `internal/agent/instance.go` (weighted eviction) and `internal/runner/runner.go` (skip-empty verification).
 
 **Current:** The replay window retains the last N snapshots and drops older ones regardless of content.
 
 **Problem:** A tick with zero hostcalls is trivially deterministic — replaying it proves nothing. A tick with many observation hostcalls is the one worth verifying.
 
-**Proposed:** Score snapshots by observation count. When evicting, prefer to drop low-observation ticks. At minimum, skip verification of ticks with empty event logs.
+**Implemented:** Snapshots scored by observation count. On eviction, lowest-score snapshot is dropped (ties favor oldest). Verification skips ticks with empty event logs.
 
 ```go
 func (snap TickSnapshot) observationScore() int {
@@ -63,41 +65,47 @@ func (snap TickSnapshot) observationScore() int {
 
 **Impact:** Better verification coverage without increasing window size.
 
-### 4. Multi-Tick Chain Verification
+### 4. Multi-Tick Chain Verification ✅
+
+**Status:** Implemented in `internal/replay/engine.go` as `ReplayChain()`.
 
 **Current:** Replay verifies a single tick at a time: `state_N + events → verify state_N+1`.
 
 **Problem:** Single-tick replay catches per-tick nondeterminism but misses drift that accumulates across ticks (e.g., memory corruption, subtle state divergence that only manifests after many transitions).
 
-**Proposed:** Add a chain verification mode that replays N consecutive ticks and compares only the final state. The event log already retains up to 1024 tick histories — the data exists.
+**Implemented:** Chain verification replays N consecutive ticks in a single WASM instance using an `iteratorHolder` that swaps entry iterators between ticks. Compares only the final state hash.
 
 ```go
 func (e *Engine) ReplayChain(
     ctx context.Context,
     wasmBytes []byte,
-    manifest *manifest.CapabilityManifest,
-    snapshots []TickSnapshot,
+    capManifest *manifest.CapabilityManifest,
+    initialState []byte,
+    snapshots []ChainSnapshot,
+    expectedFinalHash [32]byte,
 ) *ChainResult
 ```
 
 **Impact:** Stronger integrity guarantees. Catches accumulated drift that single-tick replay misses.
 
-### 5. Replay Failure Escalation Policy
+### 5. Replay Failure Escalation Policy ✅
+
+**Status:** Implemented in `internal/runner/runner.go` and `internal/config/config.go`.
 
 **Current:** When replay detects divergence, the system logs a warning and continues execution.
 
 **Problem:** No escalation path. A divergence could indicate a runtime bug, a nondeterministic agent, or a corrupted checkpoint — all of which warrant different responses.
 
-**Proposed:** Add configurable escalation policies:
+**Implemented:** Four configurable escalation policies via `--replay-on-divergence` flag:
 
 | Policy | Behavior |
 |--------|----------|
 | `log` | Log warning, continue (current default) |
-| `pause` | Stop ticking, preserve checkpoint, await operator |
-| `intensify` | Increase verification frequency temporarily |
-| `migrate` | Trigger migration to a different node |
+| `pause` | Stop ticking, preserve checkpoint, exit cleanly |
+| `intensify` | Reduce VerifyInterval to 1 (verify every tick) |
+| `migrate` | Trigger migration via `MigrationTrigger` callback, fallback to pause |
 
-Configured via `--replay-on-divergence` flag or config field.
+Config validated at startup. `HandleDivergenceAction()` executes the policy. Full test coverage.
 
 **Impact:** Operators can choose the appropriate safety/liveness tradeoff.
 
@@ -105,13 +113,15 @@ Configured via `--replay-on-divergence` flag or config field.
 
 ## Tick Loop
 
-### 6. Adaptive Tick Rate
+### 6. Adaptive Tick Rate ✅
+
+**Status:** Implemented in `cmd/igord/main.go` (tick loop) and `internal/agent/instance.go` (return value handling).
 
 **Current:** The tick loop runs at a fixed 1 Hz. An agent that finishes its tick in 0.1ms waits 999.9ms idle.
 
 **Problem:** Agents with bursty workloads (e.g., processing a batch of events) are bottlenecked at 1 tick/second regardless of how fast they complete.
 
-**Proposed:** Let `agent_tick()` return a hint: 0 = no more work (sleep full interval), 1 = more work pending (tick again immediately, subject to budget). The runtime enforces a minimum inter-tick delay (e.g., 10ms) to prevent runaway agents.
+**Implemented:** `agent_tick()` returns uint32 hint: 0 = no more work (1s interval), 1 = more work pending (10ms interval). Backward compatible — legacy void-returning agents default to "no more work". SDK `Agent.Tick() bool` maps cleanly.
 
 ```go
 results, _ := tickFn.Call(ctx)
@@ -125,46 +135,33 @@ if hasMoreWork {
 
 **Impact:** Up to 100x throughput for bursty workloads without changing the metering model. Budget still drains per wall-clock time consumed.
 
-**Breaking change:** Requires agents to change `agent_tick` signature from `() → void` to `() → i32`. Existing agents would need recompilation.
-
 ---
 
 ## Agent Developer Experience
 
-### 7. SDK Checkpoint Serialization
+### 7. SDK Checkpoint Serialization ✅
 
-**Current:** Agents manually serialize state using `unsafe.Pointer`, `binary.LittleEndian`, and raw byte buffers. Example from the counter agent:
+**Status:** Implemented in `sdk/igor/` — lifecycle exports, `Encoder`/`Decoder` helpers, `Raw`/`FixedBytes`/`ReadInto` for fixed-size fields.
 
-```go
-var stateBuf [8]byte
-
-//export agent_checkpoint
-func agent_checkpoint() uint32 {
-    binary.LittleEndian.PutUint64(stateBuf[:], state.Counter)
-    return 8
-}
-```
+**Current:** Agents manually serialize state using `unsafe.Pointer`, `binary.LittleEndian`, and raw byte buffers.
 
 **Problem:** Error-prone, tedious, and hostile to new contributors. Every agent reinvents serialization.
 
-**Proposed:** Provide an SDK package (`sdk/igor`) that handles lifecycle plumbing:
+**Implemented:** The SDK handles `agent_checkpoint`, `agent_checkpoint_ptr`, `agent_resume`, and `malloc` exports automatically. Agents implement the `Agent` interface with chainable `Encoder`/`Decoder` helpers:
 
 ```go
-import "sdk/igor"
-
-type MyState struct {
-    Counter uint64
-    Cache   map[string]string
+type Agent interface {
+    Init()
+    Tick() bool
+    Marshal() []byte       // igor.NewEncoder(n).Uint64(v).Raw(id[:]).Finish()
+    Unmarshal(data []byte)  // d := igor.NewDecoder(data); d.ReadInto(id[:])
 }
-
-func init() {
-    igor.Register(&MyState{})
-}
+func init() { igor.Run(&MyAgent{}) }
 ```
 
-The SDK handles `agent_checkpoint`, `agent_checkpoint_ptr`, `agent_resume`, and `malloc` exports automatically, using a compact binary encoding internally.
+Encoding methods: `Uint64`, `Int64`, `Uint32`, `Int32`, `Bool`, `Bytes` (length-prefixed), `String`, `Raw` (no prefix). Decoding methods: matching reads plus `FixedBytes(n)` and `ReadInto(dst)` for fixed-size arrays.
 
-**Impact:** Agent authoring goes from ~100 lines of boilerplate to ~10. Lower barrier to entry.
+**Impact:** Agent authoring reduced from manual binary manipulation to ~15-line idiomatic Go. Lower barrier to entry.
 
 ---
 
@@ -180,25 +177,22 @@ The SDK handles `agent_checkpoint`, `agent_checkpoint_ptr`, `agent_resume`, and 
 
 **Impact:** Halves baseline memory for compiled WASM caches. Simple refactor.
 
-### 9. Event Log Allocation Optimization
+### 9. Event Log Allocation Optimization ✅
 
-**Current:** Every `Record()` call allocates a new byte slice and copies the payload:
+**Status:** Implemented in `internal/eventlog/eventlog.go`.
 
-```go
-p := make([]byte, len(payload))
-copy(p, payload)
-```
+**Current:** Every `Record()` call allocates a new byte slice and copies the payload.
 
 **Problem:** For high-frequency hostcalls (e.g., `clock_now` called every tick), this creates many small allocations that pressure the GC.
 
-**Proposed:** Use a pre-allocated arena or ring buffer per tick. Allocate a single contiguous buffer at `BeginTick` and sub-allocate from it:
+**Implemented:** 4KB arena pre-allocated per tick at `BeginTick`. `Record()` sub-allocates from the arena; falls back to heap when the arena is full. Eviction copies retained slice to release references.
 
 ```go
 type TickLog struct {
     TickNumber uint64
     Entries    []Entry
-    arena      []byte  // pre-allocated backing store
-    offset     int
+    arena      []byte  // pre-allocated backing store (4KB)
+    offset     int     // next free position
 }
 ```
 
@@ -238,9 +232,9 @@ Ranked by impact-to-effort ratio:
 2. ~~**Cached WASM in Replay** (#1)~~ — **DONE**. `wazero.CompilationCache` shared across replay invocations.
 3. ~~**Hash-Based Post-State** (#2)~~ — **DONE**. `TickSnapshot.PostStateHash [32]byte` replaces full state copy.
 4. ~~**Sub-Microsecond Metering** (#10)~~ — **DONE**. Nanosecond precision via `elapsed.Nanoseconds()`.
-5. **Replay Failure Escalation** (#5) — config + policy, operational maturity
-6. **Observation-Weighted Retention** (#3) — small change, better verification coverage
-7. **SDK Checkpoint Serialization** (#7) — significant effort, biggest DX improvement
-8. **Adaptive Tick Rate** (#6) — breaking change, biggest throughput improvement
-9. **Multi-Tick Chain Verification** (#4) — moderate effort, stronger guarantees
-10. **Event Log Allocation** (#9) — optimization, matters at scale
+5. ~~**Replay Failure Escalation** (#5)~~ — **DONE**. Configurable `--replay-on-divergence` policy: log, pause, intensify, migrate.
+6. ~~**Observation-Weighted Retention** (#3)~~ — **DONE**. `observationScore()` weighted eviction; empty tick logs skipped during verification.
+7. ~~**SDK Checkpoint Serialization** (#7)~~ — **DONE**. `Encoder`/`Decoder` helpers with `Raw`/`FixedBytes`/`ReadInto` for fixed-size fields.
+8. ~~**Adaptive Tick Rate** (#6)~~ — **DONE**. `agent_tick() → uint32` return hint; tick loop uses 10ms fast path / 1s normal interval.
+9. ~~**Multi-Tick Chain Verification** (#4)~~ — **DONE**. `ReplayChain()` replays N consecutive ticks with hash-based final state comparison.
+10. ~~**Event Log Allocation** (#9)~~ — **DONE**. 4KB arena per tick with heap fallback; eviction copies to release references.
