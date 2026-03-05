@@ -67,24 +67,34 @@ type Config struct {
 	// LeaseGracePeriod is the additional time after lease expiry before
 	// the agent transitions to RECOVERY_REQUIRED. Default: 10s.
 	LeaseGracePeriod time.Duration
+
+	// MigrationMaxRetries is the maximum number of retry attempts per
+	// migration target before moving to the next candidate. Default: 3.
+	MigrationMaxRetries int
+
+	// MigrationRetryDelay is the initial backoff delay between migration
+	// retry attempts. Subsequent attempts use exponential backoff. Default: 1s.
+	MigrationRetryDelay time.Duration
 }
 
 // Load returns a Config with default values applied.
 func Load() (*Config, error) {
 	cfg := &Config{
-		NodeID:             generateNodeID(),
-		ListenAddress:      "/ip4/0.0.0.0/tcp/4001",
-		PricePerSecond:     1000, // 0.001 currency units = 1000 microcents
-		BootstrapPeers:     []string{},
-		CheckpointDir:      "./checkpoints",
-		ReplayWindowSize:   16,
-		VerifyInterval:     5,
-		ReplayMode:         "full",
-		ReplayCostLog:      false,
-		ReplayOnDivergence: "log",
-		LeaseDuration:      60 * time.Second,
-		LeaseRenewalWindow: 0.5,
-		LeaseGracePeriod:   10 * time.Second,
+		NodeID:              generateNodeID(),
+		ListenAddress:       "/ip4/0.0.0.0/tcp/4001",
+		PricePerSecond:      1000, // 0.001 currency units = 1000 microcents
+		BootstrapPeers:      []string{},
+		CheckpointDir:       "./checkpoints",
+		ReplayWindowSize:    16,
+		VerifyInterval:      5,
+		ReplayMode:          "full",
+		ReplayCostLog:       false,
+		ReplayOnDivergence:  "log",
+		LeaseDuration:       60 * time.Second,
+		LeaseRenewalWindow:  0.5,
+		LeaseGracePeriod:    10 * time.Second,
+		MigrationMaxRetries: 3,
+		MigrationRetryDelay: 1 * time.Second,
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
@@ -110,6 +120,13 @@ func (c *Config) Validate() error {
 	validPolicies := map[string]bool{"log": true, "pause": true, "intensify": true, "migrate": true}
 	if !validPolicies[c.ReplayOnDivergence] {
 		return fmt.Errorf("ReplayOnDivergence must be one of log/pause/intensify/migrate, got %q", c.ReplayOnDivergence)
+	}
+	// Migration retry validation
+	if c.MigrationMaxRetries < 0 {
+		return fmt.Errorf("MigrationMaxRetries must be non-negative, got %d", c.MigrationMaxRetries)
+	}
+	if c.MigrationRetryDelay < 0 {
+		return fmt.Errorf("MigrationRetryDelay must be non-negative, got %v", c.MigrationRetryDelay)
 	}
 	// Lease validation (LeaseDuration == 0 disables leases)
 	if c.LeaseDuration < 0 {

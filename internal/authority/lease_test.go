@@ -373,6 +373,129 @@ func TestLease_Config(t *testing.T) {
 	}
 }
 
+func TestLease_RevertHandoff(t *testing.T) {
+	cfg := testConfig()
+	l := NewLease(cfg)
+
+	if err := l.TransitionToHandoff(); err != nil {
+		t.Fatalf("handoff transition failed: %v", err)
+	}
+	if l.State != StateHandoffInitiated {
+		t.Fatalf("state = %s, want HANDOFF_INITIATED", l.State)
+	}
+
+	if err := l.RevertHandoff(); err != nil {
+		t.Fatalf("revert handoff failed: %v", err)
+	}
+	if l.State != StateActiveOwner {
+		t.Errorf("state = %s, want ACTIVE_OWNER", l.State)
+	}
+
+	// Can tick again after revert
+	if err := l.ValidateForTick(); err != nil {
+		t.Errorf("expected ticking allowed after revert: %v", err)
+	}
+}
+
+func TestLease_RevertHandoff_InvalidState(t *testing.T) {
+	tests := []struct {
+		name  string
+		state State
+	}{
+		{"ACTIVE_OWNER", StateActiveOwner},
+		{"RETIRED", StateRetired},
+		{"RECOVERY_REQUIRED", StateRecoveryRequired},
+		{"HANDOFF_PENDING", StateHandoffPending},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := testConfig()
+			l := NewLease(cfg)
+			l.State = tt.state
+
+			if err := l.RevertHandoff(); err == nil {
+				t.Errorf("expected error reverting from %s", tt.state)
+			}
+		})
+	}
+}
+
+func TestLease_Recover(t *testing.T) {
+	cfg := testConfig()
+	l := NewLease(cfg)
+	l.Epoch = Epoch{MajorVersion: 5, LeaseGeneration: 3}
+
+	// Force into RECOVERY_REQUIRED
+	l.clock = func() time.Time { return l.Expiry.Add(cfg.GracePeriod + 1*time.Second) }
+	_ = l.ValidateForTick()
+	if l.State != StateRecoveryRequired {
+		t.Fatalf("state = %s, want RECOVERY_REQUIRED", l.State)
+	}
+
+	// Reset clock so the new lease isn't immediately expired
+	l.clock = nil
+
+	if err := l.Recover(); err != nil {
+		t.Fatalf("recover failed: %v", err)
+	}
+
+	if l.State != StateActiveOwner {
+		t.Errorf("state = %s, want ACTIVE_OWNER", l.State)
+	}
+	if l.Epoch.MajorVersion != 6 {
+		t.Errorf("major version = %d, want 6 (incremented)", l.Epoch.MajorVersion)
+	}
+	if l.Epoch.LeaseGeneration != 0 {
+		t.Errorf("lease generation = %d, want 0 (reset)", l.Epoch.LeaseGeneration)
+	}
+	if l.IsExpired() {
+		t.Error("recovered lease should not be expired")
+	}
+
+	// Can tick after recovery
+	if err := l.ValidateForTick(); err != nil {
+		t.Errorf("expected ticking allowed after recovery: %v", err)
+	}
+}
+
+func TestLease_Recover_InvalidState(t *testing.T) {
+	tests := []struct {
+		name  string
+		state State
+	}{
+		{"ACTIVE_OWNER", StateActiveOwner},
+		{"HANDOFF_INITIATED", StateHandoffInitiated},
+		{"RETIRED", StateRetired},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := testConfig()
+			l := NewLease(cfg)
+			l.State = tt.state
+
+			if err := l.Recover(); err == nil {
+				t.Errorf("expected error recovering from %s", tt.state)
+			}
+		})
+	}
+}
+
+func TestLease_Recover_SupersedesOldEpoch(t *testing.T) {
+	cfg := testConfig()
+	l := NewLease(cfg)
+	oldEpoch := l.Epoch
+
+	// Force recovery
+	l.State = StateRecoveryRequired
+	if err := l.Recover(); err != nil {
+		t.Fatalf("recover failed: %v", err)
+	}
+
+	if !l.Epoch.Supersedes(oldEpoch) {
+		t.Error("recovered epoch should supersede old epoch")
+	}
+}
+
 func TestDefaultLeaseConfig(t *testing.T) {
 	cfg := DefaultLeaseConfig()
 	if err := cfg.Validate(); err != nil {

@@ -160,6 +160,42 @@ func (l *Lease) TransitionToRetired() error {
 	return nil
 }
 
+// RevertHandoff transitions from HANDOFF_INITIATED back to ACTIVE_OWNER.
+// This is used when a migration attempt fails before the transfer was sent
+// and the agent should resume ticking locally.
+//
+// Constitutionally safe: no authority transfer has occurred. The agent never
+// left the source node. Per FS-1 (Migration Continuity): "source crashed
+// before relinquishing → source retains authority."
+func (l *Lease) RevertHandoff() error {
+	if l.State != StateHandoffInitiated {
+		return fmt.Errorf("cannot revert handoff from state %s", l.State)
+	}
+	l.State = StateActiveOwner
+	return nil
+}
+
+// Recover transitions from RECOVERY_REQUIRED to ACTIVE_OWNER with a fresh
+// lease at epoch (currentMajor+1, 0). The major version increment ensures
+// any stale leases from the old epoch are superseded.
+//
+// Preconditions (caller must verify):
+//   - No other node is actively ticking this agent
+//   - The checkpoint lineage has not forked
+//
+// For v0, this is a local operation. In a multi-node network, the caller
+// should verify sole authority before invoking this.
+func (l *Lease) Recover() error {
+	if l.State != StateRecoveryRequired {
+		return fmt.Errorf("cannot recover from state %s", l.State)
+	}
+	l.Epoch.MajorVersion++
+	l.Epoch.LeaseGeneration = 0
+	l.Expiry = l.now().Add(l.config.Duration)
+	l.State = StateActiveOwner
+	return nil
+}
+
 // Config returns the lease configuration.
 func (l *Lease) Config() LeaseConfig {
 	return l.config

@@ -71,9 +71,7 @@ func HandleLeaseExpiry(ctx context.Context, instance *agent.Instance, leaseErr e
 		"agent_id", instance.AgentID,
 		"error", leaseErr,
 	)
-	if err := instance.SaveCheckpointToStorage(ctx); err != nil {
-		logger.Error("Failed to save checkpoint on lease expiry", "error", err)
-	}
+	trySaveCheckpoint(ctx, instance, logger)
 	return leaseErr
 }
 
@@ -87,34 +85,79 @@ func HandleTickFailure(ctx context.Context, instance *agent.Instance, tickErr er
 	} else {
 		logger.Error("Tick failed", "error", tickErr)
 	}
-	if err := instance.SaveCheckpointToStorage(ctx); err != nil {
-		logger.Error("Failed to save checkpoint on termination", "error", err)
-	}
+	trySaveCheckpoint(ctx, instance, logger)
 	return tickErr
 }
 
+// trySaveCheckpoint attempts to save a checkpoint, logging errors. Guards against
+// nil instances or missing storage (e.g., during unit tests).
+func trySaveCheckpoint(ctx context.Context, instance *agent.Instance, logger *slog.Logger) {
+	if instance == nil || instance.Storage == nil {
+		return
+	}
+	if err := instance.SaveCheckpointToStorage(ctx); err != nil {
+		logger.Error("Failed to save checkpoint", "error", err)
+	}
+}
+
+// MigrationTrigger is called when divergence escalation requests migration.
+// The implementation should attempt migration with retry and fallback.
+// Returns nil if migration succeeded, error if it failed.
+type MigrationTrigger func(ctx context.Context, agentID string) error
+
 // HandleDivergenceAction acts on the escalation policy returned by VerifyNextTick.
+// migrateFn is optional — passing nil preserves the existing "fall through to pause"
+// behavior for DivergenceMigrate.
 // Returns true if the tick loop should exit.
-func HandleDivergenceAction(ctx context.Context, instance *agent.Instance, cfg *config.Config, action DivergenceAction, logger *slog.Logger) bool {
+func HandleDivergenceAction(ctx context.Context, instance *agent.Instance, cfg *config.Config, action DivergenceAction, migrateFn MigrationTrigger, logger *slog.Logger) bool {
 	switch action {
 	case DivergencePause:
 		logger.Info("Agent paused due to replay divergence (EI-6), saving checkpoint")
-		if err := instance.SaveCheckpointToStorage(ctx); err != nil {
-			logger.Error("Failed to save checkpoint on pause", "error", err)
-		}
+		trySaveCheckpoint(ctx, instance, logger)
 		return true
 	case DivergenceIntensify:
 		logger.Info("Verification frequency intensified to every tick")
 		cfg.VerifyInterval = 1
 	case DivergenceMigrate:
-		// Full migration-trigger requires peer selection; fall through to pause.
-		logger.Info("Migration escalation triggered — pausing (peer selection not yet implemented)")
-		if err := instance.SaveCheckpointToStorage(ctx); err != nil {
-			logger.Error("Failed to save checkpoint on migrate-pause", "error", err)
+		if migrateFn != nil {
+			logger.Info("Divergence-triggered migration starting",
+				"agent_id", instance.AgentID,
+			)
+			if err := migrateFn(ctx, instance.AgentID); err != nil {
+				logger.Error("Divergence migration failed, pausing",
+					"error", err,
+				)
+			} else {
+				logger.Info("Divergence migration succeeded")
+				return true // exit tick loop — agent is on another node
+			}
+		} else {
+			logger.Info("Migration escalation triggered — pausing (no migration function available)")
 		}
+		trySaveCheckpoint(ctx, instance, logger)
 		return true
 	}
 	return false
+}
+
+// AttemptLeaseRecovery tries to recover from RECOVERY_REQUIRED state.
+// For v0, this is a local-only operation: the node re-grants itself a fresh
+// lease with an incremented major version, ensuring stale leases are superseded.
+// Returns nil on success, error if recovery is not possible.
+func AttemptLeaseRecovery(ctx context.Context, instance *agent.Instance, logger *slog.Logger) error {
+	if instance.Lease == nil {
+		return fmt.Errorf("lease recovery: no lease configured")
+	}
+	if err := instance.Lease.Recover(); err != nil {
+		return fmt.Errorf("lease recovery: %w", err)
+	}
+	logger.Info("Lease recovered",
+		"agent_id", instance.AgentID,
+		"epoch", instance.Lease.Epoch,
+		"expiry", instance.Lease.Expiry,
+	)
+	trySaveCheckpoint(ctx, instance, logger)
+	return nil
 }
 
 // VerifyNextTick replays the oldest unverified tick in the replay window.

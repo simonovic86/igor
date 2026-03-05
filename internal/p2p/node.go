@@ -182,6 +182,11 @@ func (n *Node) bootstrapPeers(ctx context.Context, peers []string) {
 	}
 }
 
+// ConnectedPeers returns the peer IDs of all currently connected peers.
+func (n *Node) ConnectedPeers() []peer.ID {
+	return n.Host.Network().Peers()
+}
+
 // Close closes the P2P node and releases resources.
 func (n *Node) Close() error {
 	return n.Host.Close()

@@ -4,10 +4,13 @@ package runner
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/simonovic86/igor/internal/agent"
 )
 
 func testLogger() *slog.Logger {
@@ -77,7 +80,7 @@ func TestLoadManifestData_NonWASMPath(t *testing.T) {
 
 func TestHandleDivergenceAction_None(t *testing.T) {
 	ctx := context.Background()
-	stop := HandleDivergenceAction(ctx, nil, nil, DivergenceNone, testLogger())
+	stop := HandleDivergenceAction(ctx, nil, nil, DivergenceNone, nil, testLogger())
 	if stop {
 		t.Error("DivergenceNone should not stop the loop")
 	}
@@ -85,8 +88,39 @@ func TestHandleDivergenceAction_None(t *testing.T) {
 
 func TestHandleDivergenceAction_Log(t *testing.T) {
 	ctx := context.Background()
-	stop := HandleDivergenceAction(ctx, nil, nil, DivergenceLog, testLogger())
+	stop := HandleDivergenceAction(ctx, nil, nil, DivergenceLog, nil, testLogger())
 	if stop {
 		t.Error("DivergenceLog should not stop the loop")
+	}
+}
+
+func TestHandleDivergenceAction_MigrateWithNilFn(t *testing.T) {
+	ctx := context.Background()
+	// With nil migrateFn, DivergenceMigrate should still stop the loop (pause fallback).
+	// We use a minimal instance to avoid nil dereference in SaveCheckpointToStorage.
+	inst := &agent.Instance{AgentID: "test-agent"}
+	stop := HandleDivergenceAction(ctx, inst, nil, DivergenceMigrate, nil, testLogger())
+	if !stop {
+		t.Error("DivergenceMigrate with nil migrateFn should stop the loop")
+	}
+}
+
+func TestHandleDivergenceAction_MigrateWithFn_Success(t *testing.T) {
+	ctx := context.Background()
+	inst := &agent.Instance{AgentID: "test-agent"}
+	migrateFn := func(_ context.Context, _ string) error { return nil }
+	stop := HandleDivergenceAction(ctx, inst, nil, DivergenceMigrate, migrateFn, testLogger())
+	if !stop {
+		t.Error("successful migration should stop the loop")
+	}
+}
+
+func TestHandleDivergenceAction_MigrateWithFn_Failure(t *testing.T) {
+	ctx := context.Background()
+	inst := &agent.Instance{AgentID: "test-agent"}
+	migrateFn := func(_ context.Context, _ string) error { return fmt.Errorf("no peers") }
+	stop := HandleDivergenceAction(ctx, inst, nil, DivergenceMigrate, migrateFn, testLogger())
+	if !stop {
+		t.Error("failed migration should still stop the loop (pause fallback)")
 	}
 }
