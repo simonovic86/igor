@@ -119,6 +119,115 @@ func TestDecoder_Bool_ShortRead(t *testing.T) {
 	}
 }
 
+func TestEncoder_Raw_RoundTrip(t *testing.T) {
+	// Raw writes bytes without a length prefix; FixedBytes reads them back.
+	id := [16]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10}
+
+	encoded := NewEncoder(24).
+		Uint64(42).
+		Raw(id[:]).
+		Finish()
+
+	if len(encoded) != 24 { // 8 + 16
+		t.Fatalf("expected 24 bytes, got %d", len(encoded))
+	}
+
+	d := NewDecoder(encoded)
+	if v := d.Uint64(); v != 42 {
+		t.Errorf("Uint64: got %d, want 42", v)
+	}
+	got := d.FixedBytes(16)
+	if !bytes.Equal(got, id[:]) {
+		t.Errorf("FixedBytes: got %v, want %v", got, id[:])
+	}
+	if d.Err() != nil {
+		t.Errorf("unexpected error: %v", d.Err())
+	}
+}
+
+func TestDecoder_ReadInto(t *testing.T) {
+	id := [16]byte{0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04,
+		0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C}
+
+	encoded := NewEncoder(20).
+		Uint32(99).
+		Raw(id[:]).
+		Finish()
+
+	d := NewDecoder(encoded)
+	if v := d.Uint32(); v != 99 {
+		t.Errorf("Uint32: got %d, want 99", v)
+	}
+	var restored [16]byte
+	d.ReadInto(restored[:])
+	if restored != id {
+		t.Errorf("ReadInto: got %v, want %v", restored, id)
+	}
+	if d.Err() != nil {
+		t.Errorf("unexpected error: %v", d.Err())
+	}
+}
+
+func TestDecoder_FixedBytes_ShortRead(t *testing.T) {
+	d := NewDecoder([]byte{0x01, 0x02, 0x03})
+	got := d.FixedBytes(8) // ask for 8, only 3 available
+	if got != nil {
+		t.Errorf("expected nil on short read, got %v", got)
+	}
+	if d.Err() == nil {
+		t.Error("expected error on short FixedBytes read")
+	}
+}
+
+func TestDecoder_ReadInto_ShortRead(t *testing.T) {
+	d := NewDecoder([]byte{0x01, 0x02})
+	var dst [8]byte
+	d.ReadInto(dst[:]) // ask for 8, only 2 available
+	if d.Err() == nil {
+		t.Error("expected error on short ReadInto")
+	}
+}
+
+func TestEncoder_Raw_Empty(t *testing.T) {
+	encoded := NewEncoder(8).
+		Uint64(1).
+		Raw(nil).
+		Finish()
+
+	if len(encoded) != 8 {
+		t.Fatalf("expected 8 bytes, got %d", len(encoded))
+	}
+
+	d := NewDecoder(encoded)
+	if v := d.Uint64(); v != 1 {
+		t.Errorf("Uint64: got %d, want 1", v)
+	}
+	got := d.FixedBytes(0)
+	if len(got) != 0 {
+		t.Errorf("FixedBytes(0): got %v, want empty", got)
+	}
+	if d.Err() != nil {
+		t.Errorf("unexpected error: %v", d.Err())
+	}
+}
+
+func TestRaw_vs_Bytes_SizeComparison(t *testing.T) {
+	id := [16]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10}
+
+	withBytes := NewEncoder(20).Bytes(id[:]).Finish()
+	withRaw := NewEncoder(16).Raw(id[:]).Finish()
+
+	// Bytes adds a 4-byte length prefix; Raw does not.
+	if len(withBytes) != 20 { // 4 + 16
+		t.Errorf("Bytes encoding: expected 20 bytes, got %d", len(withBytes))
+	}
+	if len(withRaw) != 16 { // just 16
+		t.Errorf("Raw encoding: expected 16 bytes, got %d", len(withRaw))
+	}
+}
+
 func TestEncoder_SurvivorPattern(t *testing.T) {
 	// Simulate the Survivor agent's Marshal/Unmarshal pattern
 	type Survivor struct {

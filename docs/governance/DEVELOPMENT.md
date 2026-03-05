@@ -4,9 +4,9 @@
 
 ### Required Tools
 
-**Go 1.22+**
+**Go 1.25+**
 
-Igor requires Go 1.22 or later. Check your version:
+Igor requires Go 1.25 or later. Check your version:
 
 ```bash
 go version
@@ -236,7 +236,7 @@ Igor uses golangci-lint with the following enabled linters:
 - `gosimple` - Code simplification suggestions
 - `unused` - Unused code detection
 - `revive` - General code quality
-- `gocyclo` - Cyclomatic complexity (max: 15)
+- `gocyclo` - Cyclomatic complexity (max: 20)
 
 Run `make lint` to check code quality.
 
@@ -272,16 +272,35 @@ igor/
 ├── cmd/igord/           # Node runtime entry point
 ├── internal/            # Internal packages (not importable)
 │   ├── agent/          # Agent instance management
+│   ├── authority/      # Lease-based authority epochs
 │   ├── config/         # Configuration
+│   ├── eventlog/       # Per-tick observation event log
+│   ├── hostcall/       # igor host module (clock, rand, log, wallet)
+│   ├── inspector/      # Checkpoint inspector
 │   ├── logging/        # Structured logging
 │   ├── migration/      # Migration coordination
 │   ├── p2p/            # P2P networking
-│   ├── runtime/        # WASM execution engine
-│   └── storage/        # Checkpoint storage
+│   ├── pricing/        # Price feed and node pricing
+│   ├── registry/       # Agent registry
+│   ├── replay/         # Deterministic replay verification
+│   ├── runner/         # Tick loop runner and escalation
+│   ├── runtime/        # WASM execution engine (wazero)
+│   ├── settlement/     # Payment settlement
+│   ├── simulator/      # Local single-process simulator
+│   ├── storage/        # Checkpoint storage
+│   ├── timeline/       # Timeline utilities
+│   └── wasmutil/       # Shared WASM capture/resume helpers
 ├── pkg/                 # Public packages (importable)
+│   ├── budget/         # Budget types and conversions
+│   ├── identity/       # Agent Ed25519 keypair management
+│   ├── lineage/        # Signed checkpoint lineage
 │   ├── manifest/       # Agent manifest schema
-│   └── protocol/       # P2P message types
-├── agents/example/      # Example agent
+│   ├── protocol/       # P2P message types
+│   └── receipt/        # Payment receipt signing
+├── sdk/igor/            # Agent SDK (lifecycle, hostcall wrappers)
+├── agents/
+│   ├── example/        # Survivor example agent
+│   └── reconciliation/ # Bridge reconciliation demo agent
 ├── docs/               # Documentation
 └── bin/                # Compiled binaries (gitignored)
 ```
