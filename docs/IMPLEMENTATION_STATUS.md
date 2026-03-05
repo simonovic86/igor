@@ -164,3 +164,10 @@ Last updated: 2026-03-05
 | `captureState`/`resumeAgent` deduplicated | Refactored | `internal/wasmutil/wasmutil.go` — shared by agent, replay, simulator |
 | WASM hash mismatch test | Added | `internal/agent/instance_test.go` `TestLoadCheckpointFromStorage_WASMHashMismatch` |
 | Receipt corruption tests | Added | `pkg/receipt/receipt_test.go` — truncated entries, signatures, fields |
+| `MustInstantiate` → `Instantiate` | Fixed | `internal/runtime/engine.go`, `internal/replay/engine.go`, `internal/simulator/simulator.go` — returns error instead of panicking |
+| Shared tick timeout constant | Fixed | `internal/config/config.go` `TickTimeout` — used by agent, replay, simulator |
+| Manifest sidecar loading unified | Refactored | `pkg/manifest/parse.go` `LoadSidecarData` — shared by runner, migration, simulator |
+| `validateIncomingManifest` tests | Added | `internal/migration/validate_test.go` — 7 cases: accept, disabled, price, memory, capability, nil policy |
+| `LoadSidecarData` tests | Added | `pkg/manifest/parse_test.go` — explicit path, derived path, no file, non-WASM |
+| CI: TinyGo before tests | Fixed | `.github/workflows/ci.yml` — WASM integration tests now run in CI |
+| CI: test coverage reporting | Added | `.github/workflows/ci.yml` — `go test -coverprofile` + summary |

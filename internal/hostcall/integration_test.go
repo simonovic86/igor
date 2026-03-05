@@ -108,7 +108,9 @@ func setupTestModule(t *testing.T) (wazero.Runtime, api.Module, *eventlog.EventL
 	el := eventlog.NewEventLog(0)
 	rt := wazero.NewRuntime(ctx)
 
-	wasi_snapshot_preview1.MustInstantiate(ctx, rt)
+	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
+		t.Fatalf("instantiate WASI: %v", err)
+	}
 
 	m := &manifest.CapabilityManifest{
 		Capabilities: map[string]manifest.CapabilityConfig{

@@ -12,7 +12,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -114,17 +113,7 @@ func (s *Service) buildMigrationPackage(
 	}
 
 	// Load manifest from sidecar file (wasmPath with .json extension)
-	var manifestPath string
-	if strings.HasSuffix(wasmPath, ".wasm") {
-		manifestPath = strings.TrimSuffix(wasmPath, ".wasm") + ".manifest.json"
-	}
-	manifestData, err := os.ReadFile(manifestPath)
-	if err != nil {
-		manifestData = []byte("{}")
-		s.logger.Info("No manifest file found, using empty capabilities",
-			"expected_path", manifestPath,
-		)
-	}
+	manifestData := manifest.LoadSidecarData(wasmPath, "", s.logger)
 
 	checkpoint, err := s.storageProvider.LoadCheckpoint(ctx, agentID)
 	if err != nil {

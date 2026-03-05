@@ -33,7 +33,10 @@ func NewEngine(ctx context.Context, logger *slog.Logger) (*Engine, error) {
 
 	// Instantiate WASI with minimal capabilities
 	// Disable filesystem and network access
-	wasi_snapshot_preview1.MustInstantiate(ctx, rt)
+	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
+		rt.Close(ctx)
+		return nil, fmt.Errorf("instantiate WASI: %w", err)
+	}
 
 	logger.Info("WASM runtime engine created",
 		"memory_limit_mb", 64,

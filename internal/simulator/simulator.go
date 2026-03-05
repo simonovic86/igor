@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/simonovic86/igor/internal/config"
 	"github.com/simonovic86/igor/internal/eventlog"
 	"github.com/simonovic86/igor/internal/hostcall"
 	"github.com/simonovic86/igor/internal/replay"
@@ -90,7 +91,7 @@ func setup(ctx context.Context, cfg Config, logger *slog.Logger) (*simEnv, int64
 		return nil, 0, fmt.Errorf("read WASM: %w", err)
 	}
 
-	manifestData := loadManifest(cfg)
+	manifestData := manifest.LoadSidecarData(cfg.WASMPath, cfg.ManifestPath, logger)
 	capManifest, err := manifest.ParseCapabilityManifest(manifestData)
 	if err != nil {
 		return nil, 0, fmt.Errorf("parse manifest: %w", err)
@@ -107,7 +108,10 @@ func setup(ctx context.Context, cfg Config, logger *slog.Logger) (*simEnv, int64
 		WithCloseOnContextDone(true)
 	rt := wazero.NewRuntimeWithConfig(ctx, rtConfig)
 
-	wasi_snapshot_preview1.MustInstantiate(ctx, rt)
+	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
+		rt.Close(ctx)
+		return nil, 0, fmt.Errorf("instantiate WASI: %w", err)
+	}
 
 	el := eventlog.NewEventLog(eventlog.DefaultMaxTicks)
 
@@ -236,7 +240,7 @@ func executeTick(ctx context.Context, env *simEnv, result *Result, tickNum uint6
 
 	env.el.BeginTick(tickNum)
 
-	tickCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	tickCtx, cancel := context.WithTimeout(ctx, config.TickTimeout)
 	start := time.Now()
 	_, tickErr := env.mod.ExportedFunction("agent_tick").Call(tickCtx)
 	elapsed := time.Since(start)
@@ -325,18 +329,6 @@ func PrintSummary(r *Result, logger *slog.Logger) {
 	for _, e := range r.Errors {
 		logger.Error("Simulation error", "detail", e)
 	}
-}
-
-func loadManifest(cfg Config) []byte {
-	mPath := cfg.ManifestPath
-	if mPath == "" && cfg.WASMPath != "" {
-		mPath = cfg.WASMPath[:len(cfg.WASMPath)-len(".wasm")] + ".manifest.json"
-	}
-	data, err := os.ReadFile(mPath)
-	if err != nil {
-		return []byte("{}")
-	}
-	return data
 }
 
 func captureState(ctx context.Context, mod api.Module) ([]byte, error) {

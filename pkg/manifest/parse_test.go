@@ -1,6 +1,9 @@
 package manifest
 
 import (
+	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -286,6 +289,48 @@ func TestParseManifest_MigrationDisabled(t *testing.T) {
 	}
 	if m.MigrationPolicy.Enabled {
 		t.Error("MigrationPolicy.Enabled: expected false")
+	}
+}
+
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+}
+
+func TestLoadSidecarData_ExplicitPath(t *testing.T) {
+	dir := t.TempDir()
+	mPath := filepath.Join(dir, "custom.manifest.json")
+	if err := os.WriteFile(mPath, []byte(`{"capabilities":{"clock":{"version":1}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	data := LoadSidecarData("irrelevant.wasm", mPath, testLogger())
+	if string(data) != `{"capabilities":{"clock":{"version":1}}}` {
+		t.Fatalf("unexpected manifest: %s", data)
+	}
+}
+
+func TestLoadSidecarData_DerivedPath(t *testing.T) {
+	dir := t.TempDir()
+	mPath := filepath.Join(dir, "agent.manifest.json")
+	if err := os.WriteFile(mPath, []byte(`{"capabilities":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	data := LoadSidecarData(filepath.Join(dir, "agent.wasm"), "", testLogger())
+	if string(data) != `{"capabilities":{}}` {
+		t.Fatalf("unexpected manifest: %s", data)
+	}
+}
+
+func TestLoadSidecarData_NoFile(t *testing.T) {
+	data := LoadSidecarData("/tmp/nonexistent.wasm", "", testLogger())
+	if string(data) != "{}" {
+		t.Fatalf("expected empty JSON, got: %s", data)
+	}
+}
+
+func TestLoadSidecarData_NonWASMPath(t *testing.T) {
+	data := LoadSidecarData("agent", "", testLogger())
+	if string(data) != "{}" {
+		t.Fatalf("expected empty JSON for non-.wasm path, got: %s", data)
 	}
 }
 

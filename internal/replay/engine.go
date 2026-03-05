@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/simonovic86/igor/internal/config"
 	"github.com/simonovic86/igor/internal/eventlog"
 	"github.com/simonovic86/igor/internal/wasmutil"
 	"github.com/simonovic86/igor/pkg/manifest"
@@ -21,9 +22,8 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
-// replayTickTimeout is the maximum duration for a single tick during replay,
-// matching the production tick timeout in internal/agent.
-const replayTickTimeout = 100 * time.Millisecond
+// replayTickTimeout aliases the shared tick timeout constant.
+const replayTickTimeout = config.TickTimeout
 
 // Result describes the outcome of replaying a single tick.
 type Result struct {
@@ -106,7 +106,10 @@ func (e *Engine) ReplayTick(
 	defer rt.Close(ctx)
 
 	// Instantiate WASI
-	wasi_snapshot_preview1.MustInstantiate(ctx, rt)
+	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
+		result.Error = fmt.Errorf("replay: instantiate WASI: %w", err)
+		return result
+	}
 
 	// Create entry iterator from tick log
 	iter := &entryIterator{entries: tickLog.Entries}
@@ -486,7 +489,10 @@ func (e *Engine) ReplayChain(
 	rt := wazero.NewRuntimeWithConfig(ctx, config)
 	defer rt.Close(ctx)
 
-	wasi_snapshot_preview1.MustInstantiate(ctx, rt)
+	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
+		result.Error = fmt.Errorf("replay chain: instantiate WASI: %w", err)
+		return result
+	}
 
 	holder := &iteratorHolder{}
 	repErr := &replayError{}

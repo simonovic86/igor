@@ -9,13 +9,12 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log/slog"
-	"os"
-	"strings"
 
 	"github.com/simonovic86/igor/internal/agent"
 	"github.com/simonovic86/igor/internal/config"
 	"github.com/simonovic86/igor/internal/p2p"
 	"github.com/simonovic86/igor/internal/replay"
+	"github.com/simonovic86/igor/pkg/manifest"
 )
 
 // DivergenceAction indicates what the tick loop should do after replay verification.
@@ -158,22 +157,7 @@ func EscalationForPolicy(policy string) DivergenceAction {
 // LoadManifestData reads the manifest file for the given WASM path and flags.
 // Returns empty JSON capabilities if no manifest is found.
 func LoadManifestData(wasmPath, manifestPathFlag string, logger *slog.Logger) []byte {
-	mPath := manifestPathFlag
-	if mPath == "" {
-		// Default: look for <agent>.manifest.json alongside the WASM file
-		if strings.HasSuffix(wasmPath, ".wasm") {
-			mPath = strings.TrimSuffix(wasmPath, ".wasm") + ".manifest.json"
-		}
-	}
-	manifestData, err := os.ReadFile(mPath)
-	if err != nil {
-		logger.Info("No manifest file found, using empty capabilities",
-			"expected_path", mPath,
-		)
-		return []byte("{}")
-	}
-	logger.Info("Manifest loaded", "path", mPath)
-	return manifestData
+	return manifest.LoadSidecarData(wasmPath, manifestPathFlag, logger)
 }
 
 // ExtractSigningKey returns the Ed25519 private key and peer ID from the node,

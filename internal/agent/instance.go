@@ -12,6 +12,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/simonovic86/igor/internal/config"
 	"github.com/simonovic86/igor/internal/eventlog"
 	"github.com/simonovic86/igor/internal/hostcall"
 	"github.com/simonovic86/igor/internal/runtime"
@@ -335,7 +336,7 @@ func (i *Instance) Tick(ctx context.Context) (bool, error) {
 	i.EventLog.BeginTick(i.TickNumber)
 
 	// Enforce tick timeout
-	tickCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	tickCtx, cancel := context.WithTimeout(ctx, config.TickTimeout)
 	defer cancel()
 
 	fn := i.Module.ExportedFunction("agent_tick")
