@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package eventlog implements per-tick observation recording for the capability membrane.
 // Every observation hostcall (clock, rand, etc.) records its return value in the event log,
 // enabling deterministic replay per CM-4 and CE-3.

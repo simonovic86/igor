@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package inspector provides checkpoint file parsing and display.
 package inspector
 

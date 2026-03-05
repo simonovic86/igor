@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package igor provides the Agent SDK for building Igor agents.
 //
 // It wraps the low-level WASM hostcall interface and lifecycle exports,

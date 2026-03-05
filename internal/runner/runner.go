@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package runner provides the tick loop orchestration logic extracted from
 // cmd/igord/main.go. This enables direct unit testing of verification,
 // divergence escalation, and tick lifecycle management.

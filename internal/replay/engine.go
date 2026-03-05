@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package replay implements deterministic single-tick replay verification.
 // Given a checkpoint, an event log, and the expected resulting state, the replay
 // engine re-executes a tick with recorded observation values and verifies the

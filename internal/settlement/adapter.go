@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package settlement provides pluggable budget validation and settlement
 // recording. The BudgetAdapter interface abstracts payment infrastructure
 // so the runtime can gate tick execution on budget validity (EI-6) and

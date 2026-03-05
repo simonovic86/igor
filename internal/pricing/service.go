@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package pricing implements the /igor/price/1.0.0 protocol for inter-node
 // price discovery. Nodes respond to price queries with their current execution
 // pricing, enabling agents to make cost-aware migration decisions.

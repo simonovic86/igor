@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package runtime implements survivable autonomous agent execution using WASM sandboxing.
 // Provides deterministic tick-based execution, resource isolation, and timeout enforcement
 // for portable agent runtimes that can checkpoint and migrate across infrastructure.

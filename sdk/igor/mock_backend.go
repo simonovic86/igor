@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package igor
 
 // MockBackend is the interface for mock hostcall implementations.

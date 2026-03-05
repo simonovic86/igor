@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package igor
 
 // Agent is the interface that agent authors implement.

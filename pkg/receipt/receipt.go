@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package receipt defines payment receipt data structures and cryptographic signing.
 // A receipt is a signed attestation that a node executed an agent for a given cost
 // during a checkpoint epoch. Receipts form an auditable payment trail (Phase 4).
