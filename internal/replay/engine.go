@@ -277,6 +277,11 @@ func registerReplayHostModule(
 		registered++
 	}
 
+	if m.Has("pricing") {
+		registerReplayPricing(builder, iter, repErr)
+		registered++
+	}
+
 	if registered == 0 {
 		return nil
 	}
@@ -417,6 +422,30 @@ func registerReplayWallet(
 			return int32(len(entry.Payload))
 		}).
 		Export("wallet_receipt")
+}
+
+// registerReplayPricing registers node_price that returns the recorded value.
+func registerReplayPricing(
+	builder wazero.HostModuleBuilder,
+	iter *entryIterator,
+	repErr *replayError,
+) {
+	builder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context) int64 {
+			entry, err := iter.next(eventlog.NodePrice)
+			if err != nil {
+				repErr.err = err
+				return 0
+			}
+			if len(entry.Payload) != 8 {
+				repErr.err = fmt.Errorf(
+					"node_price payload length %d, expected 8", len(entry.Payload),
+				)
+				return 0
+			}
+			return int64(binary.LittleEndian.Uint64(entry.Payload))
+		}).
+		Export("node_price")
 }
 
 // replayResume restores agent state in the replay module.
@@ -664,6 +693,11 @@ func registerChainReplayHostModule(
 		registered++
 	}
 
+	if m.Has("pricing") {
+		registerChainReplayPricing(builder, holder, repErr)
+		registered++
+	}
+
 	if registered == 0 {
 		return nil
 	}
@@ -730,6 +764,29 @@ func registerChainReplayWallet(
 			return int32(len(entry.Payload))
 		}).
 		Export("wallet_receipt")
+}
+
+// registerChainReplayPricing registers node_price replay that reads from
+// the iteratorHolder, allowing the iterator to be swapped between ticks.
+func registerChainReplayPricing(
+	builder wazero.HostModuleBuilder,
+	holder *iteratorHolder,
+	repErr *replayError,
+) {
+	builder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context) int64 {
+			entry, err := holder.iter.next(eventlog.NodePrice)
+			if err != nil {
+				repErr.err = err
+				return 0
+			}
+			if len(entry.Payload) != 8 {
+				repErr.err = fmt.Errorf("node_price payload length %d, expected 8", len(entry.Payload))
+				return 0
+			}
+			return int64(binary.LittleEndian.Uint64(entry.Payload))
+		}).
+		Export("node_price")
 }
 
 // firstDiff returns the index of the first differing byte, or -1 if equal.

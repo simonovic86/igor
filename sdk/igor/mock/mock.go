@@ -28,12 +28,13 @@ import (
 
 // Runtime provides mock implementations of Igor hostcalls for native testing.
 type Runtime struct {
-	mu       sync.Mutex
-	clock    func() int64
-	randSrc  *rand.Rand
-	logs     []string
-	budget   int64
-	receipts [][]byte
+	mu        sync.Mutex
+	clock     func() int64
+	randSrc   *rand.Rand
+	logs      []string
+	budget    int64
+	receipts  [][]byte
+	nodePrice int64
 }
 
 // New creates a mock runtime using the real system clock and crypto-seeded rand.
@@ -166,4 +167,18 @@ func (r *Runtime) AddReceipt(data []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.receipts = append(r.receipts, data)
+}
+
+// NodePrice implements MockBackend.
+func (r *Runtime) NodePrice() int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.nodePrice
+}
+
+// SetNodePrice sets the mock node price returned by NodePrice.
+func (r *Runtime) SetNodePrice(p int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.nodePrice = p
 }

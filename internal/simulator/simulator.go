@@ -194,7 +194,7 @@ func registerHostcalls(
 		if clockDelta == 0 {
 			clockDelta = 1_000_000_000
 		}
-		dhc := newDeterministicHostcalls(clockStart, clockDelta, cfg.RandSeed, el, logger)
+		dhc := newDeterministicHostcalls(clockStart, clockDelta, cfg.RandSeed, budget.FromFloat(cfg.PricePerSecond), el, logger)
 		if err := dhc.registerHostModule(ctx, rt, capManifest); err != nil {
 			return fmt.Errorf("register deterministic hostcalls: %w", err)
 		}

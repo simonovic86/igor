@@ -70,3 +70,12 @@ func WalletReceipt(index int) ([]byte, error) {
 	}
 	panic("igor: WalletReceipt requires WASM runtime or mock (see sdk/igor/mock)")
 }
+
+// NodePrice returns the current node's execution price in microcents per second.
+// In non-WASM builds, dispatches to the registered MockBackend.
+func NodePrice() int64 {
+	if activeMock != nil {
+		return activeMock.NodePrice()
+	}
+	panic("igor: NodePrice requires WASM runtime or mock (see sdk/igor/mock)")
+}

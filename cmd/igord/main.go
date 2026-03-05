@@ -16,9 +16,11 @@ import (
 	"github.com/simonovic86/igor/internal/logging"
 	"github.com/simonovic86/igor/internal/migration"
 	"github.com/simonovic86/igor/internal/p2p"
+	"github.com/simonovic86/igor/internal/pricing"
 	"github.com/simonovic86/igor/internal/replay"
 	"github.com/simonovic86/igor/internal/runner"
 	"github.com/simonovic86/igor/internal/runtime"
+	"github.com/simonovic86/igor/internal/settlement"
 	"github.com/simonovic86/igor/internal/simulator"
 	"github.com/simonovic86/igor/internal/storage"
 	"github.com/simonovic86/igor/pkg/budget"
@@ -119,6 +121,9 @@ func main() {
 	// Initialize migration service
 	migrationSvc := migration.NewService(node.Host, engine, storageProvider, cfg.ReplayMode, cfg.ReplayCostLog, cfg.PricePerSecond, logger)
 
+	// Initialize pricing service for inter-node price discovery
+	_ = pricing.NewService(node.Host, cfg.PricePerSecond, logger)
+
 	// If --migrate-agent flag is provided, perform migration
 	if *migrateAgent != "" {
 		if *targetPeer == "" {
@@ -202,6 +207,9 @@ func runLocalAgent(
 
 	// Configure replay window size
 	instance.SetReplayWindowSize(cfg.ReplayWindowSize)
+
+	// Wire budget adapter for settlement validation (EI-6)
+	instance.BudgetAdapter = settlement.NewMockAdapter(logger)
 
 	// Register agent with migration service
 	migrationSvc.RegisterAgent("local-agent", instance)
