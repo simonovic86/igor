@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/simonovic86/igor/internal/agent"
+	"github.com/simonovic86/igor/internal/authority"
 	"github.com/simonovic86/igor/internal/config"
 	"github.com/simonovic86/igor/internal/inspector"
 	"github.com/simonovic86/igor/internal/logging"
@@ -46,6 +47,8 @@ func main() {
 	simVerify := flag.Bool("verify", false, "Per-tick replay verification during simulation")
 	simDeterministic := flag.Bool("deterministic", false, "Use fixed clock and seeded rand for reproducible simulation")
 	simSeed := flag.Uint64("seed", 0, "Random seed for deterministic simulation")
+	leaseDuration := flag.Duration("lease-duration", 60*time.Second, "Lease validity period (0 = disabled)")
+	leaseGrace := flag.Duration("lease-grace", 10*time.Second, "Grace period after lease expiry")
 	flag.Parse()
 
 	// Checkpoint inspector — standalone, no config/P2P/engine needed
@@ -87,6 +90,8 @@ func main() {
 	if *replayOnDivergence != "" {
 		cfg.ReplayOnDivergence = *replayOnDivergence
 	}
+	cfg.LeaseDuration = *leaseDuration
+	cfg.LeaseGracePeriod = *leaseGrace
 
 	// Initialize logging
 	logger := logging.NewLogger()
@@ -119,7 +124,12 @@ func main() {
 	defer engine.Close(ctx)
 
 	// Initialize migration service
-	migrationSvc := migration.NewService(node.Host, engine, storageProvider, cfg.ReplayMode, cfg.ReplayCostLog, cfg.PricePerSecond, logger)
+	leaseCfg := authority.LeaseConfig{
+		Duration:      cfg.LeaseDuration,
+		RenewalWindow: cfg.LeaseRenewalWindow,
+		GracePeriod:   cfg.LeaseGracePeriod,
+	}
+	migrationSvc := migration.NewService(node.Host, engine, storageProvider, cfg.ReplayMode, cfg.ReplayCostLog, cfg.PricePerSecond, leaseCfg, logger)
 
 	// Initialize pricing service for inter-node price discovery
 	_ = pricing.NewService(node.Host, cfg.PricePerSecond, logger)
@@ -230,6 +240,21 @@ func runLocalAgent(
 		// Continue anyway with fresh state
 	}
 
+	// Grant initial lease if leases are enabled
+	if cfg.LeaseDuration > 0 {
+		leaseCfg := authority.LeaseConfig{
+			Duration:      cfg.LeaseDuration,
+			RenewalWindow: cfg.LeaseRenewalWindow,
+			GracePeriod:   cfg.LeaseGracePeriod,
+		}
+		instance.Lease = authority.NewLease(leaseCfg)
+		logger.Info("Lease granted",
+			"epoch", instance.Lease.Epoch,
+			"expiry", instance.Lease.Expiry,
+			"duration", cfg.LeaseDuration,
+		)
+	}
+
 	// Setup signal handling
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -277,6 +302,11 @@ func runLocalAgent(
 			return nil
 
 		case <-tickTimer.C:
+			// Pre-tick lease validation (EI-6: safety over liveness)
+			if leaseErr := runner.CheckAndRenewLease(instance, logger); leaseErr != nil {
+				return runner.HandleLeaseExpiry(ctx, instance, leaseErr, logger)
+			}
+
 			hasMoreWork, tickErr := runner.SafeTick(ctx, instance)
 			if tickErr != nil {
 				return runner.HandleTickFailure(ctx, instance, tickErr, logger)

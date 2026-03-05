@@ -2,15 +2,17 @@ package protocol
 
 // AgentPackage contains all data needed to transfer an agent.
 type AgentPackage struct {
-	AgentID        string
-	WASMBinary     []byte
-	WASMHash       []byte // SHA-256 of WASMBinary for integrity verification
-	Checkpoint     []byte
-	ManifestData   []byte
-	Budget         int64
-	PricePerSecond int64
-	ReplayData     *ReplayData `json:",omitempty"`
-	Receipts       []byte      `json:",omitempty"` // Serialized payment receipts
+	AgentID         string
+	WASMBinary      []byte
+	WASMHash        []byte // SHA-256 of WASMBinary for integrity verification
+	Checkpoint      []byte
+	ManifestData    []byte
+	Budget          int64
+	PricePerSecond  int64
+	ReplayData      *ReplayData `json:",omitempty"`
+	Receipts        []byte      `json:",omitempty"` // Serialized payment receipts
+	MajorVersion    uint64      `json:",omitempty"` // Authority epoch major version
+	LeaseGeneration uint64      `json:",omitempty"` // Authority epoch lease generation
 }
 
 // ReplayData contains replay verification data for a single tick.

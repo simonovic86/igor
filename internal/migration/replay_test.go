@@ -252,7 +252,7 @@ func TestParseCheckpointHeader(t *testing.T) {
 	// bytes 25-57: wasmHash (leave zeroed for this test)
 	copy(checkpoint[57:], state)
 
-	budgetVal, price, tick, _, s, err := agent.ParseCheckpointHeader(checkpoint)
+	budgetVal, price, tick, _, _, _, s, err := agent.ParseCheckpointHeader(checkpoint)
 	if err != nil {
 		t.Fatalf("ParseCheckpointHeader: %v", err)
 	}

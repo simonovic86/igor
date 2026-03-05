@@ -21,6 +21,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/simonovic86/igor/internal/agent"
+	"github.com/simonovic86/igor/internal/authority"
 	"github.com/simonovic86/igor/internal/replay"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
@@ -41,6 +42,7 @@ type Service struct {
 	replayMode      string // "off", "periodic", "on-migrate", "full"
 	replayCostLog   bool
 	pricePerSecond  int64 // This node's price per second in microcents
+	leaseConfig     authority.LeaseConfig
 	logger          *slog.Logger
 
 	// nodeCapabilities overrides manifest.NodeCapabilities for this node when
@@ -61,6 +63,7 @@ func NewService(
 	replayMode string,
 	replayCostLog bool,
 	pricePerSecond int64,
+	leaseCfg authority.LeaseConfig,
 	logger *slog.Logger,
 ) *Service {
 	svc := &Service{
@@ -71,6 +74,7 @@ func NewService(
 		replayMode:      replayMode,
 		replayCostLog:   replayCostLog,
 		pricePerSecond:  pricePerSecond,
+		leaseConfig:     leaseCfg,
 		logger:          logger,
 		activeAgents:    make(map[string]*agent.Instance),
 	}
@@ -126,12 +130,15 @@ func (s *Service) buildMigrationPackage(
 	)
 
 	var budgetVal, pricePerSecond int64
-	if parsedBudget, parsedPrice, _, _, _, parseErr := agent.ParseCheckpointHeader(checkpoint); parseErr == nil {
+	var epoch authority.Epoch
+	if parsedBudget, parsedPrice, _, _, parsedEpoch, _, _, parseErr := agent.ParseCheckpointHeader(checkpoint); parseErr == nil {
 		budgetVal = parsedBudget
 		pricePerSecond = parsedPrice
+		epoch = parsedEpoch
 		s.logger.Info("Budget metadata extracted",
 			"budget", budget.Format(budgetVal),
 			"price_per_second", budget.Format(pricePerSecond),
+			"epoch", epoch,
 		)
 	} else {
 		s.logger.Warn("Could not parse checkpoint header for budget extraction",
@@ -147,14 +154,16 @@ func (s *Service) buildMigrationPackage(
 
 	wasmHashArr := sha256.Sum256(wasmBinary)
 	pkg := protomsg.AgentPackage{
-		AgentID:        agentID,
-		WASMBinary:     wasmBinary,
-		WASMHash:       wasmHashArr[:],
-		Checkpoint:     checkpoint,
-		ManifestData:   manifestData,
-		Budget:         budgetVal,
-		PricePerSecond: pricePerSecond,
-		Receipts:       receiptData,
+		AgentID:         agentID,
+		WASMBinary:      wasmBinary,
+		WASMHash:        wasmHashArr[:],
+		Checkpoint:      checkpoint,
+		ManifestData:    manifestData,
+		Budget:          budgetVal,
+		PricePerSecond:  pricePerSecond,
+		Receipts:        receiptData,
+		MajorVersion:    epoch.MajorVersion,
+		LeaseGeneration: epoch.LeaseGeneration,
 	}
 
 	s.mu.RLock()
@@ -206,6 +215,16 @@ func (s *Service) MigrateAgent(
 		return fmt.Errorf("failed to connect to target peer: %w", err)
 	}
 
+	// Transition local lease to HANDOFF_INITIATED before building package
+	s.mu.RLock()
+	if li, ok := s.activeAgents[agentID]; ok && li.Lease != nil {
+		if err := li.Lease.TransitionToHandoff(); err != nil {
+			s.mu.RUnlock()
+			return fmt.Errorf("lease handoff transition: %w", err)
+		}
+	}
+	s.mu.RUnlock()
+
 	pkg, localInstance, err := s.buildMigrationPackage(ctx, agentID, wasmPath)
 	if err != nil {
 		return err
@@ -246,6 +265,13 @@ func (s *Service) MigrateAgent(
 		"agent_id", agentID,
 		"target_node", started.NodeID,
 	)
+
+	// Transition source lease to RETIRED after target confirms
+	if localInstance != nil && localInstance.Lease != nil {
+		if err := localInstance.Lease.TransitionToRetired(); err != nil {
+			s.logger.Warn("Failed to transition lease to RETIRED", "error", err)
+		}
+	}
 
 	// Terminate local instance using compare-and-delete: only remove if the
 	// map still holds the same instance we read earlier. A concurrent incoming
@@ -418,6 +444,16 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		return
 	}
 
+	// Grant lease with advanced epoch (MajorVersion+1) for the migrated agent
+	if s.leaseConfig.Duration > 0 {
+		instance.Lease = authority.NewLeaseFromMigration(pkg.MajorVersion, s.leaseConfig)
+		s.logger.Info("Lease granted to migrated agent",
+			"agent_id", pkg.AgentID,
+			"epoch", instance.Lease.Epoch,
+			"expiry", instance.Lease.Expiry,
+		)
+	}
+
 	// Store as active agent
 	s.mu.Lock()
 	s.activeAgents[pkg.AgentID] = instance
@@ -426,6 +462,7 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 	s.logger.Info("Agent migration accepted and started",
 		"agent_id", pkg.AgentID,
 		"from_node", transfer.SourceNodeID,
+		"epoch", fmt.Sprintf("(%d,%d)", pkg.MajorVersion+1, 0),
 	)
 
 	// Send success confirmation
