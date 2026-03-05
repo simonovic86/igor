@@ -79,7 +79,7 @@ func HandleLeaseExpiry(ctx context.Context, instance *agent.Instance, leaseErr e
 func HandleTickFailure(ctx context.Context, instance *agent.Instance, tickErr error, logger *slog.Logger) error {
 	if instance.Budget <= 0 {
 		logger.Info("Agent budget exhausted, terminating",
-			"agent_id", "local-agent",
+			"agent_id", instance.AgentID,
 			"reason", "budget_exhausted",
 		)
 	} else {

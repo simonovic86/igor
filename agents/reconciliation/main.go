@@ -203,6 +203,9 @@ func (r *Reconciler) Unmarshal(data []byte) {
 	r.DetectNano = d.Int64()
 	r.FinalizeNano = d.Int64()
 	r.CompleteNano = d.Int64()
+	if err := d.Err(); err != nil {
+		panic("unmarshal checkpoint: " + err.Error())
+	}
 }
 
 // shortHex returns the first 8 hex chars of a byte slice (4 bytes).
