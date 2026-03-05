@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/simonovic86/igor/internal/agent"
+	"github.com/simonovic86/igor/internal/authority"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
 	"github.com/simonovic86/igor/pkg/budget"
@@ -78,7 +79,7 @@ func newMultiNodeEnv(t *testing.T, nodeCount int) *multiNodeEnv {
 		t.Cleanup(func() { eng.Close(ctx) })
 		env.engines[i] = eng
 
-		env.migSvcs[i] = NewService(h, eng, st, "full", false, 1000, logger)
+		env.migSvcs[i] = NewService(h, eng, st, "full", false, 1000, authority.LeaseConfig{}, logger)
 	}
 
 	return env
@@ -153,7 +154,7 @@ func (env *multiNodeEnv) readCheckpoint(t *testing.T, nodeIdx int) (budgetVal in
 		t.Fatalf("LoadCheckpoint on node[%d]: %v", nodeIdx, err)
 	}
 
-	b, _, tk, _, state, err := agent.ParseCheckpointHeader(checkpoint)
+	b, _, tk, _, _, _, state, err := agent.ParseCheckpointHeader(checkpoint)
 	if err != nil {
 		t.Fatalf("ParseCheckpointHeader on node[%d]: %v", nodeIdx, err)
 	}

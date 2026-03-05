@@ -167,6 +167,64 @@ func TestPrint_Output(t *testing.T) {
 	}
 }
 
+func TestInspect_V3Checkpoint(t *testing.T) {
+	result, err := inspector.InspectFile(filepath.Join("..", "agent", "testdata", "checkpoint_v3.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.Version != 3 {
+		t.Errorf("version: got %d, want 3", result.Version)
+	}
+	if result.Budget != 2000000 {
+		t.Errorf("budget: got %d, want 2000000", result.Budget)
+	}
+	if result.PricePerSecond != 1500 {
+		t.Errorf("price: got %d, want 1500", result.PricePerSecond)
+	}
+	if result.TickNumber != 10 {
+		t.Errorf("tick: got %d, want 10", result.TickNumber)
+	}
+	if result.Epoch.MajorVersion != 3 {
+		t.Errorf("majorVersion: got %d, want 3", result.Epoch.MajorVersion)
+	}
+	if result.Epoch.LeaseGeneration != 7 {
+		t.Errorf("leaseGeneration: got %d, want 7", result.Epoch.LeaseGeneration)
+	}
+	if result.LeaseExpiry != 1700000000000000000 {
+		t.Errorf("leaseExpiry: got %d, want 1700000000000000000", result.LeaseExpiry)
+	}
+	if result.StateSize != 8 {
+		t.Errorf("state size: got %d, want 8", result.StateSize)
+	}
+	if result.TotalSize != 89 { // 81 header + 8 state
+		t.Errorf("total size: got %d, want 89", result.TotalSize)
+	}
+}
+
+func TestPrint_V3Output(t *testing.T) {
+	result, err := inspector.InspectFile(filepath.Join("..", "agent", "testdata", "checkpoint_v3.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	result.Print(&buf)
+	output := buf.String()
+
+	checks := []string{
+		"Epoch:",
+		"(3,7)",
+		"Lease Expiry:",
+		"Header Size:      81 bytes",
+	}
+	for _, check := range checks {
+		if !strings.Contains(output, check) {
+			t.Errorf("output missing %q", check)
+		}
+	}
+}
+
 func TestPrint_EmptyState(t *testing.T) {
 	result, err := inspector.InspectFile(filepath.Join("..", "agent", "testdata", "checkpoint_empty_state.bin"))
 	if err != nil {

@@ -39,6 +39,42 @@ func SafeTick(ctx context.Context, instance *agent.Instance) (hasMore bool, err 
 	return instance.Tick(ctx)
 }
 
+// CheckAndRenewLease validates the lease before a tick and renews if needed.
+// Returns nil if ticking is allowed, or an error if the lease has expired.
+// No-op if leases are disabled (instance.Lease == nil).
+func CheckAndRenewLease(instance *agent.Instance, logger *slog.Logger) error {
+	if instance.Lease == nil {
+		return nil
+	}
+	if err := instance.Lease.ValidateForTick(); err != nil {
+		return err
+	}
+	if instance.Lease.NeedsRenewal() {
+		if err := instance.Lease.Renew(); err != nil {
+			logger.Error("Lease renewal failed", "error", err)
+		} else {
+			logger.Info("Lease renewed",
+				"epoch", instance.Lease.Epoch,
+				"expiry", instance.Lease.Expiry,
+			)
+		}
+	}
+	return nil
+}
+
+// HandleLeaseExpiry saves a final checkpoint and returns the lease error.
+// EI-6: safety over liveness — we stop rather than tick without authority.
+func HandleLeaseExpiry(ctx context.Context, instance *agent.Instance, leaseErr error, logger *slog.Logger) error {
+	logger.Error("Lease expired, halting agent",
+		"agent_id", instance.AgentID,
+		"error", leaseErr,
+	)
+	if err := instance.SaveCheckpointToStorage(ctx); err != nil {
+		logger.Error("Failed to save checkpoint on lease expiry", "error", err)
+	}
+	return leaseErr
+}
+
 // HandleTickFailure logs the failure reason, saves a final checkpoint, and returns the error.
 func HandleTickFailure(ctx context.Context, instance *agent.Instance, tickErr error, logger *slog.Logger) error {
 	if instance.Budget <= 0 {

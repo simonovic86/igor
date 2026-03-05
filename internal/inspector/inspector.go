@@ -8,7 +8,10 @@ import (
 	"io"
 	"os"
 
+	"time"
+
 	"github.com/simonovic86/igor/internal/agent"
+	"github.com/simonovic86/igor/internal/authority"
 	"github.com/simonovic86/igor/pkg/budget"
 )
 
@@ -22,6 +25,8 @@ type Result struct {
 	TickNumber      uint64
 	WASMHash        [32]byte
 	WASMHashHex     string
+	Epoch           authority.Epoch
+	LeaseExpiry     int64 // Unix nanoseconds; 0 = no lease
 	StateSize       int
 	State           []byte
 	TotalSize       int
@@ -40,7 +45,7 @@ func InspectFile(path string) (*Result, error) {
 
 // Inspect parses raw checkpoint bytes.
 func Inspect(data []byte) (*Result, error) {
-	budgetVal, price, tick, wasmHash, state, err := agent.ParseCheckpointHeader(data)
+	budgetVal, price, tick, wasmHash, epoch, leaseExpiry, state, err := agent.ParseCheckpointHeader(data)
 	if err != nil {
 		return nil, fmt.Errorf("parse checkpoint: %w", err)
 	}
@@ -54,6 +59,8 @@ func Inspect(data []byte) (*Result, error) {
 		TickNumber:      tick,
 		WASMHash:        wasmHash,
 		WASMHashHex:     hex.EncodeToString(wasmHash[:]),
+		Epoch:           epoch,
+		LeaseExpiry:     leaseExpiry,
 		StateSize:       len(state),
 		State:           state,
 		TotalSize:       len(data),
@@ -86,8 +93,18 @@ func (r *Result) Print(w io.Writer) {
 	fmt.Fprintf(w, "Price/Second:     %s (%d microcents)\n", r.PriceFormatted, r.PricePerSecond)
 	fmt.Fprintf(w, "Tick Number:      %d\n", r.TickNumber)
 	fmt.Fprintf(w, "WASM Hash:        %s\n", r.WASMHashHex)
+	if r.Version >= 0x03 {
+		fmt.Fprintf(w, "Epoch:            %s\n", r.Epoch)
+		if r.LeaseExpiry > 0 {
+			fmt.Fprintf(w, "Lease Expiry:     %s\n", time.Unix(0, r.LeaseExpiry).UTC().Format(time.RFC3339))
+		} else {
+			fmt.Fprintf(w, "Lease Expiry:     (none)\n")
+		}
+		fmt.Fprintf(w, "Header Size:      81 bytes\n")
+	} else {
+		fmt.Fprintf(w, "Header Size:      57 bytes\n")
+	}
 	fmt.Fprintf(w, "Total Size:       %d bytes\n", r.TotalSize)
-	fmt.Fprintf(w, "Header Size:      57 bytes\n")
 	fmt.Fprintf(w, "State Size:       %d bytes\n", r.StateSize)
 
 	if r.WASMVerified != nil {

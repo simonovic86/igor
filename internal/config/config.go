@@ -53,6 +53,18 @@ type Config struct {
 	//   "intensify" - Temporarily reduce VerifyInterval to 1 (verify every tick)
 	//   "migrate"   - Log intent to migrate (full implementation requires peer selection)
 	ReplayOnDivergence string
+
+	// LeaseDuration is the validity period for authority leases.
+	// 0 disables leases (backward compatible). Default: 60s.
+	LeaseDuration time.Duration
+
+	// LeaseRenewalWindow is the fraction of lease duration at which
+	// automatic renewal triggers. Must be in (0, 1). Default: 0.5.
+	LeaseRenewalWindow float64
+
+	// LeaseGracePeriod is the additional time after lease expiry before
+	// the agent transitions to RECOVERY_REQUIRED. Default: 10s.
+	LeaseGracePeriod time.Duration
 }
 
 // Load returns a Config with default values applied.
@@ -68,6 +80,9 @@ func Load() (*Config, error) {
 		ReplayMode:         "full",
 		ReplayCostLog:      false,
 		ReplayOnDivergence: "log",
+		LeaseDuration:      60 * time.Second,
+		LeaseRenewalWindow: 0.5,
+		LeaseGracePeriod:   10 * time.Second,
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
@@ -93,6 +108,18 @@ func (c *Config) Validate() error {
 	validPolicies := map[string]bool{"log": true, "pause": true, "intensify": true, "migrate": true}
 	if !validPolicies[c.ReplayOnDivergence] {
 		return fmt.Errorf("ReplayOnDivergence must be one of log/pause/intensify/migrate, got %q", c.ReplayOnDivergence)
+	}
+	// Lease validation (LeaseDuration == 0 disables leases)
+	if c.LeaseDuration < 0 {
+		return fmt.Errorf("LeaseDuration must be non-negative, got %v", c.LeaseDuration)
+	}
+	if c.LeaseDuration > 0 {
+		if c.LeaseRenewalWindow <= 0 || c.LeaseRenewalWindow >= 1.0 {
+			return fmt.Errorf("LeaseRenewalWindow must be in (0, 1), got %f", c.LeaseRenewalWindow)
+		}
+		if c.LeaseGracePeriod < 0 {
+			return fmt.Errorf("LeaseGracePeriod must be non-negative, got %v", c.LeaseGracePeriod)
+		}
 	}
 	return nil
 }

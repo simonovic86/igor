@@ -14,6 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/simonovic86/igor/internal/agent"
+	"github.com/simonovic86/igor/internal/authority"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
 	"github.com/simonovic86/igor/pkg/budget"
@@ -170,8 +171,8 @@ func newMigrationEnv(t *testing.T) *migrationEnv {
 	}
 	t.Cleanup(func() { engB.Close(ctx) })
 
-	migA := NewService(hostA, engA, stA, "full", false, 1000, logger)
-	migB := NewService(hostB, engB, stB, "full", false, 1000, logger)
+	migA := NewService(hostA, engA, stA, "full", false, 1000, authority.LeaseConfig{}, logger)
+	migB := NewService(hostB, engB, stB, "full", false, 1000, authority.LeaseConfig{}, logger)
 
 	agentID := "integration-test-agent"
 	manifestJSON := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
@@ -294,7 +295,7 @@ func TestMultiNodeMigration(t *testing.T) {
 			t.Fatalf("target LoadCheckpoint: %v", err)
 		}
 
-		if len(checkpoint) < 57 || checkpoint[0] != 0x02 {
+		if len(checkpoint) < 81 || checkpoint[0] != 0x03 {
 			t.Fatalf("invalid checkpoint: len=%d, version=%d", len(checkpoint), checkpoint[0])
 		}
 
@@ -303,7 +304,7 @@ func TestMultiNodeMigration(t *testing.T) {
 			t.Errorf("budget: got %d, want %d", targetBudget, env.budgetBeforeMigration)
 		}
 
-		counter := binary.LittleEndian.Uint64(checkpoint[57:])
+		counter := binary.LittleEndian.Uint64(checkpoint[81:])
 		if counter != 3 {
 			t.Errorf("counter: got %d, want 3", counter)
 		}
@@ -329,7 +330,7 @@ func TestMultiNodeMigration(t *testing.T) {
 			t.Fatalf("target LoadCheckpoint after tick: %v", err)
 		}
 
-		counter := binary.LittleEndian.Uint64(checkpoint[57:])
+		counter := binary.LittleEndian.Uint64(checkpoint[81:])
 		if counter != 4 {
 			t.Errorf("counter after tick: got %d, want 4", counter)
 		}
@@ -381,8 +382,8 @@ func newPolicyTestEnv(t *testing.T, manifestJSON string) *migrationEnv {
 	t.Cleanup(func() { engB.Close(ctx) })
 
 	// Target node charges 2000 microcents/sec
-	migA := NewService(hostA, engA, stA, "off", false, 1000, logger)
-	migB := NewService(hostB, engB, stB, "off", false, 2000, logger)
+	migA := NewService(hostA, engA, stA, "off", false, 1000, authority.LeaseConfig{}, logger)
+	migB := NewService(hostB, engB, stB, "off", false, 2000, authority.LeaseConfig{}, logger)
 
 	agentID := "policy-test-agent"
 	inst, err := agent.LoadAgent(ctx, engA, wasmPath, agentID, stA,

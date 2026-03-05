@@ -368,12 +368,12 @@ func TestCheckpointAndResume(t *testing.T) {
 		t.Fatalf("LoadCheckpoint: %v", err)
 	}
 
-	// Verify checkpoint format: [version:1][budget:8][price:8][tick:8][wasmHash:32][state:N]
-	if len(rawCheckpoint) < 57 {
+	// Verify checkpoint format v0x03: [version:1][budget:8][price:8][tick:8][wasmHash:32][majorVer:8][leaseGen:8][leaseExpiry:8][state:N]
+	if len(rawCheckpoint) < 81 {
 		t.Fatalf("checkpoint too short: %d bytes", len(rawCheckpoint))
 	}
-	if rawCheckpoint[0] != 0x02 {
-		t.Fatalf("checkpoint version: got %d, want 2", rawCheckpoint[0])
+	if rawCheckpoint[0] != 0x03 {
+		t.Fatalf("checkpoint version: got %d, want 3", rawCheckpoint[0])
 	}
 
 	storedBudget := int64(binary.LittleEndian.Uint64(rawCheckpoint[1:9]))
@@ -397,8 +397,8 @@ func TestCheckpointAndResume(t *testing.T) {
 		t.Error("stored WASM hash should not be zero")
 	}
 
-	// State portion should be 8 bytes (uint64 counter)
-	state := rawCheckpoint[57:]
+	// State portion should be 8 bytes (uint64 counter) — starts at offset 81 for v0x03
+	state := rawCheckpoint[81:]
 	if len(state) != 8 {
 		t.Errorf("state size: got %d, want 8", len(state))
 	}
@@ -559,7 +559,7 @@ func TestParseCheckpointHeader_Golden(t *testing.T) {
 		t.Fatalf("read golden fixture: %v", err)
 	}
 
-	budgetVal, price, tick, wasmHash, state, err := ParseCheckpointHeader(data)
+	budgetVal, price, tick, wasmHash, epoch, _, state, err := ParseCheckpointHeader(data)
 	if err != nil {
 		t.Fatalf("ParseCheckpointHeader: %v", err)
 	}
@@ -579,6 +579,11 @@ func TestParseCheckpointHeader_Golden(t *testing.T) {
 		t.Errorf("wasmHash mismatch")
 	}
 
+	// v0x02 fixture should return zero epoch
+	if epoch.MajorVersion != 0 || epoch.LeaseGeneration != 0 {
+		t.Errorf("v0x02 epoch: got %s, want (0,0)", epoch)
+	}
+
 	if len(state) != 8 {
 		t.Fatalf("state length: got %d, want 8", len(state))
 	}
@@ -588,13 +593,58 @@ func TestParseCheckpointHeader_Golden(t *testing.T) {
 	}
 }
 
+func TestParseCheckpointHeader_V3Golden(t *testing.T) {
+	data, err := os.ReadFile("testdata/checkpoint_v3.bin")
+	if err != nil {
+		t.Fatalf("read golden fixture: %v", err)
+	}
+
+	budgetVal, price, tick, wasmHash, epoch, leaseExpiry, state, err := ParseCheckpointHeader(data)
+	if err != nil {
+		t.Fatalf("ParseCheckpointHeader: %v", err)
+	}
+
+	if budgetVal != 2000000 {
+		t.Errorf("budget: got %d, want 2000000", budgetVal)
+	}
+	if price != 1500 {
+		t.Errorf("price: got %d, want 1500", price)
+	}
+	if tick != 10 {
+		t.Errorf("tick: got %d, want 10", tick)
+	}
+
+	expectedHash := sha256.Sum256([]byte("known-wasm-binary-for-golden-test"))
+	if wasmHash != expectedHash {
+		t.Errorf("wasmHash mismatch")
+	}
+
+	if epoch.MajorVersion != 3 {
+		t.Errorf("majorVersion: got %d, want 3", epoch.MajorVersion)
+	}
+	if epoch.LeaseGeneration != 7 {
+		t.Errorf("leaseGeneration: got %d, want 7", epoch.LeaseGeneration)
+	}
+	if leaseExpiry != 1700000000000000000 {
+		t.Errorf("leaseExpiry: got %d, want 1700000000000000000", leaseExpiry)
+	}
+
+	if len(state) != 8 {
+		t.Fatalf("state length: got %d, want 8", len(state))
+	}
+	counter := binary.LittleEndian.Uint64(state)
+	if counter != 5 {
+		t.Errorf("counter: got %d, want 5", counter)
+	}
+}
+
 func TestParseCheckpointHeader_EmptyState(t *testing.T) {
 	data, err := os.ReadFile("testdata/checkpoint_empty_state.bin")
 	if err != nil {
 		t.Fatalf("read golden fixture: %v", err)
 	}
 
-	budgetVal, price, tick, _, state, err := ParseCheckpointHeader(data)
+	budgetVal, price, tick, _, _, _, state, err := ParseCheckpointHeader(data)
 	if err != nil {
 		t.Fatalf("ParseCheckpointHeader: %v", err)
 	}
@@ -621,7 +671,7 @@ func TestParseCheckpointHeader_NegativeBudget(t *testing.T) {
 	binary.LittleEndian.PutUint64(checkpoint[1:9], uint64(negBudget))
 	binary.LittleEndian.PutUint64(checkpoint[9:17], 1000)
 
-	_, _, _, _, _, err := ParseCheckpointHeader(checkpoint)
+	_, _, _, _, _, _, _, err := ParseCheckpointHeader(checkpoint)
 	if err == nil {
 		t.Error("expected error for negative budget in checkpoint")
 	}
@@ -634,7 +684,7 @@ func TestParseCheckpointHeader_NegativePrice(t *testing.T) {
 	negPrice := int64(-500)
 	binary.LittleEndian.PutUint64(checkpoint[9:17], uint64(negPrice))
 
-	_, _, _, _, _, err := ParseCheckpointHeader(checkpoint)
+	_, _, _, _, _, _, _, err := ParseCheckpointHeader(checkpoint)
 	if err == nil {
 		t.Error("expected error for negative price in checkpoint")
 	}
@@ -658,7 +708,7 @@ func TestParseCheckpointHeader_Corruption(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, _, _, _, err := ParseCheckpointHeader(tt.input)
+			_, _, _, _, _, _, _, err := ParseCheckpointHeader(tt.input)
 			if err == nil {
 				t.Error("expected error for corrupted checkpoint")
 			}
