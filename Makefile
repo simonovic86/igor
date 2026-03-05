@@ -1,4 +1,4 @@
-.PHONY: help bootstrap build clean test lint vet fmt fmt-check tidy agent run-agent gh-check gh-metadata gh-release
+.PHONY: help bootstrap build clean test lint vet fmt fmt-check tidy agent agent-reconciliation run-agent demo gh-check gh-metadata gh-release
 
 .DEFAULT_GOAL := help
 
@@ -6,6 +6,7 @@
 BINARY_NAME := igord
 BINARY_DIR := bin
 AGENT_DIR := agents/example
+RECONCILIATION_AGENT_DIR := agents/reconciliation
 
 # Go commands
 GOCMD := go
@@ -44,6 +45,7 @@ clean: ## Remove build artifacts
 	rm -rf checkpoints
 	rm -f agents/example/agent.wasm
 	rm -f agents/example/agent.wasm.checkpoint
+	rm -f agents/reconciliation/agent.wasm
 	@echo "Clean complete"
 
 test: ## Run tests (with race detector)
@@ -93,6 +95,20 @@ agent: ## Build example agent WASM
 run-agent: build agent ## Build and run example agent locally
 	@echo "Running agent with default budget (1.0)..."
 	./$(BINARY_DIR)/$(BINARY_NAME) --run-agent $(AGENT_DIR)/agent.wasm --budget 1.0
+
+agent-reconciliation: ## Build reconciliation agent WASM
+	@echo "Building reconciliation agent..."
+	@which tinygo > /dev/null || \
+		(echo "tinygo not found. See docs/governance/DEVELOPMENT.md for installation" && exit 1)
+	cd $(RECONCILIATION_AGENT_DIR) && $(MAKE) build
+	@echo "Agent built: $(RECONCILIATION_AGENT_DIR)/agent.wasm"
+
+demo: build agent-reconciliation ## Build and run reconciliation demo
+	@echo "Building demo runner..."
+	@mkdir -p $(BINARY_DIR)
+	$(GOBUILD) -o $(BINARY_DIR)/demo-reconciliation ./cmd/demo-reconciliation
+	@echo "Running Bridge Reconciliation Demo..."
+	./$(BINARY_DIR)/demo-reconciliation --wasm $(RECONCILIATION_AGENT_DIR)/agent.wasm
 
 check: fmt-check vet lint test ## Run all checks (formatting, vet, lint, tests)
 	@echo "All checks passed"
