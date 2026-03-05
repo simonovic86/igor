@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package mock provides mock hostcall implementations for testing Igor agents
 // natively (without WASM compilation).
 //

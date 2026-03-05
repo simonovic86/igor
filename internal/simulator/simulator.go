@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package simulator provides a single-process WASM agent runner for local
 // development and testing. It drives the agent tick loop with optional
 // deterministic hostcalls and per-tick replay verification.

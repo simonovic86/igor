@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package wasmutil provides shared WASM module interaction helpers used by
 // the agent, replay, and simulator packages. Extracting these avoids three
 // near-identical copies of captureState and resumeAgent.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package protocol
 
 // AgentPackage contains all data needed to transfer an agent.

@@ -367,6 +367,4 @@ Contributors are recognized through:
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the same license as the project.
-
-(License to be specified in LICENSE file)
+By contributing, you agree that your contributions will be licensed under the Apache License 2.0, the same license that covers the project. See [LICENSE](./LICENSE) for details.

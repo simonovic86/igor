@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package hostcall implements the igor WASM host module containing
 // runtime-mediated capability hostcalls per the capability membrane spec.
 // Agents import functions from the "igor" namespace; only capabilities

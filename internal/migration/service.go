@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package migration implements peer-to-peer agent relocation and transfer protocols.
 // Coordinates autonomous agent migration between distributed nodes using libp2p streams
 // while maintaining single-instance invariants and budget preservation guarantees.

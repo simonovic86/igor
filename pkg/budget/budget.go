@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package budget provides integer-based budget arithmetic for agent execution metering.
 // Budget values are represented as int64 microcents (1 currency unit = 1,000,000 microcents)
 // to avoid floating-point precision loss that would violate RE-3 (Budget Conservation).

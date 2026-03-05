@@ -330,4 +330,4 @@ See [docs/governance/KEYWORDS.md](./docs/governance/KEYWORDS.md) for keyword gov
 
 ## License
 
-MIT
+Apache-2.0 — see [LICENSE](./LICENSE) for details.
