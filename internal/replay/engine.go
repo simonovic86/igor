@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/simonovic86/igor/internal/eventlog"
+	"github.com/simonovic86/igor/internal/wasmutil"
 	"github.com/simonovic86/igor/pkg/manifest"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -417,70 +418,12 @@ func registerReplayWallet(
 
 // replayResume restores agent state in the replay module.
 func replayResume(ctx context.Context, mod api.Module, state []byte) error {
-	fn := mod.ExportedFunction("agent_resume")
-	if fn == nil {
-		return fmt.Errorf("agent_resume not exported")
-	}
-
-	if len(state) == 0 {
-		_, err := fn.Call(ctx, 0, 0)
-		return err
-	}
-
-	malloc := mod.ExportedFunction("malloc")
-	if malloc == nil {
-		return fmt.Errorf("malloc not exported (required for agent_resume)")
-	}
-
-	results, err := malloc.Call(ctx, uint64(len(state)))
-	if err != nil {
-		return fmt.Errorf("malloc: %w", err)
-	}
-	ptr := uint32(results[0])
-
-	if !mod.Memory().Write(ptr, state) {
-		return fmt.Errorf("failed to write state to WASM memory")
-	}
-
-	_, err = fn.Call(ctx, uint64(ptr), uint64(len(state)))
-	return err
+	return wasmutil.ResumeAgent(ctx, mod, state)
 }
 
 // replayCheckpoint extracts the agent's state from the replay module.
 func replayCheckpoint(ctx context.Context, mod api.Module) ([]byte, error) {
-	fnSize := mod.ExportedFunction("agent_checkpoint")
-	if fnSize == nil {
-		return nil, fmt.Errorf("agent_checkpoint not exported")
-	}
-
-	sizeResults, err := fnSize.Call(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("agent_checkpoint: %w", err)
-	}
-	size := uint32(sizeResults[0])
-	if size == 0 {
-		return []byte{}, nil
-	}
-
-	fnPtr := mod.ExportedFunction("agent_checkpoint_ptr")
-	if fnPtr == nil {
-		return nil, fmt.Errorf("agent_checkpoint_ptr not exported")
-	}
-
-	ptrResults, err := fnPtr.Call(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("agent_checkpoint_ptr: %w", err)
-	}
-	ptr := uint32(ptrResults[0])
-
-	data, ok := mod.Memory().Read(ptr, size)
-	if !ok {
-		return nil, fmt.Errorf("failed to read checkpoint from memory")
-	}
-
-	out := make([]byte, len(data))
-	copy(out, data)
-	return out, nil
+	return wasmutil.CaptureState(ctx, mod)
 }
 
 // ChainSnapshot holds the data needed to replay a single tick within a chain.

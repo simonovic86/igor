@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -662,6 +663,115 @@ func TestParseCheckpointHeader_Corruption(t *testing.T) {
 				t.Error("expected error for corrupted checkpoint")
 			}
 		})
+	}
+}
+
+// testAgentAlternate is a different agent (adds 2 instead of 1) to produce a
+// different WASM binary hash for hash-mismatch testing.
+const testAgentAlternate = `package main
+
+import "unsafe"
+
+//go:wasmimport igor clock_now
+func clockNow() int64
+
+//go:wasmimport igor rand_bytes
+func randBytes(ptr uint32, length uint32) int32
+
+//go:wasmimport igor log_emit
+func logEmit(ptr uint32, length uint32)
+
+var counter uint64
+
+//export agent_init
+func agent_init() { counter = 0 }
+
+//export agent_tick
+func agent_tick() uint32 {
+	counter += 2
+	_ = clockNow()
+	var buf [4]byte
+	randBytes(uint32(uintptr(unsafe.Pointer(&buf[0]))), 4)
+	msg := []byte("tick")
+	logEmit(uint32(uintptr(unsafe.Pointer(&msg[0]))), uint32(len(msg)))
+	return 0
+}
+
+//export agent_checkpoint
+func agent_checkpoint() uint32 { return 8 }
+
+//export agent_checkpoint_ptr
+func agent_checkpoint_ptr() uint32 {
+	return uint32(uintptr(unsafe.Pointer(&counter)))
+}
+
+//export agent_resume
+func agent_resume(ptr, size uint32) {
+	if size >= 8 {
+		buf := unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), size)
+		counter = *(*uint64)(unsafe.Pointer(&buf[0]))
+	}
+}
+
+func main() {}
+`
+
+func TestLoadCheckpointFromStorage_WASMHashMismatch(t *testing.T) {
+	// Build two different WASM agents to get different hashes.
+	wasmPath1 := buildTestAgent(t)
+	wasmPath2 := buildTestAgentFromSource(t, testAgentAlternate)
+
+	ctx := context.Background()
+	logger := newTestLogger()
+
+	engine, err := runtime.NewEngine(ctx, logger)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+	defer engine.Close(ctx)
+
+	storageDir := t.TempDir()
+	storageProvider, err := storage.NewFSProvider(storageDir, logger)
+	if err != nil {
+		t.Fatalf("NewFSProvider: %v", err)
+	}
+
+	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
+
+	// Load agent 1, run a tick, save checkpoint.
+	inst1, err := LoadAgent(ctx, engine, wasmPath1, "hash-test", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", logger)
+	if err != nil {
+		t.Fatalf("LoadAgent(1): %v", err)
+	}
+	if err := inst1.Init(ctx); err != nil {
+		t.Fatalf("Init(1): %v", err)
+	}
+	if _, err := inst1.Tick(ctx); err != nil {
+		t.Fatalf("Tick(1): %v", err)
+	}
+	if err := inst1.SaveCheckpointToStorage(ctx); err != nil {
+		t.Fatalf("SaveCheckpoint(1): %v", err)
+	}
+	inst1.Close(ctx)
+
+	// Load agent 2 with the same agent ID — different binary, different hash.
+	inst2, err := LoadAgent(ctx, engine, wasmPath2, "hash-test", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", logger)
+	if err != nil {
+		t.Fatalf("LoadAgent(2): %v", err)
+	}
+	defer inst2.Close(ctx)
+
+	if err := inst2.Init(ctx); err != nil {
+		t.Fatalf("Init(2): %v", err)
+	}
+
+	// This should fail: checkpoint was created by agent 1, but we're loading with agent 2.
+	err = inst2.LoadCheckpointFromStorage(ctx)
+	if err == nil {
+		t.Fatal("expected WASM hash mismatch error, got nil")
+	}
+	if !strings.Contains(err.Error(), "WASM hash mismatch") {
+		t.Fatalf("expected hash mismatch error, got: %v", err)
 	}
 }
 

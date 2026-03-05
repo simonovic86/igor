@@ -1,16 +1,16 @@
 # Hostcall ABI
 
 **Spec Layer:** Runtime Implementation
-**Status:** Design Draft
+**Status:** Implemented
 **Derives from:** [CAPABILITY_MEMBRANE.md](../constitution/CAPABILITY_MEMBRANE.md) (CM-1 through CM-7), [CAPABILITY_ENFORCEMENT.md](../enforcement/CAPABILITY_ENFORCEMENT.md) (CE-1 through CE-6)
 
 ---
 
 ## Purpose
 
-This document defines the concrete hostcall interface between agents and the Igor runtime. It specifies the WASM module namespace, capability namespaces, function signatures, error conventions, and integration approach with the wazero engine.
+This document defines the concrete hostcall interface between agents and the Igor runtime. It specifies the WASM module namespace, capability namespaces, function signatures, error conventions, and integration with the wazero engine.
 
-This is a runtime-layer design document. It may evolve as implementation proceeds. The constitutional guarantees it implements (CM-1 through CM-7) are stable; the specific ABI described here is not frozen.
+The constitutional guarantees it implements (CM-1 through CM-7) are stable; the specific ABI described here may evolve as new capabilities are added.
 
 ---
 
@@ -37,6 +37,8 @@ Provides wall-clock time. Observation hostcall — recorded in event log for rep
 |----------|-----------|-------------|
 | `clock_now` | `() -> (i64)` | Returns current time as Unix nanoseconds |
 
+**Implementation:** `internal/hostcall/clock.go` — calls `time.Now().UnixNano()`, records 8-byte little-endian payload in event log.
+
 **Replay behavior:** During replay, returns the recorded value from the event log instead of live time.
 
 ### rand — Randomness Observation
@@ -47,41 +49,21 @@ Provides cryptographically random bytes. Observation hostcall — recorded in ev
 |----------|-----------|-------------|
 | `rand_bytes` | `(ptr: i32, len: i32) -> (i32)` | Fills buffer at `ptr` with `len` random bytes. Returns 0 on success, negative on error. |
 
+**Implementation:** `internal/hostcall/rand.go` — calls `crypto/rand.Read()`, writes bytes to WASM memory, records raw bytes in event log.
+
 **Replay behavior:** During replay, writes the recorded bytes to the buffer.
-
-### kv — Key-Value Storage
-
-Provides persistent key-value storage scoped to the agent. Read operations are observations; write operations are side effects gated on ACTIVE_OWNER (CE-4).
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `kv_get` | `(key_ptr: i32, key_len: i32, val_ptr: i32, val_cap: i32) -> (i32)` | Reads value for key into buffer. Returns bytes written, 0 if not found, negative on error. |
-| `kv_put` | `(key_ptr: i32, key_len: i32, val_ptr: i32, val_len: i32) -> (i32)` | Writes value for key. Side effect. Returns 0 on success, negative on error. |
-| `kv_delete` | `(key_ptr: i32, key_len: i32) -> (i32)` | Deletes key. Side effect. Returns 0 on success, negative on error. |
-
-**Storage scope:** Per-agent. Agents cannot access each other's KV space (RE-7).
-**Persistence:** KV state is included in checkpoint data.
-**Replay behavior:** Reads return recorded values. Writes are recorded but not re-executed during replay.
 
 ### log — Structured Logging
 
-Provides structured log output. Not a side effect — logging is an observation that produces no externally visible state change.
+Provides structured log output. Observation hostcall — recorded in event log for replay (CE-3). Not a side effect — logging produces no externally visible state change.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `log_emit` | `(ptr: i32, len: i32) -> ()` | Emits a structured log entry. |
 
-**Replay behavior:** Log entries are silently discarded during replay.
+**Implementation:** `internal/hostcall/log.go` — reads message from WASM memory (capped at 4096 bytes), logs via `slog`, records message bytes in event log.
 
-### net — Network Requests (Future: Phase 3+)
-
-Provides HTTP-like request/response capability. Side-effect hostcall — gated on ACTIVE_OWNER (CE-4), recorded for replay (CE-3).
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `net_request` | `(req_ptr: i32, req_len: i32, resp_ptr: i32, resp_cap: i32) -> (i32)` | Sends request, writes response to buffer. Returns bytes written or negative on error. |
-
-**Not implemented in current phase.** Included to demonstrate namespace reservation and design direction.
+**Replay behavior:** Log entries are silently consumed during replay (entry iterator advances but no output is produced).
 
 ### wallet — Economic Operations
 
@@ -93,9 +75,29 @@ Provides budget introspection and receipt access. All wallet hostcalls are obser
 | `wallet_receipt_count` | `() -> (i32)` | Returns number of receipts accumulated by the agent. Observation. |
 | `wallet_receipt` | `(index: i32, buf_ptr: i32, buf_len: i32) -> (i32)` | Copies receipt at `index` into buffer. Returns bytes written, -1 on invalid index, -4 if buffer too small. Observation. |
 
+**Implementation:** `internal/hostcall/wallet.go` — reads from the `WalletState` interface (budget, receipt count, receipt bytes), records values in event log.
+
 **Replay behavior:** During replay, returns the recorded values from the event log.
 
 **Receipts:** Created by the runtime after each checkpoint epoch. Each receipt is signed by the node's Ed25519 peer key and attests to the execution cost for a range of ticks. Receipts travel with the agent during migration for audit trail continuity.
+
+### kv — Key-Value Storage (Not Yet Implemented)
+
+Persistent key-value storage scoped to the agent. Reads are observations; writes are side effects gated on ACTIVE_OWNER (CE-4). Reserved for a future task.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `kv_get` | `(key_ptr: i32, key_len: i32, val_ptr: i32, val_cap: i32) -> (i32)` | Reads value for key into buffer. Returns bytes written, 0 if not found, negative on error. |
+| `kv_put` | `(key_ptr: i32, key_len: i32, val_ptr: i32, val_len: i32) -> (i32)` | Writes value for key. Side effect. Returns 0 on success, negative on error. |
+| `kv_delete` | `(key_ptr: i32, key_len: i32) -> (i32)` | Deletes key. Side effect. Returns 0 on success, negative on error. |
+
+### net — Network Requests (Not Yet Implemented)
+
+HTTP-like request/response capability. Side-effect hostcall gated on ACTIVE_OWNER (CE-4). Reserved for a future phase.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `net_request` | `(req_ptr: i32, req_len: i32, resp_ptr: i32, resp_cap: i32) -> (i32)` | Sends request, writes response to buffer. Returns bytes written or negative on error. |
 
 ---
 
@@ -103,15 +105,17 @@ Provides budget introspection and receipt access. All wallet hostcalls are obser
 
 All hostcalls returning `i32` follow this convention:
 
-| Value | Meaning |
-|-------|---------|
-| `>= 0` | Success. For read operations, the number of bytes written. |
-| `-1` | Generic error |
-| `-2` | Capability not granted |
-| `-3` | Authority state violation (not ACTIVE_OWNER) |
-| `-4` | Buffer too small |
-| `-5` | Key not found (kv_get) |
-| `-6` | Budget insufficient |
+| Value | Meaning | Status |
+|-------|---------|--------|
+| `>= 0` | Success. For read operations, the number of bytes written. | Active |
+| `-1` | Generic error | Active |
+| `-4` | Buffer too small | Active |
+| `-2` | Capability not granted | Reserved (undeclared capabilities cause WASM instantiation failure instead) |
+| `-3` | Authority state violation (not ACTIVE_OWNER) | Reserved (authority state machine not yet implemented) |
+| `-5` | Key not found (kv_get) | Reserved (kv not yet implemented) |
+| `-6` | Budget insufficient | Reserved |
+
+**Note:** Error codes `-2` and `-3` are defined for future use. Currently, capabilities not declared in the manifest are simply not registered in the `igor` host module, causing WASM instantiation to fail (the import cannot be resolved). When the authority state machine is implemented (Phase 5), `-3` will be returned for side-effect hostcalls invoked outside ACTIVE_OWNER state.
 
 Agents MUST check return values. The runtime does not abort on hostcall errors — it returns error codes and lets the agent decide how to respond.
 
@@ -126,8 +130,15 @@ Agents declare required capabilities in their manifest. The manifest is evaluate
   "capabilities": {
     "clock": { "version": 1 },
     "rand": { "version": 1 },
-    "kv": { "version": 1, "max_key_size": 256, "max_value_size": 65536 },
-    "log": { "version": 1 }
+    "log": { "version": 1 },
+    "wallet": { "version": 1 }
+  },
+  "resource_limits": {
+    "max_memory_bytes": 33554432
+  },
+  "migration_policy": {
+    "enabled": true,
+    "max_price_per_second": 5000
   }
 }
 ```
@@ -136,6 +147,8 @@ Agents declare required capabilities in their manifest. The manifest is evaluate
 - Only declared capabilities are registered in the WASM import namespace (CE-1)
 - Missing required imports cause WASM instantiation failure (expected, not an error)
 - Manifest format is part of the agent package alongside the WASM binary
+- `resource_limits.max_memory_bytes` is validated against the node's 64MB limit at load time
+- `migration_policy` controls whether the agent accepts migration and at what price ceiling
 
 ---
 
@@ -143,64 +156,59 @@ Agents declare required capabilities in their manifest. The manifest is evaluate
 
 Per CM-4 and CE-3, the runtime records all observation hostcall return values in a per-tick event log.
 
-**Log entry format (conceptual):**
+**Implementation:** `internal/eventlog/eventlog.go`
 
-```
-[tick_number: u64][entry_count: u32][entries...]
+**Entry format:**
 
-Entry:
-  [hostcall_id: u16][payload_length: u32][payload: bytes]
+```go
+type Entry struct {
+    HostcallID HostcallID // ClockNow=1, RandBytes=2, LogEmit=3, WalletBalance=4, etc.
+    Payload    []byte     // Return value bytes (e.g., 8-byte timestamp, N random bytes)
+}
 ```
 
 **Properties:**
 - Append-only during tick execution
 - Sealed at tick boundary (before checkpoint commit)
-- Carried alongside checkpoint data through migration
+- Carried alongside checkpoint data through migration (as `ReplayData` in `AgentPackage`)
 - Sufficient to replay any tick from its starting checkpoint
-
-**Open questions:**
-- Event log size budget per tick (may need limits)
-- Compression strategy for large observation payloads
-- Retention policy (keep all history vs sliding window)
+- Per-tick arena allocation (4KB default) to minimize GC pressure
+- Sliding window retention (configurable via `--replay-window`, default 16 snapshots)
+- Observation-weighted eviction: low-observation ticks are evicted first
 
 ---
 
 ## wazero Integration
 
-Hostcalls are registered using wazero's `RuntimeConfig` and host module builder:
+Hostcalls are registered using wazero's host module builder. The `internal/hostcall/registry.go` Registry selectively registers capabilities based on the agent's manifest:
 
 ```go
-// Conceptual — not final API
-igor := r.NewHostModuleBuilder("igor")
-
-if manifest.Has("clock") {
-    igor.NewFunctionBuilder().
-        WithFunc(func(ctx context.Context) int64 {
-            now := time.Now().UnixNano()
-            eventLog.Record(ClockNow, now)
-            return now
-        }).
-        Export("clock_now")
+// From internal/hostcall/registry.go
+registry := hostcall.NewRegistry(logger, eventLog)
+registry.SetWalletState(walletState)
+if err := registry.RegisterHostModule(ctx, rt, capManifest); err != nil {
+    return err
 }
+```
 
-if manifest.Has("rand") {
-    igor.NewFunctionBuilder().
-        WithFunc(func(ctx context.Context, ptr, length uint32) int32 {
-            buf := make([]byte, length)
-            rand.Read(buf)
-            eventLog.Record(RandBytes, buf)
-            mem.Write(ptr, buf)
-            return 0
-        }).
-        Export("rand_bytes")
-}
+Each capability registers its functions under the `igor` module namespace:
 
-igor.Instantiate(ctx)
+```go
+// From internal/hostcall/clock.go
+builder.NewFunctionBuilder().
+    WithFunc(func(ctx context.Context) int64 {
+        now := time.Now().UnixNano()
+        el.Record(eventlog.ClockNow, now)
+        return now
+    }).
+    Export("clock_now")
 ```
 
 **Key integration points:**
-- `internal/runtime/engine.go` — currently calls `wasi.MustInstantiate`; hostcall module registered alongside WASI
-- `internal/agent/instance.go` — manifest loaded from agent package, passed to engine for selective registration
+- `internal/runtime/engine.go` — creates the wazero runtime with 64MB memory limit, WASI instantiated alongside the `igor` host module
+- `internal/agent/instance.go` — manifest loaded from agent package, passed to Registry for selective registration
+- `internal/hostcall/registry.go` — deny-by-default: only capabilities declared in the manifest are registered
+- `internal/replay/engine.go` — replay-mode hostcalls return recorded values from the event log iterator
 
 ---
 
@@ -212,19 +220,6 @@ igor.Instantiate(ctx)
 
 **Negative error codes over exceptions/traps:** Hostcalls return negative integers for errors rather than trapping the WASM instance. This keeps error handling in agent code (the agent decides how to respond to a failed hostcall) and preserves the agent's ability to checkpoint cleanly after errors. A trap would abort the tick and potentially lose in-progress state.
 
-## Relationship to Current Implementation
-
-The current runtime (`internal/runtime/engine.go`) provides WASI with filesystem/network disabled. Agents interact via stdout/stderr only. The hostcall ABI replaces this limited interface with structured, auditable, replayable I/O channels.
-
-**Migration path:**
-1. Add `igor` host module alongside existing WASI
-2. Implement clock and rand hostcalls first (simplest, most useful)
-3. Add kv hostcalls (enables persistent agent state beyond checkpoint blob)
-4. Deprecate direct stdout for agent output; prefer `log_emit`
-5. Add net/wallet in later phases
-
-The existing 4-function agent contract (`agent_init`, `agent_tick`, `agent_checkpoint`, `agent_resume`) remains unchanged. Hostcalls add new imports, not new exports.
-
 ---
 
 ## References
@@ -233,3 +228,4 @@ The existing 4-function agent contract (`agent_init`, `agent_tick`, `agent_check
 - [CAPABILITY_ENFORCEMENT.md](../enforcement/CAPABILITY_ENFORCEMENT.md) — Enforcement rules (CE-1 through CE-6)
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — System architecture
 - [AGENT_LIFECYCLE.md](./AGENT_LIFECYCLE.md) — Agent development guide
+- [IMPROVEMENTS.md](./IMPROVEMENTS.md) — Runtime optimization decisions

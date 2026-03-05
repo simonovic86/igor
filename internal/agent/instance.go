@@ -16,6 +16,7 @@ import (
 	"github.com/simonovic86/igor/internal/hostcall"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
+	"github.com/simonovic86/igor/internal/wasmutil"
 	"github.com/simonovic86/igor/pkg/budget"
 	"github.com/simonovic86/igor/pkg/manifest"
 	"github.com/simonovic86/igor/pkg/receipt"
@@ -426,31 +427,7 @@ func (i *Instance) Tick(ctx context.Context) (bool, error) {
 
 // captureState extracts the agent's current state via checkpoint exports.
 func (i *Instance) captureState(ctx context.Context) ([]byte, error) {
-	fnSize := i.Module.ExportedFunction("agent_checkpoint")
-	sizeResults, err := fnSize.Call(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("agent_checkpoint: %w", err)
-	}
-	size := uint32(sizeResults[0])
-	if size == 0 {
-		return []byte{}, nil
-	}
-
-	fnPtr := i.Module.ExportedFunction("agent_checkpoint_ptr")
-	ptrResults, err := fnPtr.Call(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("agent_checkpoint_ptr: %w", err)
-	}
-	ptr := uint32(ptrResults[0])
-
-	data, ok := i.Module.Memory().Read(ptr, size)
-	if !ok {
-		return nil, fmt.Errorf("failed to read state from WASM memory")
-	}
-
-	out := make([]byte, len(data))
-	copy(out, data)
-	return out, nil
+	return wasmutil.CaptureState(ctx, i.Module)
 }
 
 // Checkpoint saves the agent's state.

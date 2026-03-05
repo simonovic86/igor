@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/simonovic86/igor/internal/runner"
 )
 
 func testLogger() *slog.Logger {
@@ -18,7 +20,7 @@ func TestLoadManifestData_ExplicitPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data := loadManifestData("irrelevant.wasm", mPath, testLogger())
+	data := runner.LoadManifestData("irrelevant.wasm", mPath, testLogger())
 	if string(data) != `{"capabilities":{"clock":{"version":1}}}` {
 		t.Fatalf("unexpected manifest: %s", data)
 	}
@@ -32,14 +34,14 @@ func TestLoadManifestData_DerivedFromWASMPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data := loadManifestData(wasmPath, "", testLogger())
+	data := runner.LoadManifestData(wasmPath, "", testLogger())
 	if string(data) != `{"capabilities":{}}` {
 		t.Fatalf("unexpected manifest: %s", data)
 	}
 }
 
 func TestLoadManifestData_NoManifestFallsBack(t *testing.T) {
-	data := loadManifestData("/tmp/nonexistent.wasm", "", testLogger())
+	data := runner.LoadManifestData("/tmp/nonexistent.wasm", "", testLogger())
 	if string(data) != "{}" {
 		t.Fatalf("expected empty JSON, got: %s", data)
 	}
@@ -47,7 +49,7 @@ func TestLoadManifestData_NoManifestFallsBack(t *testing.T) {
 
 func TestLoadManifestData_NonWASMPath(t *testing.T) {
 	// When wasmPath doesn't end in .wasm and no explicit manifest, should fallback
-	data := loadManifestData("agent", "", testLogger())
+	data := runner.LoadManifestData("agent", "", testLogger())
 	if string(data) != "{}" {
 		t.Fatalf("expected empty JSON for non-.wasm path, got: %s", data)
 	}
@@ -56,19 +58,19 @@ func TestLoadManifestData_NonWASMPath(t *testing.T) {
 func TestEscalationForPolicy(t *testing.T) {
 	tests := []struct {
 		policy string
-		want   divergenceAction
+		want   runner.DivergenceAction
 	}{
-		{"pause", divergencePause},
-		{"intensify", divergenceIntensify},
-		{"migrate", divergenceMigrate},
-		{"log", divergenceLog},
-		{"", divergenceLog},
-		{"unknown", divergenceLog},
+		{"pause", runner.DivergencePause},
+		{"intensify", runner.DivergenceIntensify},
+		{"migrate", runner.DivergenceMigrate},
+		{"log", runner.DivergenceLog},
+		{"", runner.DivergenceLog},
+		{"unknown", runner.DivergenceLog},
 	}
 	for _, tt := range tests {
-		got := escalationForPolicy(tt.policy)
+		got := runner.EscalationForPolicy(tt.policy)
 		if got != tt.want {
-			t.Errorf("escalationForPolicy(%q) = %d, want %d", tt.policy, got, tt.want)
+			t.Errorf("EscalationForPolicy(%q) = %d, want %d", tt.policy, got, tt.want)
 		}
 	}
 }

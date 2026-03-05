@@ -2,14 +2,11 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/sha256"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -20,6 +17,7 @@ import (
 	"github.com/simonovic86/igor/internal/migration"
 	"github.com/simonovic86/igor/internal/p2p"
 	"github.com/simonovic86/igor/internal/replay"
+	"github.com/simonovic86/igor/internal/runner"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/simulator"
 	"github.com/simonovic86/igor/internal/storage"
@@ -166,41 +164,6 @@ func main() {
 	logger.Info("Igor Node shutting down...")
 }
 
-// loadManifestData reads the manifest file for the given WASM path and flags.
-// Returns empty JSON capabilities if no manifest is found.
-func loadManifestData(wasmPath, manifestPathFlag string, logger *slog.Logger) []byte {
-	mPath := manifestPathFlag
-	if mPath == "" {
-		// Default: look for <agent>.manifest.json alongside the WASM file
-		if strings.HasSuffix(wasmPath, ".wasm") {
-			mPath = strings.TrimSuffix(wasmPath, ".wasm") + ".manifest.json"
-		}
-	}
-	manifestData, err := os.ReadFile(mPath)
-	if err != nil {
-		logger.Info("No manifest file found, using empty capabilities",
-			"expected_path", mPath,
-		)
-		return []byte("{}")
-	}
-	logger.Info("Manifest loaded", "path", mPath)
-	return manifestData
-}
-
-// extractSigningKey returns the Ed25519 private key and peer ID from the node,
-// or nil/"" if the key is not available or not Ed25519.
-func extractSigningKey(node *p2p.Node) (ed25519.PrivateKey, string) {
-	privKey := node.Host.Peerstore().PrivKey(node.Host.ID())
-	if privKey == nil {
-		return nil, ""
-	}
-	raw, err := privKey.Raw()
-	if err != nil || len(raw) != ed25519.PrivateKeySize {
-		return nil, ""
-	}
-	return ed25519.PrivateKey(raw), node.Host.ID().String()
-}
-
 // runLocalAgent loads and executes an agent locally with tick loop and checkpointing.
 func runLocalAgent(
 	ctx context.Context,
@@ -214,9 +177,9 @@ func runLocalAgent(
 	node *p2p.Node,
 	logger *slog.Logger,
 ) error {
-	manifestData := loadManifestData(wasmPath, manifestPathFlag, logger)
+	manifestData := runner.LoadManifestData(wasmPath, manifestPathFlag, logger)
 
-	signingKey, nodeID := extractSigningKey(node)
+	signingKey, nodeID := runner.ExtractSigningKey(node)
 
 	// Load agent with budget and manifest
 	instance, err := agent.LoadAgent(
@@ -306,9 +269,9 @@ func runLocalAgent(
 			return nil
 
 		case <-tickTimer.C:
-			hasMoreWork, tickErr := safeTick(ctx, instance)
+			hasMoreWork, tickErr := runner.SafeTick(ctx, instance)
 			if tickErr != nil {
-				return handleTickFailure(ctx, instance, tickErr, logger)
+				return runner.HandleTickFailure(ctx, instance, tickErr, logger)
 			}
 
 			// Adaptive tick scheduling: fast-path if agent has more work.
@@ -321,9 +284,9 @@ func runLocalAgent(
 			ticksSinceVerify++
 			if periodicVerify && cfg.VerifyInterval > 0 && ticksSinceVerify >= cfg.VerifyInterval {
 				ticksSinceVerify = 0
-				var action divergenceAction
-				lastVerifiedTick, action = verifyNextTick(ctx, instance, replayEngine, lastVerifiedTick, cfg.ReplayCostLog, cfg.ReplayOnDivergence, logger)
-				if stop := handleDivergenceAction(ctx, instance, cfg, action, logger); stop {
+				var action runner.DivergenceAction
+				lastVerifiedTick, action = runner.VerifyNextTick(ctx, instance, replayEngine, lastVerifiedTick, cfg.ReplayCostLog, cfg.ReplayOnDivergence, logger)
+				if stop := runner.HandleDivergenceAction(ctx, instance, cfg, action, logger); stop {
 					return nil
 				}
 			}
@@ -334,143 +297,6 @@ func runLocalAgent(
 				logger.Error("Failed to save checkpoint", "error", err)
 			}
 		}
-	}
-}
-
-// handleTickFailure logs the failure reason, saves a final checkpoint, and returns the error.
-func handleTickFailure(ctx context.Context, instance *agent.Instance, tickErr error, logger *slog.Logger) error {
-	if instance.Budget <= 0 {
-		logger.Info("Agent budget exhausted, terminating",
-			"agent_id", "local-agent",
-			"reason", "budget_exhausted",
-		)
-	} else {
-		logger.Error("Tick failed", "error", tickErr)
-	}
-	if err := instance.SaveCheckpointToStorage(ctx); err != nil {
-		logger.Error("Failed to save checkpoint on termination", "error", err)
-	}
-	return tickErr
-}
-
-// handleDivergenceAction acts on the escalation policy returned by verifyNextTick.
-// Returns true if the tick loop should exit.
-func handleDivergenceAction(ctx context.Context, instance *agent.Instance, cfg *config.Config, action divergenceAction, logger *slog.Logger) bool {
-	switch action {
-	case divergencePause:
-		logger.Info("Agent paused due to replay divergence (EI-6), saving checkpoint")
-		if err := instance.SaveCheckpointToStorage(ctx); err != nil {
-			logger.Error("Failed to save checkpoint on pause", "error", err)
-		}
-		return true
-	case divergenceIntensify:
-		logger.Info("Verification frequency intensified to every tick")
-		cfg.VerifyInterval = 1
-	case divergenceMigrate:
-		// Full migration-trigger requires peer selection; fall through to pause.
-		logger.Info("Migration escalation triggered — pausing (peer selection not yet implemented)")
-		if err := instance.SaveCheckpointToStorage(ctx); err != nil {
-			logger.Error("Failed to save checkpoint on migrate-pause", "error", err)
-		}
-		return true
-	}
-	return false
-}
-
-// safeTick executes one tick with panic recovery (EI-6: Safety Over Liveness).
-// A WASM trap or runtime bug must not crash the node.
-func safeTick(ctx context.Context, instance *agent.Instance) (hasMore bool, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("tick panicked: %v", r)
-		}
-	}()
-	return instance.Tick(ctx)
-}
-
-// divergenceAction indicates what the tick loop should do after replay verification.
-type divergenceAction int
-
-const (
-	divergenceNone      divergenceAction = iota // no divergence detected
-	divergenceLog                               // log and continue
-	divergencePause                             // stop ticking, preserve checkpoint
-	divergenceIntensify                         // increase verify frequency
-	divergenceMigrate                           // trigger migration
-)
-
-// verifyNextTick replays the oldest unverified tick in the replay window.
-// Returns the tick number of the verified tick (for tracking) and an escalation
-// action if divergence is detected. Returns divergenceNone when verification passes.
-func verifyNextTick(
-	ctx context.Context,
-	instance *agent.Instance,
-	replayEngine *replay.Engine,
-	lastVerified uint64,
-	logCost bool,
-	policy string,
-	logger *slog.Logger,
-) (uint64, divergenceAction) {
-	for _, snap := range instance.ReplayWindow {
-		if snap.TickNumber <= lastVerified {
-			continue
-		}
-		if snap.TickLog == nil || len(snap.TickLog.Entries) == 0 {
-			continue
-		}
-
-		// Pass nil expectedState — hash-based verification (IMPROVEMENTS #2).
-		result := replayEngine.ReplayTick(
-			ctx,
-			instance.WASMBytes,
-			instance.Manifest,
-			snap.PreState,
-			snap.TickLog,
-			nil,
-		)
-
-		if result.Error != nil {
-			logger.Error("Replay verification failed",
-				"tick", result.TickNumber,
-				"error", result.Error,
-			)
-			return snap.TickNumber, escalationForPolicy(policy)
-		}
-
-		// Hash-based post-state comparison (IMPROVEMENTS #2).
-		replayedHash := sha256.Sum256(result.ReplayedState)
-		if replayedHash != snap.PostStateHash {
-			logger.Error("Replay divergence detected",
-				"tick", result.TickNumber,
-				"state_bytes", len(result.ReplayedState),
-			)
-			return snap.TickNumber, escalationForPolicy(policy)
-		}
-
-		attrs := []any{
-			"tick", result.TickNumber,
-			"state_bytes", len(result.ReplayedState),
-		}
-		if logCost {
-			attrs = append(attrs, "replay_duration", result.Duration)
-		}
-		logger.Info("Replay verified", attrs...)
-		return snap.TickNumber, divergenceNone
-	}
-	return lastVerified, divergenceNone
-}
-
-// escalationForPolicy maps a policy string to a divergenceAction.
-func escalationForPolicy(policy string) divergenceAction {
-	switch policy {
-	case "pause":
-		return divergencePause
-	case "intensify":
-		return divergenceIntensify
-	case "migrate":
-		return divergenceMigrate
-	default:
-		return divergenceLog
 	}
 }
 
