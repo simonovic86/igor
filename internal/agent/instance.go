@@ -16,6 +16,7 @@ import (
 	"github.com/simonovic86/igor/internal/eventlog"
 	"github.com/simonovic86/igor/internal/hostcall"
 	"github.com/simonovic86/igor/internal/runtime"
+	"github.com/simonovic86/igor/internal/settlement"
 	"github.com/simonovic86/igor/internal/storage"
 	"github.com/simonovic86/igor/internal/wasmutil"
 	"github.com/simonovic86/igor/pkg/budget"
@@ -78,11 +79,12 @@ type Instance struct {
 	replayWindowMax int            // Maximum snapshots retained (0 = use DefaultReplayWindowSize)
 
 	// Receipt tracking (Phase 4: Economics)
-	Receipts        []receipt.Receipt  // Accumulated payment receipts
-	lastReceiptTick uint64             // Tick number of the last receipt's epoch end
-	epochCost       int64              // Accumulated cost since last receipt
-	signingKey      ed25519.PrivateKey // Node's signing key; nil = receipts disabled
-	nodeID          string             // Node's peer ID string
+	Receipts        []receipt.Receipt        // Accumulated payment receipts
+	lastReceiptTick uint64                   // Tick number of the last receipt's epoch end
+	epochCost       int64                    // Accumulated cost since last receipt
+	signingKey      ed25519.PrivateKey       // Node's signing key; nil = receipts disabled
+	nodeID          string                   // Node's peer ID string
+	BudgetAdapter   settlement.BudgetAdapter // optional; nil = no external budget validation
 }
 
 // walletStateRef is an indirection layer that lets wallet hostcall closures
@@ -99,6 +101,14 @@ func (w *walletStateRef) GetReceiptCount() int {
 func (w *walletStateRef) GetReceiptBytes(index int) ([]byte, error) {
 	return w.instance.GetReceiptBytes(index)
 }
+
+// pricingStateRef is an indirection layer that lets pricing hostcall closures
+// reference the Instance before it is fully constructed. Same pattern as walletStateRef.
+type pricingStateRef struct {
+	instance *Instance
+}
+
+func (p *pricingStateRef) GetNodePrice() int64 { return p.instance.PricePerSecond }
 
 // GetBudget returns the current budget (implements hostcall.WalletState).
 func (i *Instance) GetBudget() int64 {
@@ -229,9 +239,11 @@ func loadAgent(
 	// The wallet hostcall closures capture this ref; it is only dereferenced during
 	// agent_tick (not during loading), so the nil instance is safe at this point.
 	wsRef := &walletStateRef{}
+	psRef := &pricingStateRef{}
 
 	registry := hostcall.NewRegistry(logger, el)
 	registry.SetWalletState(wsRef)
+	registry.SetPricingState(psRef)
 	if err := registry.RegisterHostModule(ctx, engine.Runtime(), capManifest); err != nil {
 		return nil, fmt.Errorf("failed to register host module: %w", err)
 	}
@@ -273,9 +285,10 @@ func loadAgent(
 		nodeID:         nodeID,
 	}
 
-	// Now that the instance exists, wire the wallet state ref so wallet
-	// hostcalls can access budget and receipts during agent_tick.
+	// Now that the instance exists, wire state refs so hostcall closures
+	// can access budget, receipts, and pricing during agent_tick.
 	wsRef.instance = instance
+	psRef.instance = instance
 
 	if err := instance.verifyExports(); err != nil {
 		return nil, fmt.Errorf("agent lifecycle validation failed: %w", err)
@@ -323,6 +336,13 @@ func (i *Instance) Tick(ctx context.Context) (bool, error) {
 	// Check budget before execution
 	if i.Budget <= 0 {
 		return false, fmt.Errorf("budget exhausted: %s", budget.Format(i.Budget))
+	}
+
+	// Budget adapter validation (EI-6: Safety Over Liveness)
+	if i.BudgetAdapter != nil {
+		if err := i.BudgetAdapter.ValidateBudget(ctx, i.AgentID, i.Budget); err != nil {
+			return false, fmt.Errorf("budget validation failed: %w", err)
+		}
 	}
 
 	// Capture pre-tick state for replay verification
@@ -565,6 +585,13 @@ func (i *Instance) SaveCheckpointToStorage(ctx context.Context) error {
 		data := receipt.MarshalReceipts(i.Receipts)
 		if err := i.Storage.SaveReceipts(ctx, i.AgentID, data); err != nil {
 			i.logger.Error("Failed to save receipts", "error", err)
+		}
+		// Record latest receipt with budget adapter for settlement (non-fatal).
+		if i.BudgetAdapter != nil {
+			latestReceipt := i.Receipts[len(i.Receipts)-1]
+			if err := i.BudgetAdapter.RecordSettlement(ctx, latestReceipt); err != nil {
+				i.logger.Error("Failed to record settlement", "error", err)
+			}
 		}
 	}
 

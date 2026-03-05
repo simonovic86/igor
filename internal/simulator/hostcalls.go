@@ -23,11 +23,13 @@ type deterministicHostcalls struct {
 	eventLog   *eventlog.EventLog
 	logger     *slog.Logger
 	budget     int64
+	nodePrice  int64
 }
 
 func newDeterministicHostcalls(
 	clockStart, clockDelta int64,
 	randSeed uint64,
+	nodePrice int64,
 	el *eventlog.EventLog,
 	logger *slog.Logger,
 ) *deterministicHostcalls {
@@ -37,6 +39,7 @@ func newDeterministicHostcalls(
 		randSrc:    rand.New(rand.NewPCG(randSeed, randSeed)),
 		eventLog:   el,
 		logger:     logger,
+		nodePrice:  nodePrice,
 	}
 }
 
@@ -65,6 +68,11 @@ func (d *deterministicHostcalls) registerHostModule(
 
 	if m.Has("wallet") {
 		d.registerWallet(builder)
+		registered++
+	}
+
+	if m.Has("pricing") {
+		d.registerPricing(builder)
 		registered++
 	}
 
@@ -156,4 +164,18 @@ func (d *deterministicHostcalls) registerWallet(builder wazero.HostModuleBuilder
 			return -1
 		}).
 		Export("wallet_receipt")
+}
+
+func (d *deterministicHostcalls) registerPricing(builder wazero.HostModuleBuilder) {
+	// node_price() -> i64
+	builder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context) int64 {
+			d.mu.Lock()
+			price := d.nodePrice
+			d.mu.Unlock()
+			payload := binary.LittleEndian.AppendUint64(nil, uint64(price))
+			d.eventLog.Record(eventlog.NodePrice, payload)
+			return price
+		}).
+		Export("node_price")
 }
