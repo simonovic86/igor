@@ -1,0 +1,14 @@
+{
+  "capabilities": {
+    "clock": { "version": 1 },
+    "rand": { "version": 1 },
+    "log": { "version": 1 }
+  },
+  "resource_limits": {
+    "max_memory_bytes": 67108864
+  },
+  "migration_policy": {
+    "enabled": true,
+    "max_price_per_second": 10000
+  }
+}
