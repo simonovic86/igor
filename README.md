@@ -9,7 +9,7 @@ Igor is a decentralized execution runtime for autonomous software agents. It pro
 ## About This Repository
 
 **What:** Experimental infrastructure for autonomous agent survival  
-**Status:** Research-stage — Phase 3 (Autonomy) complete. Capability membrane, replay verification, agent SDK, and multi-node mobility testing validated. Phase 4 (Economics) next.
+**Status:** Research-stage — Phases 2–4 complete, Phase 5 (Hardening) complete. Agents run, checkpoint, migrate, resume, meter cost, enforce capability membranes, replay-verify, support multi-node chain migration, sign checkpoint lineage, recover from migration failures, and enforce lease-based authority. Task 15 (Permissionless Hardening) next.
 **Purpose:** Demonstrate that software can checkpoint, migrate, and self-fund execution
 
 **Read first:**
@@ -133,16 +133,22 @@ Nodes operate autonomously without coordination.
 
 ### Checkpoints
 
-Atomic snapshots preserving agent state, budget, and binary identity (57-byte header):
+Atomic snapshots preserving agent state, budget, and binary identity (209-byte header):
 
 ```
 Offset  Size  Field
-0       1     Version (0x02)
+0       1     Version (0x04)
 1       8     Budget (int64 microcents, little-endian)
 9       8     PricePerSecond (int64 microcents, little-endian)
 17      8     TickNumber (uint64, little-endian)
 25      32    WASMHash (SHA-256 of agent binary)
-57      N     Agent State (application-defined)
+57      8     MajorVersion (uint64, little-endian)
+65      8     LeaseGeneration (uint64, little-endian)
+73      8     LeaseExpiry (int64, little-endian)
+81      32    PrevHash (SHA-256 of previous checkpoint)
+113     32    AgentPubKey (Ed25519 public key)
+145     64    Signature (Ed25519, covers bytes 0–144)
+209     N     Agent State (application-defined)
 ```
 
 Budget unit: 1 currency unit = 1,000,000 microcents. Integer arithmetic avoids float precision drift.

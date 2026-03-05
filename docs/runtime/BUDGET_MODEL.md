@@ -103,13 +103,19 @@ Tick 2: budget 9.999999 → cost 0.000001 → budget 9.999998
 Budget is persisted in checkpoint:
 
 ```
-Checkpoint Format:
-[0]     version (0x02)
-[1-8]   budget (int64 microcents)
-[9-16]  pricePerSecond (int64 microcents)
-[17-24] tickNumber (uint64)
-[25-56] wasmHash (SHA-256)
-[57+]   agent state
+Checkpoint Format (v0x04, 209-byte header):
+[0]       version (0x04)
+[1-8]     budget (int64 microcents)
+[9-16]    pricePerSecond (int64 microcents)
+[17-24]   tickNumber (uint64)
+[25-56]   wasmHash (SHA-256)
+[57-64]   majorVersion (uint64)
+[65-72]   leaseGeneration (uint64)
+[73-80]   leaseExpiry (int64)
+[81-112]  prevHash (SHA-256 of previous checkpoint)
+[113-144] agentPubKey (Ed25519 public key)
+[145-208] signature (Ed25519)
+[209+]    agent state
 ```
 
 ### 4. Restoration
@@ -210,11 +216,11 @@ The checkpoint preserves the exhausted state, allowing inspection or potential r
 Checkpoints include budget as metadata:
 
 ```
-Binary Layout (57-byte header):
-┌─────────┬──────────┬────────────────┬────────────┬──────────┬─────────────┐
-│ Version │  Budget  │ PricePerSecond │ TickNumber │ WASMHash │ Agent State │
-│ (1 byte)│ (8 bytes)│   (8 bytes)    │ (8 bytes)  │(32 bytes)│  (N bytes)  │
-└─────────┴──────────┴────────────────┴────────────┴──────────┴─────────────┘
+Binary Layout (209-byte header, v0x04):
+┌─────────┬──────────┬────────────────┬────────────┬──────────┬──────────────┬─────────────────┬─────────────┬──────────┬─────────────┬───────────┬─────────────┐
+│ Version │  Budget  │ PricePerSecond │ TickNumber │ WASMHash │ MajorVersion │ LeaseGeneration │ LeaseExpiry │ PrevHash │ AgentPubKey │ Signature │ Agent State │
+│ (1 byte)│ (8 bytes)│   (8 bytes)    │ (8 bytes)  │(32 bytes)│  (8 bytes)   │   (8 bytes)     │  (8 bytes)  │(32 bytes)│  (32 bytes) │ (64 bytes)│  (N bytes)  │
+└─────────┴──────────┴────────────────┴────────────┴──────────┴──────────────┴─────────────────┴─────────────┴──────────┴─────────────┴───────────┴─────────────┘
 
 Encoding: Little-endian integers (int64 microcents for budget/price, uint64 for tick)
 ```

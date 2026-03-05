@@ -23,7 +23,7 @@ type AgentPackage struct {
     AgentID        string      // Unique agent identifier
     WASMBinary     []byte      // Compiled WASM module
     WASMHash       []byte      // SHA-256 of WASMBinary for integrity verification
-    Checkpoint     []byte      // Serialized state + budget metadata (57-byte header)
+    Checkpoint     []byte      // Serialized state + budget metadata (209-byte header, v0x04)
     ManifestData   []byte      // Capability manifest JSON
     Budget         int64       // Remaining budget in microcents
     PricePerSecond int64       // Cost per second in microcents
@@ -373,9 +373,9 @@ Typical migration time (local network):
 
 ### Checkpoint Size
 
-- Header: 57 bytes (version + budget + price + tick + wasmHash)
+- Header: 209 bytes (version + budget + price + tick + wasmHash + majorVersion + leaseGeneration + leaseExpiry + prevHash + agentPubKey + signature)
 - State: Agent-dependent
-- Example agent: 65 bytes total (57 header + 8 state)
+- Example agent: 237 bytes total (209 header + 28 state)
 
 ### WASM Transfer Size
 

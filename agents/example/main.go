@@ -59,6 +59,9 @@ func (s *Survivor) Unmarshal(data []byte) {
 	s.BirthNano = d.Int64()
 	s.LastNano = d.Int64()
 	s.Luck = d.Uint32()
+	if err := d.Err(); err != nil {
+		panic("unmarshal checkpoint: " + err.Error())
+	}
 }
 
 func init() { igor.Run(&Survivor{}) }
