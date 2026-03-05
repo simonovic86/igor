@@ -33,26 +33,32 @@ jobs:
           test -f scripts/bootstrap.sh || (echo "bootstrap.sh missing" && exit 1)
           test -f scripts/pre-commit.sh || (echo "pre-commit.sh missing" && exit 1)
       
-      - name: Bootstrap development environment
-        run: make bootstrap
-      
-      - name: Verify dependencies are tidy
-        run: |
-          go mod tidy
-          git diff --exit-code go.mod go.sum
-      
-      - name: Run all quality checks
-        run: make check
-      
-      - name: Verify binary
-        run: |
-          ls -lh bin/igord
-          file bin/igord
-
       - name: Install TinyGo
         uses: acifani/setup-tinygo@v2
         with:
           tinygo-version: '0.40.1'
 
+      - name: Bootstrap development environment
+        run: make bootstrap
+
+      - name: Verify dependencies are tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
       - name: Build WASM agent
         run: make agent
+
+      - name: Run all quality checks
+        run: make check
+
+      - name: Verify binary
+        run: |
+          ls -lh bin/igord
+          file bin/igord
+
+      - name: Run tests with coverage
+        run: go test -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Display coverage summary
+        run: go tool cover -func=coverage.out | tail -1

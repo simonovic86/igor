@@ -190,3 +190,79 @@ func TestSign_BadKeySize(t *testing.T) {
 		t.Error("bad key size should fail signing")
 	}
 }
+
+func TestUnmarshalReceipts_TruncatedEntryLength(t *testing.T) {
+	// Valid count header (count=2) but only enough bytes for the count header
+	// and the first receipt's length prefix — no actual receipt data.
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := testReceipt()
+	if err := r.Sign(priv); err != nil {
+		t.Fatal(err)
+	}
+	rb := r.MarshalBinary()
+
+	// Build: [count=2][len1][receipt1] — missing second receipt entirely
+	buf := make([]byte, 0, 4+4+len(rb))
+	buf = append(buf, 0, 0, 0, 0)               // count placeholder
+	buf[0], buf[1], buf[2], buf[3] = 2, 0, 0, 0 // count = 2
+	lenBytes := make([]byte, 4)
+	lenBytes[0] = byte(len(rb))
+	lenBytes[1] = byte(len(rb) >> 8)
+	lenBytes[2] = byte(len(rb) >> 16)
+	lenBytes[3] = byte(len(rb) >> 24)
+	buf = append(buf, lenBytes...)
+	buf = append(buf, rb...)
+	// No second receipt — should fail at "entry 1 length"
+
+	_, err = UnmarshalReceipts(buf)
+	if err == nil {
+		t.Error("expected error for truncated receipts (missing second entry)")
+	}
+}
+
+func TestUnmarshalReceipts_TruncatedEntryData(t *testing.T) {
+	// count=1, length=100, but only 10 bytes of data
+	buf := make([]byte, 0, 4+4+10)
+	buf = append(buf, 1, 0, 0, 0)          // count = 1
+	buf = append(buf, 100, 0, 0, 0)        // length = 100
+	buf = append(buf, make([]byte, 10)...) // only 10 bytes, not 100
+
+	_, err := UnmarshalReceipts(buf)
+	if err == nil {
+		t.Error("expected error for truncated receipt data")
+	}
+}
+
+func TestUnmarshalBinary_TruncatedSignature(t *testing.T) {
+	// Build a receipt with a sig_len that claims 64 bytes but only has 2
+	r := testReceipt()
+	signData := r.MarshalSignData()
+
+	buf := make([]byte, 0, len(signData)+4+2)
+	buf = append(buf, signData...)
+	buf = append(buf, 64, 0, 0, 0) // sig_len = 64
+	buf = append(buf, 0xAA, 0xBB)  // only 2 bytes, not 64
+
+	_, err := UnmarshalBinary(buf)
+	if err == nil {
+		t.Error("expected error for truncated signature")
+	}
+}
+
+func TestUnmarshalBinary_TruncatedFields(t *testing.T) {
+	// Build valid sign data but truncate in the middle of a uint64 field
+	r := testReceipt()
+	full := r.MarshalSignData()
+
+	// Truncate after agentID + nodeID strings, in the middle of epochStart
+	// agentID: 4 + 10 = 14 bytes, nodeID: 4 + 36 = 40 bytes, total = 54 bytes
+	// epochStart needs 8 more bytes — truncate at 58 (4 bytes into epochStart)
+	truncated := full[:58]
+	_, err := UnmarshalBinary(truncated)
+	if err == nil {
+		t.Error("expected error for truncated receipt fields")
+	}
+}

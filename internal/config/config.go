@@ -2,9 +2,14 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
+
+// TickTimeout is the maximum duration for a single agent tick.
+// Used by agent execution, replay verification, and the simulator.
+const TickTimeout = 100 * time.Millisecond
 
 // Config holds the runtime configuration for an Igor node.
 type Config struct {

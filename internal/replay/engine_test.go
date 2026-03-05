@@ -153,7 +153,9 @@ func newLiveTickEnv(t *testing.T, source string, capManifest *manifest.Capabilit
 		WithMemoryLimitPages(1024).
 		WithCloseOnContextDone(true))
 
-	wasi_snapshot_preview1.MustInstantiate(ctx, rt)
+	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
+		t.Fatalf("instantiate WASI: %v", err)
+	}
 
 	// Register live hostcalls (only if manifest has capabilities)
 	if capManifest != nil && len(capManifest.Capabilities) > 0 {

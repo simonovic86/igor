@@ -11,9 +11,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/simonovic86/igor/internal/config"
 	"github.com/simonovic86/igor/internal/eventlog"
 	"github.com/simonovic86/igor/internal/hostcall"
 	"github.com/simonovic86/igor/internal/replay"
+	"github.com/simonovic86/igor/internal/wasmutil"
 	"github.com/simonovic86/igor/pkg/budget"
 	"github.com/simonovic86/igor/pkg/manifest"
 	"github.com/tetratelabs/wazero"
@@ -89,7 +91,7 @@ func setup(ctx context.Context, cfg Config, logger *slog.Logger) (*simEnv, int64
 		return nil, 0, fmt.Errorf("read WASM: %w", err)
 	}
 
-	manifestData := loadManifest(cfg)
+	manifestData := manifest.LoadSidecarData(cfg.WASMPath, cfg.ManifestPath, logger)
 	capManifest, err := manifest.ParseCapabilityManifest(manifestData)
 	if err != nil {
 		return nil, 0, fmt.Errorf("parse manifest: %w", err)
@@ -106,7 +108,10 @@ func setup(ctx context.Context, cfg Config, logger *slog.Logger) (*simEnv, int64
 		WithCloseOnContextDone(true)
 	rt := wazero.NewRuntimeWithConfig(ctx, rtConfig)
 
-	wasi_snapshot_preview1.MustInstantiate(ctx, rt)
+	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
+		rt.Close(ctx)
+		return nil, 0, fmt.Errorf("instantiate WASI: %w", err)
+	}
 
 	el := eventlog.NewEventLog(eventlog.DefaultMaxTicks)
 
@@ -235,7 +240,7 @@ func executeTick(ctx context.Context, env *simEnv, result *Result, tickNum uint6
 
 	env.el.BeginTick(tickNum)
 
-	tickCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	tickCtx, cancel := context.WithTimeout(ctx, config.TickTimeout)
 	start := time.Now()
 	_, tickErr := env.mod.ExportedFunction("agent_tick").Call(tickCtx)
 	elapsed := time.Since(start)
@@ -326,69 +331,16 @@ func PrintSummary(r *Result, logger *slog.Logger) {
 	}
 }
 
-func loadManifest(cfg Config) []byte {
-	mPath := cfg.ManifestPath
-	if mPath == "" && cfg.WASMPath != "" {
-		mPath = cfg.WASMPath[:len(cfg.WASMPath)-len(".wasm")] + ".manifest.json"
-	}
-	data, err := os.ReadFile(mPath)
-	if err != nil {
-		return []byte("{}")
-	}
-	return data
-}
-
 func captureState(ctx context.Context, mod api.Module) ([]byte, error) {
-	fnSize := mod.ExportedFunction("agent_checkpoint")
-	sizeResults, err := fnSize.Call(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("agent_checkpoint: %w", err)
-	}
-	size := uint32(sizeResults[0])
-	if size == 0 {
-		return []byte{}, nil
-	}
-
-	fnPtr := mod.ExportedFunction("agent_checkpoint_ptr")
-	ptrResults, err := fnPtr.Call(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("agent_checkpoint_ptr: %w", err)
-	}
-	ptr := uint32(ptrResults[0])
-
-	data, ok := mod.Memory().Read(ptr, size)
-	if !ok {
-		return nil, fmt.Errorf("failed to read state from WASM memory")
-	}
-
-	out := make([]byte, len(data))
-	copy(out, data)
-	return out, nil
+	return wasmutil.CaptureState(ctx, mod)
 }
 
 func verifyCheckpointRoundTrip(ctx context.Context, mod api.Module, state []byte) ([]byte, error) {
 	if len(state) == 0 {
 		return []byte{}, nil
 	}
-
-	malloc := mod.ExportedFunction("malloc")
-	if malloc == nil {
-		return nil, fmt.Errorf("malloc not exported")
+	if err := wasmutil.ResumeAgent(ctx, mod, state); err != nil {
+		return nil, err
 	}
-	results, err := malloc.Call(ctx, uint64(len(state)))
-	if err != nil {
-		return nil, fmt.Errorf("malloc: %w", err)
-	}
-	ptr := uint32(results[0])
-
-	if !mod.Memory().Write(ptr, state) {
-		return nil, fmt.Errorf("memory write failed")
-	}
-
-	resumeFn := mod.ExportedFunction("agent_resume")
-	if _, err := resumeFn.Call(ctx, uint64(ptr), uint64(len(state))); err != nil {
-		return nil, fmt.Errorf("agent_resume: %w", err)
-	}
-
-	return captureState(ctx, mod)
+	return wasmutil.CaptureState(ctx, mod)
 }

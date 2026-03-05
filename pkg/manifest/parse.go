@@ -3,7 +3,10 @@ package manifest
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"os"
 	"sort"
+	"strings"
 )
 
 // NodeCapabilities lists capabilities available on the current node.
@@ -102,6 +105,28 @@ func ParseManifest(data []byte) (*Manifest, error) {
 	}
 
 	return m, nil
+}
+
+// LoadSidecarData loads manifest data from a sidecar file. If manifestPath is
+// non-empty it is used directly; otherwise the manifest path is derived by
+// replacing the ".wasm" suffix of wasmPath with ".manifest.json". Returns
+// "{}" when no manifest can be read.
+func LoadSidecarData(wasmPath, manifestPath string, logger *slog.Logger) []byte {
+	mPath := manifestPath
+	if mPath == "" {
+		if strings.HasSuffix(wasmPath, ".wasm") {
+			mPath = strings.TrimSuffix(wasmPath, ".wasm") + ".manifest.json"
+		}
+	}
+	data, err := os.ReadFile(mPath)
+	if err != nil {
+		logger.Info("No manifest file found, using empty capabilities",
+			"expected_path", mPath,
+		)
+		return []byte("{}")
+	}
+	logger.Info("Manifest loaded", "path", mPath)
+	return data
 }
 
 // ValidateAgainstNode checks that every declared capability is available on
