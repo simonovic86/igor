@@ -99,7 +99,7 @@ func (env *multiNodeEnv) loadAndInitAgent(t *testing.T, nodeIdx int, budgetVal, 
 	logger := multiNodeLogger()
 
 	inst, err := agent.LoadAgent(env.ctx, env.engines[nodeIdx], env.wasmPath, env.agentID,
-		env.storages[nodeIdx], budgetVal, price, env.manifestJSON, nil, "", logger)
+		env.storages[nodeIdx], budgetVal, price, env.manifestJSON, nil, "", nil, logger)
 	if err != nil {
 		t.Fatalf("LoadAgent on node[%d]: %v", nodeIdx, err)
 	}
@@ -156,7 +156,7 @@ func (env *multiNodeEnv) readCheckpoint(t *testing.T, nodeIdx int) (budgetVal in
 		t.Fatalf("LoadCheckpoint on node[%d]: %v", nodeIdx, err)
 	}
 
-	b, _, tk, _, _, _, state, err := agent.ParseCheckpointHeader(checkpoint)
+	hdr, state, err := agent.ParseCheckpointHeader(checkpoint)
 	if err != nil {
 		t.Fatalf("ParseCheckpointHeader on node[%d]: %v", nodeIdx, err)
 	}
@@ -166,7 +166,7 @@ func (env *multiNodeEnv) readCheckpoint(t *testing.T, nodeIdx int) (budgetVal in
 		cnt = binary.LittleEndian.Uint64(state[:8])
 	}
 
-	return b, tk, cnt
+	return hdr.Budget, hdr.TickNumber, cnt
 }
 
 // tickOnNode ticks the agent on node i for the given number of ticks and saves

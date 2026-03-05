@@ -16,6 +16,9 @@ var ErrCheckpointNotFound = errors.New("checkpoint not found")
 // ErrReceiptsNotFound is returned when receipts do not exist.
 var ErrReceiptsNotFound = errors.New("receipts not found")
 
+// ErrIdentityNotFound is returned when an agent identity does not exist.
+var ErrIdentityNotFound = errors.New("identity not found")
+
 // Provider defines the interface for agent checkpoint persistence.
 // Implementations must be safe for concurrent use.
 type Provider interface {
@@ -42,4 +45,16 @@ type Provider interface {
 	// DeleteReceipts removes an agent's receipt chain.
 	// Does not return error if receipts don't exist (idempotent).
 	DeleteReceipts(ctx context.Context, agentID string) error
+
+	// SaveIdentity persists an agent's serialized cryptographic identity.
+	// Must be atomic - either the entire data is saved or none of it.
+	SaveIdentity(ctx context.Context, agentID string, data []byte) error
+
+	// LoadIdentity retrieves an agent's serialized cryptographic identity.
+	// Returns ErrIdentityNotFound if no identity exists for the agent.
+	LoadIdentity(ctx context.Context, agentID string) ([]byte, error)
+
+	// DeleteIdentity removes an agent's cryptographic identity.
+	// Does not return error if identity doesn't exist (idempotent).
+	DeleteIdentity(ctx context.Context, agentID string) error
 }

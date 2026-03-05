@@ -15,6 +15,7 @@ type AgentPackage struct {
 	Receipts        []byte      `json:",omitempty"` // Serialized payment receipts
 	MajorVersion    uint64      `json:",omitempty"` // Authority epoch major version
 	LeaseGeneration uint64      `json:",omitempty"` // Authority epoch lease generation
+	AgentIdentity   []byte      `json:",omitempty"` // Serialized agent Ed25519 keypair
 }
 
 // ReplayData contains replay verification data for a single tick.

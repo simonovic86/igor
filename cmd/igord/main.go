@@ -27,6 +27,7 @@ import (
 	"github.com/simonovic86/igor/internal/simulator"
 	"github.com/simonovic86/igor/internal/storage"
 	"github.com/simonovic86/igor/pkg/budget"
+	"github.com/simonovic86/igor/pkg/identity"
 )
 
 func main() {
@@ -198,6 +199,12 @@ func runLocalAgent(
 
 	signingKey, nodeID := runner.ExtractSigningKey(node)
 
+	// Load or generate agent cryptographic identity for signed checkpoint lineage.
+	agentIdent, err := loadOrGenerateIdentity(ctx, storageProvider, "local-agent", logger)
+	if err != nil {
+		return fmt.Errorf("agent identity: %w", err)
+	}
+
 	// Load agent with budget and manifest
 	instance, err := agent.LoadAgent(
 		ctx,
@@ -210,6 +217,7 @@ func runLocalAgent(
 		manifestData,
 		signingKey,
 		nodeID,
+		agentIdent,
 		logger,
 	)
 	if err != nil {
@@ -217,44 +225,8 @@ func runLocalAgent(
 	}
 	defer instance.Close(ctx)
 
-	// Configure replay window size
-	instance.SetReplayWindowSize(cfg.ReplayWindowSize)
-
-	// Wire budget adapter for settlement validation (EI-6)
-	instance.BudgetAdapter = settlement.NewMockAdapter(logger)
-
-	// Register agent with migration service
-	migrationSvc.RegisterAgent("local-agent", instance)
-
-	logger.Info("Agent loaded with budget",
-		"budget", budget.Format(budgetMicrocents),
-		"price_per_second", budget.Format(cfg.PricePerSecond),
-	)
-
-	// Initialize agent
-	if err := instance.Init(ctx); err != nil {
-		return fmt.Errorf("failed to initialize agent: %w", err)
-	}
-
-	// Load checkpoint from storage if it exists
-	if err := instance.LoadCheckpointFromStorage(ctx); err != nil {
-		logger.Error("Failed to load checkpoint", "error", err)
-		// Continue anyway with fresh state
-	}
-
-	// Grant initial lease if leases are enabled
-	if cfg.LeaseDuration > 0 {
-		leaseCfg := authority.LeaseConfig{
-			Duration:      cfg.LeaseDuration,
-			RenewalWindow: cfg.LeaseRenewalWindow,
-			GracePeriod:   cfg.LeaseGracePeriod,
-		}
-		instance.Lease = authority.NewLease(leaseCfg)
-		logger.Info("Lease granted",
-			"epoch", instance.Lease.Epoch,
-			"expiry", instance.Lease.Expiry,
-			"duration", cfg.LeaseDuration,
-		)
+	if err := initLocalAgent(ctx, cfg, instance, migrationSvc, budgetMicrocents, logger); err != nil {
+		return err
 	}
 
 	// Setup signal handling
@@ -340,6 +312,48 @@ func runLocalAgent(
 	}
 }
 
+// initLocalAgent configures, initializes, and resumes a local agent instance.
+func initLocalAgent(
+	ctx context.Context,
+	cfg *config.Config,
+	instance *agent.Instance,
+	migrationSvc *migration.Service,
+	budgetMicrocents int64,
+	logger *slog.Logger,
+) error {
+	instance.SetReplayWindowSize(cfg.ReplayWindowSize)
+	instance.BudgetAdapter = settlement.NewMockAdapter(logger)
+	migrationSvc.RegisterAgent("local-agent", instance)
+
+	logger.Info("Agent loaded with budget",
+		"budget", budget.Format(budgetMicrocents),
+		"price_per_second", budget.Format(cfg.PricePerSecond),
+	)
+
+	if err := instance.Init(ctx); err != nil {
+		return fmt.Errorf("failed to initialize agent: %w", err)
+	}
+
+	if err := instance.LoadCheckpointFromStorage(ctx); err != nil {
+		logger.Error("Failed to load checkpoint", "error", err)
+	}
+
+	if cfg.LeaseDuration > 0 {
+		leaseCfg := authority.LeaseConfig{
+			Duration:      cfg.LeaseDuration,
+			RenewalWindow: cfg.LeaseRenewalWindow,
+			GracePeriod:   cfg.LeaseGracePeriod,
+		}
+		instance.Lease = authority.NewLease(leaseCfg)
+		logger.Info("Lease granted",
+			"epoch", instance.Lease.Epoch,
+			"expiry", instance.Lease.Expiry,
+			"duration", cfg.LeaseDuration,
+		)
+	}
+	return nil
+}
+
 // runInspector parses and displays a checkpoint file.
 func runInspector(checkpointPath, wasmPath string) {
 	result, err := inspector.InspectFile(checkpointPath)
@@ -379,4 +393,40 @@ func runSimulator(wasmPath, manifestPath string, budgetVal float64, ticks int, v
 	if len(result.Errors) > 0 {
 		os.Exit(1)
 	}
+}
+
+// loadOrGenerateIdentity loads an existing agent identity from storage,
+// or generates a new one and persists it. The identity is the agent's Ed25519
+// keypair used for signed checkpoint lineage (Task 13).
+func loadOrGenerateIdentity(
+	ctx context.Context,
+	storageProvider storage.Provider,
+	agentID string,
+	logger *slog.Logger,
+) (*identity.AgentIdentity, error) {
+	data, err := storageProvider.LoadIdentity(ctx, agentID)
+	if err == nil {
+		id, parseErr := identity.UnmarshalBinary(data)
+		if parseErr != nil {
+			logger.Warn("Corrupted agent identity, generating new", "error", parseErr)
+		} else {
+			logger.Info("Agent identity loaded",
+				"agent_id", agentID,
+				"pub_key_size", len(id.PublicKey),
+			)
+			return id, nil
+		}
+	}
+
+	id, err := identity.Generate()
+	if err != nil {
+		return nil, fmt.Errorf("generate identity: %w", err)
+	}
+
+	if err := storageProvider.SaveIdentity(ctx, agentID, id.MarshalBinary()); err != nil {
+		return nil, fmt.Errorf("save identity: %w", err)
+	}
+
+	logger.Info("Agent identity generated and saved", "agent_id", agentID)
+	return id, nil
 }

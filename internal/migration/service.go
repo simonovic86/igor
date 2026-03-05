@@ -28,6 +28,7 @@ import (
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
 	"github.com/simonovic86/igor/pkg/budget"
+	"github.com/simonovic86/igor/pkg/identity"
 	"github.com/simonovic86/igor/pkg/manifest"
 	protomsg "github.com/simonovic86/igor/pkg/protocol"
 )
@@ -133,10 +134,10 @@ func (s *Service) buildMigrationPackage(
 
 	var budgetVal, pricePerSecond int64
 	var epoch authority.Epoch
-	if parsedBudget, parsedPrice, _, _, parsedEpoch, _, _, parseErr := agent.ParseCheckpointHeader(checkpoint); parseErr == nil {
-		budgetVal = parsedBudget
-		pricePerSecond = parsedPrice
-		epoch = parsedEpoch
+	if hdr, _, parseErr := agent.ParseCheckpointHeader(checkpoint); parseErr == nil {
+		budgetVal = hdr.Budget
+		pricePerSecond = hdr.PricePerSecond
+		epoch = hdr.Epoch
 		s.logger.Info("Budget metadata extracted",
 			"budget", budget.Format(budgetVal),
 			"price_per_second", budget.Format(pricePerSecond),
@@ -183,6 +184,10 @@ func (s *Service) buildMigrationPackage(
 			s.logger.Info("No replay data available for migration package",
 				"agent_id", agentID,
 			)
+		}
+		// Include agent identity for signed checkpoint lineage.
+		if localInstance.AgentIdentity != nil {
+			pkg.AgentIdentity = localInstance.AgentIdentity.MarshalBinary()
 		}
 	}
 
@@ -291,23 +296,91 @@ func (s *Service) MigrateAgent(
 	}
 	s.mu.Unlock()
 
-	// Delete local checkpoint — failure is an error because a stale checkpoint
-	// could cause EI-1 violations if this node restarts and resumes the agent.
-	if err := s.storageProvider.DeleteCheckpoint(ctx, agentID); err != nil {
-		return fmt.Errorf("migration succeeded but failed to delete local checkpoint: %w", err)
-	}
-	s.logger.Info("Local checkpoint deleted", "agent_id", agentID)
-
-	// Delete local receipts (non-fatal).
-	if err := s.storageProvider.DeleteReceipts(ctx, agentID); err != nil {
-		s.logger.Error("Failed to delete local receipts", "error", err)
+	if err := s.cleanupLocalAgent(ctx, agentID); err != nil {
+		return err
 	}
 
 	s.logger.Info("Migration completed successfully", "agent_id", agentID)
 	return nil
 }
 
+// cleanupLocalAgent deletes local checkpoint, receipts, and identity after
+// a successful outbound migration. Checkpoint deletion failure is fatal
+// because a stale checkpoint could cause EI-1 violations on restart.
+func (s *Service) cleanupLocalAgent(ctx context.Context, agentID string) error {
+	if err := s.storageProvider.DeleteCheckpoint(ctx, agentID); err != nil {
+		return fmt.Errorf("migration succeeded but failed to delete local checkpoint: %w", err)
+	}
+	s.logger.Info("Local checkpoint deleted", "agent_id", agentID)
+
+	if err := s.storageProvider.DeleteReceipts(ctx, agentID); err != nil {
+		s.logger.Error("Failed to delete local receipts", "error", err)
+	}
+
+	if err := s.storageProvider.DeleteIdentity(ctx, agentID); err != nil {
+		s.logger.Error("Failed to delete local identity", "error", err)
+	}
+
+	return nil
+}
+
 // handleIncomingMigration handles an incoming agent transfer.
+// loadMigratedAgent deserializes the agent identity, loads the WASM agent,
+// initializes it, and resumes from the migrated checkpoint.
+func (s *Service) loadMigratedAgent(ctx context.Context, pkg protomsg.AgentPackage) (*agent.Instance, error) {
+	agentIdent, idErr := s.restoreAgentIdentity(ctx, pkg)
+	if idErr != nil {
+		return nil, fmt.Errorf("invalid agent identity: %w", idErr)
+	}
+
+	instance, err := agent.LoadAgentFromBytes(
+		ctx,
+		s.runtimeEngine,
+		pkg.WASMBinary,
+		pkg.AgentID,
+		s.storageProvider,
+		pkg.Budget,
+		pkg.PricePerSecond,
+		pkg.ManifestData,
+		s.signingKey(),
+		s.host.ID().String(),
+		agentIdent,
+		s.logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load agent: %w", err)
+	}
+
+	if err := instance.Init(ctx); err != nil {
+		instance.Close(ctx)
+		return nil, fmt.Errorf("init agent: %w", err)
+	}
+
+	if err := instance.LoadCheckpointFromStorage(ctx); err != nil {
+		instance.Close(ctx)
+		return nil, fmt.Errorf("resume agent: %w", err)
+	}
+
+	return instance, nil
+}
+
+// restoreAgentIdentity deserializes and persists the agent identity from
+// a migration package. Returns nil identity if none was included.
+func (s *Service) restoreAgentIdentity(ctx context.Context, pkg protomsg.AgentPackage) (*identity.AgentIdentity, error) {
+	if len(pkg.AgentIdentity) == 0 {
+		return nil, nil
+	}
+	agentIdent, err := identity.UnmarshalBinary(pkg.AgentIdentity)
+	if err != nil {
+		s.logger.Error("Failed to unmarshal agent identity", "error", err)
+		return nil, err
+	}
+	if saveErr := s.storageProvider.SaveIdentity(ctx, pkg.AgentID, pkg.AgentIdentity); saveErr != nil {
+		s.logger.Error("Failed to save agent identity", "error", saveErr)
+	}
+	return agentIdent, nil
+}
+
 func (s *Service) handleIncomingMigration(stream network.Stream) {
 	defer stream.Close()
 
@@ -408,41 +481,10 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 		}
 	}
 
-	instance, err := agent.LoadAgentFromBytes(
-		ctx,
-		s.runtimeEngine,
-		pkg.WASMBinary,
-		pkg.AgentID,
-		s.storageProvider,
-		pkg.Budget,
-		pkg.PricePerSecond,
-		pkg.ManifestData,
-		s.signingKey(),
-		s.host.ID().String(),
-		s.logger,
-	)
-	if err != nil {
-		s.logger.Error("Failed to load agent", "error", err)
+	instance, loadErr := s.loadMigratedAgent(ctx, pkg)
+	if loadErr != nil {
 		s.deleteOrphanedCheckpoint(ctx, pkg.AgentID)
-		s.sendStartConfirmation(stream, pkg.AgentID, false, err.Error())
-		return
-	}
-
-	// Initialize agent
-	if err := instance.Init(ctx); err != nil {
-		s.logger.Error("Failed to initialize agent", "error", err)
-		instance.Close(ctx)
-		s.deleteOrphanedCheckpoint(ctx, pkg.AgentID)
-		s.sendStartConfirmation(stream, pkg.AgentID, false, err.Error())
-		return
-	}
-
-	// Resume from checkpoint
-	if err := instance.LoadCheckpointFromStorage(ctx); err != nil {
-		s.logger.Error("Failed to resume agent", "error", err)
-		instance.Close(ctx)
-		s.deleteOrphanedCheckpoint(ctx, pkg.AgentID)
-		s.sendStartConfirmation(stream, pkg.AgentID, false, err.Error())
+		s.sendStartConfirmation(stream, pkg.AgentID, false, loadErr.Error())
 		return
 	}
 

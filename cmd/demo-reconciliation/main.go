@@ -96,7 +96,7 @@ func runDemo(wasmPath string) error {
 
 	inst, err := agent.LoadAgent(ctx, nodeA.engine, wasmPath, agentID,
 		nodeA.storage, budget.FromFloat(100.0), budget.FromFloat(0.001),
-		manifestJSON, nil, "", logger)
+		manifestJSON, nil, "", nil, logger)
 	if err != nil {
 		return fmt.Errorf("load agent: %w", err)
 	}

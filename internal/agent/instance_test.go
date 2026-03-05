@@ -159,7 +159,7 @@ func TestLoadAgent_WithManifest(t *testing.T) {
 
 	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
 
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-agent", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", logger)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-agent", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", nil, logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestLoadAgent_EmptyManifest(t *testing.T) {
 
 	// Empty manifest — backward compatible, but agent imports hostcalls
 	// so instantiation should fail (deny by default)
-	_, err = LoadAgent(ctx, engine, wasmPath, "test-empty", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), []byte("{}"), nil, "", logger)
+	_, err = LoadAgent(ctx, engine, wasmPath, "test-empty", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), []byte("{}"), nil, "", nil, logger)
 	if err == nil {
 		t.Error("expected error when agent imports undeclared capabilities")
 	}
@@ -219,7 +219,7 @@ func TestLoadAgent_InvalidManifest(t *testing.T) {
 		t.Fatalf("NewFSProvider: %v", err)
 	}
 
-	_, err = LoadAgent(ctx, engine, wasmPath, "test-bad-manifest", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), []byte("not json"), nil, "", logger)
+	_, err = LoadAgent(ctx, engine, wasmPath, "test-bad-manifest", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), []byte("not json"), nil, "", nil, logger)
 	if err == nil {
 		t.Error("expected error for invalid JSON manifest")
 	}
@@ -242,7 +242,7 @@ func TestTick_RecordObservations(t *testing.T) {
 	}
 
 	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-tick", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", logger)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-tick", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", nil, logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}
@@ -306,7 +306,7 @@ func TestTick_BudgetExhausted(t *testing.T) {
 	}
 
 	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-budget", storageProvider, 0, budget.FromFloat(0.01), manifest, nil, "", logger)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-budget", storageProvider, 0, budget.FromFloat(0.01), manifest, nil, "", nil, logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}
@@ -340,7 +340,7 @@ func TestCheckpointAndResume(t *testing.T) {
 
 	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
 	priceMicrocents := budget.FromFloat(0.5)
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-ckpt", storageProvider, budget.FromFloat(10.0), priceMicrocents, manifest, nil, "", logger)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-ckpt", storageProvider, budget.FromFloat(10.0), priceMicrocents, manifest, nil, "", nil, logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}
@@ -428,7 +428,7 @@ func TestReplayWindow_Eviction(t *testing.T) {
 	}
 
 	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-evict", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", logger)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-evict", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", nil, logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}
@@ -561,29 +561,29 @@ func TestParseCheckpointHeader_Golden(t *testing.T) {
 		t.Fatalf("read golden fixture: %v", err)
 	}
 
-	budgetVal, price, tick, wasmHash, epoch, _, state, err := ParseCheckpointHeader(data)
+	hdr, state, err := ParseCheckpointHeader(data)
 	if err != nil {
 		t.Fatalf("ParseCheckpointHeader: %v", err)
 	}
 
-	if budgetVal != 1000000 {
-		t.Errorf("budget: got %d, want 1000000", budgetVal)
+	if hdr.Budget != 1000000 {
+		t.Errorf("budget: got %d, want 1000000", hdr.Budget)
 	}
-	if price != 1000 {
-		t.Errorf("price: got %d, want 1000", price)
+	if hdr.PricePerSecond != 1000 {
+		t.Errorf("price: got %d, want 1000", hdr.PricePerSecond)
 	}
-	if tick != 5 {
-		t.Errorf("tick: got %d, want 5", tick)
+	if hdr.TickNumber != 5 {
+		t.Errorf("tick: got %d, want 5", hdr.TickNumber)
 	}
 
 	expectedHash := sha256.Sum256([]byte("known-wasm-binary-for-golden-test"))
-	if wasmHash != expectedHash {
+	if hdr.WASMHash != expectedHash {
 		t.Errorf("wasmHash mismatch")
 	}
 
 	// v0x02 fixture should return zero epoch
-	if epoch.MajorVersion != 0 || epoch.LeaseGeneration != 0 {
-		t.Errorf("v0x02 epoch: got %s, want (0,0)", epoch)
+	if hdr.Epoch.MajorVersion != 0 || hdr.Epoch.LeaseGeneration != 0 {
+		t.Errorf("v0x02 epoch: got %s, want (0,0)", hdr.Epoch)
 	}
 
 	if len(state) != 8 {
@@ -601,34 +601,34 @@ func TestParseCheckpointHeader_V3Golden(t *testing.T) {
 		t.Fatalf("read golden fixture: %v", err)
 	}
 
-	budgetVal, price, tick, wasmHash, epoch, leaseExpiry, state, err := ParseCheckpointHeader(data)
+	hdr, state, err := ParseCheckpointHeader(data)
 	if err != nil {
 		t.Fatalf("ParseCheckpointHeader: %v", err)
 	}
 
-	if budgetVal != 2000000 {
-		t.Errorf("budget: got %d, want 2000000", budgetVal)
+	if hdr.Budget != 2000000 {
+		t.Errorf("budget: got %d, want 2000000", hdr.Budget)
 	}
-	if price != 1500 {
-		t.Errorf("price: got %d, want 1500", price)
+	if hdr.PricePerSecond != 1500 {
+		t.Errorf("price: got %d, want 1500", hdr.PricePerSecond)
 	}
-	if tick != 10 {
-		t.Errorf("tick: got %d, want 10", tick)
+	if hdr.TickNumber != 10 {
+		t.Errorf("tick: got %d, want 10", hdr.TickNumber)
 	}
 
 	expectedHash := sha256.Sum256([]byte("known-wasm-binary-for-golden-test"))
-	if wasmHash != expectedHash {
+	if hdr.WASMHash != expectedHash {
 		t.Errorf("wasmHash mismatch")
 	}
 
-	if epoch.MajorVersion != 3 {
-		t.Errorf("majorVersion: got %d, want 3", epoch.MajorVersion)
+	if hdr.Epoch.MajorVersion != 3 {
+		t.Errorf("majorVersion: got %d, want 3", hdr.Epoch.MajorVersion)
 	}
-	if epoch.LeaseGeneration != 7 {
-		t.Errorf("leaseGeneration: got %d, want 7", epoch.LeaseGeneration)
+	if hdr.Epoch.LeaseGeneration != 7 {
+		t.Errorf("leaseGeneration: got %d, want 7", hdr.Epoch.LeaseGeneration)
 	}
-	if leaseExpiry != 1700000000000000000 {
-		t.Errorf("leaseExpiry: got %d, want 1700000000000000000", leaseExpiry)
+	if hdr.LeaseExpiry != 1700000000000000000 {
+		t.Errorf("leaseExpiry: got %d, want 1700000000000000000", hdr.LeaseExpiry)
 	}
 
 	if len(state) != 8 {
@@ -646,19 +646,19 @@ func TestParseCheckpointHeader_EmptyState(t *testing.T) {
 		t.Fatalf("read golden fixture: %v", err)
 	}
 
-	budgetVal, price, tick, _, _, _, state, err := ParseCheckpointHeader(data)
+	hdr, state, err := ParseCheckpointHeader(data)
 	if err != nil {
 		t.Fatalf("ParseCheckpointHeader: %v", err)
 	}
 
-	if budgetVal != 500000 {
-		t.Errorf("budget: got %d, want 500000", budgetVal)
+	if hdr.Budget != 500000 {
+		t.Errorf("budget: got %d, want 500000", hdr.Budget)
 	}
-	if price != 2000 {
-		t.Errorf("price: got %d, want 2000", price)
+	if hdr.PricePerSecond != 2000 {
+		t.Errorf("price: got %d, want 2000", hdr.PricePerSecond)
 	}
-	if tick != 0 {
-		t.Errorf("tick: got %d, want 0", tick)
+	if hdr.TickNumber != 0 {
+		t.Errorf("tick: got %d, want 0", hdr.TickNumber)
 	}
 	if len(state) != 0 {
 		t.Errorf("state should be empty, got %d bytes", len(state))
@@ -673,7 +673,7 @@ func TestParseCheckpointHeader_NegativeBudget(t *testing.T) {
 	binary.LittleEndian.PutUint64(checkpoint[1:9], uint64(negBudget))
 	binary.LittleEndian.PutUint64(checkpoint[9:17], 1000)
 
-	_, _, _, _, _, _, _, err := ParseCheckpointHeader(checkpoint)
+	_, _, err := ParseCheckpointHeader(checkpoint)
 	if err == nil {
 		t.Error("expected error for negative budget in checkpoint")
 	}
@@ -686,7 +686,7 @@ func TestParseCheckpointHeader_NegativePrice(t *testing.T) {
 	negPrice := int64(-500)
 	binary.LittleEndian.PutUint64(checkpoint[9:17], uint64(negPrice))
 
-	_, _, _, _, _, _, _, err := ParseCheckpointHeader(checkpoint)
+	_, _, err := ParseCheckpointHeader(checkpoint)
 	if err == nil {
 		t.Error("expected error for negative price in checkpoint")
 	}
@@ -710,7 +710,7 @@ func TestParseCheckpointHeader_Corruption(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, _, _, _, _, _, err := ParseCheckpointHeader(tt.input)
+			_, _, err := ParseCheckpointHeader(tt.input)
 			if err == nil {
 				t.Error("expected error for corrupted checkpoint")
 			}
@@ -791,7 +791,7 @@ func TestLoadCheckpointFromStorage_WASMHashMismatch(t *testing.T) {
 	manifest := []byte(`{"capabilities":{"clock":{"version":1},"rand":{"version":1},"log":{"version":1}}}`)
 
 	// Load agent 1, run a tick, save checkpoint.
-	inst1, err := LoadAgent(ctx, engine, wasmPath1, "hash-test", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", logger)
+	inst1, err := LoadAgent(ctx, engine, wasmPath1, "hash-test", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", nil, logger)
 	if err != nil {
 		t.Fatalf("LoadAgent(1): %v", err)
 	}
@@ -807,7 +807,7 @@ func TestLoadCheckpointFromStorage_WASMHashMismatch(t *testing.T) {
 	inst1.Close(ctx)
 
 	// Load agent 2 with the same agent ID — different binary, different hash.
-	inst2, err := LoadAgent(ctx, engine, wasmPath2, "hash-test", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", logger)
+	inst2, err := LoadAgent(ctx, engine, wasmPath2, "hash-test", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", nil, logger)
 	if err != nil {
 		t.Fatalf("LoadAgent(2): %v", err)
 	}
@@ -849,7 +849,7 @@ func TestLoadAgent_ExcessiveMemoryRejected(t *testing.T) {
 		"resource_limits": {"max_memory_bytes": 134217728}
 	}`)
 
-	_, err = LoadAgent(ctx, engine, wasmPath, "test-mem", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", logger)
+	_, err = LoadAgent(ctx, engine, wasmPath, "test-mem", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", nil, logger)
 	if err == nil {
 		t.Error("expected error when agent requires more memory than node provides")
 	}
@@ -877,7 +877,7 @@ func TestLoadAgent_ValidMemoryAccepted(t *testing.T) {
 		"resource_limits": {"max_memory_bytes": 33554432}
 	}`)
 
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-mem-ok", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", logger)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-mem-ok", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), manifest, nil, "", nil, logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}
@@ -911,7 +911,7 @@ func TestTick_TimeoutEnforcement(t *testing.T) {
 	}
 
 	// No hostcall imports needed — the infinite-loop agent doesn't use them.
-	instance, err := LoadAgent(ctx, engine, wasmPath, "test-timeout", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), nil, nil, "", logger)
+	instance, err := LoadAgent(ctx, engine, wasmPath, "test-timeout", storageProvider, budget.FromFloat(10.0), budget.FromFloat(0.01), nil, nil, "", nil, logger)
 	if err != nil {
 		t.Fatalf("LoadAgent: %v", err)
 	}
