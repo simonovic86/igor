@@ -12,7 +12,7 @@ import (
 )
 
 // NodeCapabilities lists capabilities available on the current node.
-var NodeCapabilities = []string{"clock", "rand", "log", "wallet", "pricing"}
+var NodeCapabilities = []string{"clock", "rand", "log", "wallet", "pricing", "http"}
 
 // ParseCapabilityManifest parses a capability manifest from JSON bytes.
 // An empty or nil input returns an empty manifest (no capabilities declared).

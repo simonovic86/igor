@@ -28,15 +28,19 @@ import (
 	igor "github.com/simonovic86/igor/sdk/igor"
 )
 
+// HTTPHandler is a function that handles mock HTTP requests.
+type HTTPHandler func(method, url string, headers map[string]string, body []byte) (statusCode int, respBody []byte, err error)
+
 // Runtime provides mock implementations of Igor hostcalls for native testing.
 type Runtime struct {
-	mu        sync.Mutex
-	clock     func() int64
-	randSrc   *rand.Rand
-	logs      []string
-	budget    int64
-	receipts  [][]byte
-	nodePrice int64
+	mu          sync.Mutex
+	clock       func() int64
+	randSrc     *rand.Rand
+	logs        []string
+	budget      int64
+	receipts    [][]byte
+	nodePrice   int64
+	httpHandler HTTPHandler
 }
 
 // New creates a mock runtime using the real system clock and crypto-seeded rand.
@@ -183,4 +187,22 @@ func (r *Runtime) SetNodePrice(p int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.nodePrice = p
+}
+
+// HTTPRequest implements MockBackend.
+func (r *Runtime) HTTPRequest(method, url string, headers map[string]string, body []byte) (int, []byte, error) {
+	r.mu.Lock()
+	handler := r.httpHandler
+	r.mu.Unlock()
+	if handler != nil {
+		return handler(method, url, headers, body)
+	}
+	return 0, nil, fmt.Errorf("no HTTP handler configured (use SetHTTPHandler)")
+}
+
+// SetHTTPHandler configures a function to handle mock HTTP requests.
+func (r *Runtime) SetHTTPHandler(h HTTPHandler) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.httpHandler = h
 }
