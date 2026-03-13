@@ -1,0 +1,17 @@
+{
+  "capabilities": {
+    "clock": { "version": 1 },
+    "log": { "version": 1 },
+    "http": {
+      "version": 1,
+      "options": {
+        "allowed_hosts": ["api.coingecko.com"],
+        "timeout_ms": 10000,
+        "max_response_bytes": 4096
+      }
+    }
+  },
+  "resource_limits": {
+    "max_memory_bytes": 67108864
+  }
+}

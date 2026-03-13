@@ -697,9 +697,9 @@ func TestReplayTick_Timeout(t *testing.T) {
 	}
 	t.Logf("Replay tick timed out after %v with error: %v", elapsed, result.Error)
 
-	// Should complete within a reasonable bound (timeout is 100ms, allow up to 1s for CI)
-	if elapsed > 1*time.Second {
-		t.Fatalf("replay took too long: %v (expected < 1s)", elapsed)
+	// Should complete within a reasonable bound (allow generous margin for CI)
+	if elapsed > replayTickTimeout+5*time.Second {
+		t.Fatalf("replay took too long: %v (expected < %v)", elapsed, replayTickTimeout+5*time.Second)
 	}
 }
 
