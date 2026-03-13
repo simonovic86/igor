@@ -15,16 +15,18 @@ Igor is the runtime for portable, immortal software agents. The checkpoint file 
 ```bash
 make bootstrap       # Install toolchain (Go, golangci-lint, goimports, TinyGo)
 make build           # Build igord → bin/igord
-make agent           # Build example WASM agent → agents/example/agent.wasm
-make agent-heartbeat # Build heartbeat WASM agent → agents/heartbeat/agent.wasm
+make agent              # Build example WASM agent → agents/example/agent.wasm
+make agent-heartbeat    # Build heartbeat WASM agent → agents/heartbeat/agent.wasm
+make agent-pricewatcher # Build price watcher WASM agent → agents/pricewatcher/agent.wasm
 make test            # Run tests: go test -v ./...
 make lint            # golangci-lint (5m timeout)
 make vet             # go vet
 make fmt             # gofmt + goimports
 make check           # fmt-check + vet + lint + test (same as precommit)
 make run-agent       # Build + run example agent with budget 1.0
-make demo            # Build + run bridge reconciliation demo
-make demo-portable   # Build + run portable agent demo (run → stop → copy → resume → verify)
+make demo              # Build + run bridge reconciliation demo
+make demo-portable     # Build + run portable agent demo (run → stop → copy → resume → verify)
+make demo-pricewatcher # Build + run price watcher demo (fetch prices → stop → resume → verify)
 make clean           # Remove bin/, checkpoints/, agent.wasm
 ```
 
@@ -47,7 +49,7 @@ Legacy mode (P2P/migration):
 ## Architecture
 
 ### Execution model
-Agents export 5 WASM functions: `agent_init`, `agent_tick`, `agent_checkpoint`, `agent_checkpoint_ptr`, `agent_resume`. TinyGo agents provide `malloc` automatically. The runtime drives an adaptive tick loop: 1 Hz default, 10ms fast path when `agent_tick` returns 1 (more work pending). Each tick is budgeted: `cost = elapsed_nanoseconds × price_per_second / 1e9`. Checkpoints save every 5 seconds. Tick timeout: 100ms.
+Agents export 5 WASM functions: `agent_init`, `agent_tick`, `agent_checkpoint`, `agent_checkpoint_ptr`, `agent_resume`. TinyGo agents provide `malloc` automatically. The runtime drives an adaptive tick loop: 1 Hz default, 10ms fast path when `agent_tick` returns 1 (more work pending). Each tick is budgeted: `cost = elapsed_nanoseconds × price_per_second / 1e9`. Checkpoints save every 5 seconds. Tick timeout: 15s (increased from 100ms to accommodate HTTP hostcalls).
 
 ### Checkpoint format (binary, little-endian)
 Current version is v0x04 (209-byte header). Supports reading v0x02 (57 bytes) and v0x03 (81 bytes).
@@ -79,6 +81,7 @@ Atomic writes via temp file → fsync → rename. Every checkpoint is also archi
 - `pkg/receipt/` — Payment receipt data structure, Ed25519 signing, binary serialization
 - `sdk/igor/` — Agent SDK: hostcall wrappers (ClockNow, RandBytes, Log, WalletBalance), lifecycle plumbing (Agent interface), Encoder/Decoder with Raw/FixedBytes/ReadInto for checkpoint serialization
 - `agents/heartbeat/` — Demo agent: logs heartbeat with tick count and age, milestones every 10 ticks
+- `agents/pricewatcher/` — Demo agent: fetches BTC/ETH prices from CoinGecko, tracks high/low/latest across checkpoint/resume
 - `agents/example/` — Original demo agent (Survivor) from research phases
 - `scripts/demo-portable.sh` — End-to-end portable agent demo
 

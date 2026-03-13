@@ -11,7 +11,8 @@ import (
 
 // TickTimeout is the maximum duration for a single agent tick.
 // Used by agent execution, replay verification, and the simulator.
-const TickTimeout = 100 * time.Millisecond
+// Set to 15s to accommodate agents making HTTP requests during ticks.
+const TickTimeout = 15 * time.Second
 
 // Config holds the runtime configuration for an Igor node.
 type Config struct {
