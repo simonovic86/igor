@@ -12,6 +12,7 @@ type MockBackend interface {
 	WalletReceiptCount() int
 	WalletReceipt(index int) ([]byte, error)
 	NodePrice() int64
+	HTTPRequest(method, url string, headers map[string]string, body []byte) (statusCode int, respBody []byte, err error)
 }
 
 // activeMock is set by mock.Enable() and cleared by mock.Disable().

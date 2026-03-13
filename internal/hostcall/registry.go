@@ -22,6 +22,7 @@ type Registry struct {
 	eventLog     *eventlog.EventLog
 	walletState  WalletState  // optional; nil = wallet hostcalls not available
 	pricingState PricingState // optional; nil = pricing hostcalls not available
+	httpClient   HTTPClient   // optional; nil = use http.DefaultClient
 }
 
 // NewRegistry creates a hostcall registry bound to the given event log.
@@ -42,6 +43,12 @@ func (r *Registry) SetWalletState(ws WalletState) {
 // Must be called before RegisterHostModule if the agent declares "pricing" capability.
 func (r *Registry) SetPricingState(ps PricingState) {
 	r.pricingState = ps
+}
+
+// SetHTTPClient installs a custom HTTP client for the http_request hostcall.
+// If not set, http.DefaultClient is used. Useful for testing.
+func (r *Registry) SetHTTPClient(c HTTPClient) {
+	r.httpClient = c
 }
 
 // RegisterHostModule builds and instantiates the "igor" WASM host module
@@ -87,6 +94,12 @@ func (r *Registry) RegisterHostModule(
 
 	if m.Has("pricing") && r.pricingState != nil {
 		r.registerPricing(builder, r.pricingState)
+		registered++
+	}
+
+	if m.Has("http") {
+		capCfg := m.Capabilities["http"]
+		r.registerHTTP(builder, capCfg)
 		registered++
 	}
 
