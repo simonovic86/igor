@@ -1,4 +1,4 @@
-.PHONY: help bootstrap build clean test lint vet fmt fmt-check tidy agent agent-reconciliation run-agent demo gh-check gh-metadata gh-release
+.PHONY: help bootstrap build clean test lint vet fmt fmt-check tidy agent agent-heartbeat agent-reconciliation run-agent demo demo-portable gh-check gh-metadata gh-release
 
 .DEFAULT_GOAL := help
 
@@ -6,6 +6,7 @@
 BINARY_NAME := igord
 BINARY_DIR := bin
 AGENT_DIR := agents/example
+HEARTBEAT_AGENT_DIR := agents/heartbeat
 RECONCILIATION_AGENT_DIR := agents/reconciliation
 
 # Go commands
@@ -45,6 +46,7 @@ clean: ## Remove build artifacts
 	rm -rf checkpoints
 	rm -f agents/example/agent.wasm
 	rm -f agents/example/agent.wasm.checkpoint
+	rm -f agents/heartbeat/agent.wasm
 	rm -f agents/reconciliation/agent.wasm
 	@echo "Clean complete"
 
@@ -96,6 +98,13 @@ run-agent: build agent ## Build and run example agent locally
 	@echo "Running agent with default budget (1.0)..."
 	./$(BINARY_DIR)/$(BINARY_NAME) --run-agent $(AGENT_DIR)/agent.wasm --budget 1.0
 
+agent-heartbeat: ## Build heartbeat demo agent WASM
+	@echo "Building heartbeat agent..."
+	@which tinygo > /dev/null || \
+		(echo "tinygo not found. See docs/governance/DEVELOPMENT.md for installation" && exit 1)
+	cd $(HEARTBEAT_AGENT_DIR) && $(MAKE) build
+	@echo "Agent built: $(HEARTBEAT_AGENT_DIR)/agent.wasm"
+
 agent-reconciliation: ## Build reconciliation agent WASM
 	@echo "Building reconciliation agent..."
 	@which tinygo > /dev/null || \
@@ -109,6 +118,11 @@ demo: build agent-reconciliation ## Build and run reconciliation demo
 	$(GOBUILD) -o $(BINARY_DIR)/demo-reconciliation ./cmd/demo-reconciliation
 	@echo "Running Bridge Reconciliation Demo..."
 	./$(BINARY_DIR)/demo-reconciliation --wasm $(RECONCILIATION_AGENT_DIR)/agent.wasm
+
+demo-portable: build agent-heartbeat ## Run the portable agent demo (run, stop, resume, verify)
+	@echo "Running Portable Agent Demo..."
+	@chmod +x scripts/demo-portable.sh
+	@./scripts/demo-portable.sh
 
 check: fmt-check vet lint test ## Run all checks (formatting, vet, lint, tests)
 	@echo "All checks passed"

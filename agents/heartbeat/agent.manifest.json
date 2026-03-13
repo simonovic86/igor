@@ -1,0 +1,9 @@
+{
+  "capabilities": {
+    "clock": { "version": 1 },
+    "log": { "version": 1 }
+  },
+  "resource_limits": {
+    "max_memory_bytes": 67108864
+  }
+}

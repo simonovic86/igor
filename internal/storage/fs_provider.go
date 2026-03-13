@@ -4,6 +4,7 @@ package storage
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"os"
@@ -107,6 +108,9 @@ func (p *FSProvider) SaveCheckpoint(
 		"path", checkpointPath,
 		"size_bytes", len(state),
 	)
+
+	// Archive to history for lineage verification.
+	p.archiveCheckpoint(agentID, state)
 
 	return nil
 }
@@ -354,6 +358,39 @@ func (p *FSProvider) DeleteIdentity(
 
 	p.logger.Info("Identity deleted", "agent_id", agentID, "path", idPath)
 	return nil
+}
+
+// archiveCheckpoint copies a checkpoint to the history directory for lineage verification.
+// Failures are logged but do not affect the main checkpoint save.
+func (p *FSProvider) archiveCheckpoint(agentID string, state []byte) {
+	// Extract tick number from checkpoint header (bytes 17:25, little-endian uint64).
+	// Minimum checkpoint size is 57 bytes (v2 header).
+	if len(state) < 25 {
+		return
+	}
+	tickNumber := binary.LittleEndian.Uint64(state[17:25])
+
+	histDir := filepath.Join(p.baseDir, "history", agentID)
+	if err := os.MkdirAll(histDir, 0755); err != nil {
+		p.logger.Warn("Failed to create history directory", "error", err)
+		return
+	}
+
+	histPath := filepath.Join(histDir, fmt.Sprintf("%010d.ckpt", tickNumber))
+
+	// Skip if this tick's checkpoint already archived.
+	if _, err := os.Stat(histPath); err == nil {
+		return
+	}
+
+	if err := os.WriteFile(histPath, state, 0644); err != nil {
+		p.logger.Warn("Failed to archive checkpoint", "tick", tickNumber, "error", err)
+	}
+}
+
+// HistoryDir returns the path to an agent's checkpoint history directory.
+func (p *FSProvider) HistoryDir(agentID string) string {
+	return filepath.Join(p.baseDir, "history", agentID)
 }
 
 // receiptPath returns the filesystem path for an agent's receipts.

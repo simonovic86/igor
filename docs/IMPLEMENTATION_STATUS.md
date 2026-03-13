@@ -2,7 +2,24 @@
 
 Truth matrix mapping spec documents to current code. Source of truth is the code; docs have been updated to match.
 
-Last updated: 2026-03-05
+Last updated: 2026-03-13
+
+## Portable Agent (Product Phase 1)
+
+| Aspect | Status | Code Reference |
+|--------|--------|----------------|
+| DID identity encoding (`did:key:z6Mk...`) | Implemented | `pkg/identity/did.go` `DID()` |
+| DID round-trip parsing | Implemented | `pkg/identity/did.go` `ParseDID()` |
+| DID short form | Implemented | `pkg/identity/did.go` `DIDShort()` |
+| CLI `run` subcommand | Implemented | `cmd/igord/main.go` `subcmdRun` |
+| CLI `resume` subcommand | Implemented | `cmd/igord/main.go` `subcmdResume` |
+| CLI `verify` subcommand | Implemented | `cmd/igord/main.go` `subcmdVerify` |
+| CLI `inspect` subcommand | Implemented | `cmd/igord/main.go` `subcmdInspect` |
+| Checkpoint history archival | Implemented | `internal/storage/fs_provider.go` `archiveCheckpoint` |
+| History directory accessor | Implemented | `internal/storage/fs_provider.go` `HistoryDir()` |
+| Lineage chain verification | Implemented | `internal/inspector/chain.go` `VerifyChain` |
+| Heartbeat demo agent | Implemented | `agents/heartbeat/main.go` |
+| Portable demo script | Implemented | `scripts/demo-portable.sh` |
 
 ## Checkpoint Format
 
@@ -86,6 +103,7 @@ Last updated: 2026-03-05
 | Signed checkpoint lineage | Implemented | Task 13: `pkg/lineage/`, checkpoint v0x04 with signed hash chain. See [SIGNED_LINEAGE.md](runtime/SIGNED_LINEAGE.md). |
 | Lease-based authority epochs | Implemented | Task 12: `internal/authority/`, checkpoint v0x03 with epoch metadata. See [LEASE_EPOCH.md](runtime/LEASE_EPOCH.md). |
 | Cryptographic agent identity | Implemented | Task 13: `pkg/identity/`, Ed25519 agent keypairs with persistent storage. |
+| DID encoding (did:key multicodec) | Implemented | `pkg/identity/did.go`, base58btc with 0xed01 prefix. |
 
 ## Migration
 
@@ -121,6 +139,8 @@ Last updated: 2026-03-05
 | Checkpoint inspector | Implemented | `internal/inspector/inspector.go` |
 | WASM hash verification in inspector | Implemented | `internal/inspector/inspector.go` `VerifyWASM` |
 | Agent template (Survivor example) | Implemented | `agents/example/` |
+| Heartbeat demo agent | Implemented | `agents/heartbeat/` — tick count, age, milestones |
+| Lineage chain verifier | Implemented | `internal/inspector/chain.go` `VerifyChain`, `PrintChain` |
 | `--simulate` CLI flag | Implemented | `cmd/igord/main.go` |
 | `--inspect-checkpoint` CLI flag | Implemented | `cmd/igord/main.go` |
 
