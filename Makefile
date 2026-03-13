@@ -1,4 +1,4 @@
-.PHONY: help bootstrap build clean test lint vet fmt fmt-check tidy agent agent-heartbeat agent-reconciliation run-agent demo demo-portable gh-check gh-metadata gh-release
+.PHONY: help bootstrap build build-lab clean test lint vet fmt fmt-check tidy agent agent-heartbeat agent-reconciliation run-agent demo demo-portable gh-check gh-metadata gh-release
 
 .DEFAULT_GOAL := help
 
@@ -33,11 +33,17 @@ bootstrap: ## Install development toolchain and verify environment
 	@echo "Running developer environment bootstrap..."
 	@./scripts/bootstrap.sh
 
-build: ## Build igord binary
+build: ## Build igord binary (product CLI)
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BINARY_DIR)
 	$(GOBUILD) -o $(BINARY_DIR)/$(BINARY_NAME) ./cmd/igord
 	@echo "Built $(BINARY_DIR)/$(BINARY_NAME)"
+
+build-lab: ## Build igord-lab binary (research/P2P CLI)
+	@echo "Building igord-lab..."
+	@mkdir -p $(BINARY_DIR)
+	$(GOBUILD) -o $(BINARY_DIR)/igord-lab ./cmd/igord-lab
+	@echo "Built $(BINARY_DIR)/igord-lab"
 
 clean: ## Remove build artifacts
 	@echo "Cleaning build artifacts..."
@@ -62,7 +68,7 @@ lint: ## Run golangci-lint
 
 vet: ## Run go vet
 	@echo "Running go vet..."
-	$(GOVET) ./cmd/... ./internal/... ./pkg/...
+	$(GOVET) ./cmd/... ./internal/... ./pkg/... ./sdk/...
 
 fmt: ## Format code with gofmt and goimports
 	@echo "Formatting code..."
@@ -94,9 +100,9 @@ agent: ## Build example agent WASM
 	cd $(AGENT_DIR) && $(MAKE) build
 	@echo "Agent built: $(AGENT_DIR)/agent.wasm"
 
-run-agent: build agent ## Build and run example agent locally
+run-agent: build-lab agent ## Build and run example agent locally (uses igord-lab)
 	@echo "Running agent with default budget (1.0)..."
-	./$(BINARY_DIR)/$(BINARY_NAME) --run-agent $(AGENT_DIR)/agent.wasm --budget 1.0
+	./$(BINARY_DIR)/igord-lab --run-agent $(AGENT_DIR)/agent.wasm --budget 1.0
 
 agent-heartbeat: ## Build heartbeat demo agent WASM
 	@echo "Building heartbeat agent..."
