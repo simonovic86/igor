@@ -1,16 +1,16 @@
 # Igor
 
-**Runtime for Survivable Autonomous Agents**
+**Runtime for Portable, Immortal Software Agents**
 
-Igor is a decentralized execution runtime for autonomous software agents. It provides infrastructure primitives enabling agents to checkpoint state, migrate between peer nodes over libp2p, and pay for execution using internal budgets. Agents built on Igor persist independently of any infrastructure provider through WASM sandbox execution, peer-to-peer migration protocols, and runtime economics.
+Igor makes any WASM program into a sovereign agent with its own identity, memory, and verifiable life history. The checkpoint file IS the agent — copy it anywhere, run `igord resume`, it continues exactly where it left off. No infrastructure lock-in.
 
 ---
 
 ## About This Repository
 
-**What:** Experimental infrastructure for autonomous agent survival  
-**Status:** Research-stage — Phases 2–4 complete, Phase 5 (Hardening) complete. Agents run, checkpoint, migrate, resume, meter cost, enforce capability membranes, replay-verify, support multi-node chain migration, sign checkpoint lineage, recover from migration failures, and enforce lease-based authority. Task 15 (Permissionless Hardening) next.
-**Purpose:** Demonstrate that software can checkpoint, migrate, and self-fund execution
+**What:** Runtime for portable, infrastructure-independent agents
+**Status:** Product Phase 1 complete. Agents have DID identity, checkpoint/resume across machines, and cryptographic lineage verification. Built on a research foundation (Phases 2–5) of WASM sandboxing, P2P migration, budget metering, replay verification, and signed checkpoint lineage.
+**Purpose:** Give software agents identity, memory, and continuity — independent of any machine, cloud, or operator
 
 **Read first:**
 - [ANNOUNCEMENT.md](./ANNOUNCEMENT.md) - Public project introduction
@@ -25,11 +25,11 @@ Igor is a decentralized execution runtime for autonomous software agents. It pro
 
 ## Why Igor Exists
 
-Autonomous economic software—including DeFi automation, oracle networks, and AI service agents—can execute decisions independently but cannot survive infrastructure failure autonomously. These distributed systems hold capital, operate continuously, yet remain existentially tied to specific infrastructure.
+Agents today are tied to their infrastructure. Kill the server, the agent dies. Restart it, and it has to start from scratch — losing in-memory state, execution history, and continuity.
 
-Trading strategies manage capital without human approval yet stop when servers fail. Oracle participants must maintain continuous uptime yet depend entirely on operators. AI service agents process requests autonomously yet cannot survive the loss of their hosting infrastructure.
+Kubernetes restarts processes but loses state. Temporal forces you into a workflow programming model. AO replays entire message histories from Arweave. An LLM with a wallet can rent a server but can't survive dying on it.
 
-Igor provides survivable agent runtime primitives: explicit state checkpointing, peer-to-peer agent migration, and runtime economic metering. Agents persist across distributed infrastructure changes. Infrastructure becomes fungible; agents become persistent.
+Igor gives agents three things nothing else provides together: **identity** (DID), **memory** (checkpointed state that survives infrastructure failure), and **verifiable continuity** (cryptographic proof of the agent's entire life history). The agent is a portable digital object — not a deployment tied to specific infrastructure.
 
 ## Technical Domains
 
@@ -60,12 +60,12 @@ Igor provides execution survival primitives that these higher-level systems coul
 
 ## Core Guarantees
 
-- **Survival:** Agents checkpoint state and resume after node failure
-- **Migration:** Agents transfer between nodes over libp2p streams
-- **Single-instance:** At most one active instance exists (no split-brain)
-- **Budget enforcement:** Execution metered per-tick, cost deducted automatically
+- **Portable:** The checkpoint file IS the agent — copy it anywhere, resume it
+- **Identity:** Every agent has a DID (`did:key:z6Mk...`) derived from its Ed25519 keypair
+- **Verifiable:** Signed checkpoint lineage — cryptographic proof of entire life history
+- **Survival:** Agents checkpoint state and resume after infrastructure failure
 - **Sandboxing:** WASM isolation, 64MB memory limit, no filesystem/network access
-- **Decentralization:** Peer-to-peer coordination, no central authority
+- **Migration:** Agents transfer between nodes over libp2p streams (research foundation)
 
 ## What Igor Does Not Provide
 
@@ -77,33 +77,30 @@ Igor is **not**:
 - A multi-agent coordination platform
 - A general-purpose orchestration system
 
-Igor is a minimal survival runtime. It implements checkpointing, migration, and budget metering. Nothing more.
+Igor is a minimal runtime for portable, sovereign agents. It provides identity, checkpointing, and verifiable continuity. Nothing more.
 
 ## Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  Autonomous Agent (WASM)                        │
+│  Agent (WASM binary)                            │
 │  ┌──────────┐  ┌───────────┐  ┌──────────────┐ │
 │  │  Init    │→ │ Tick Loop │→ │  Checkpoint  │ │
-│  └──────────┘  └─────┬─────┘  └──────┬───────┘ │
-│                      │                │         │
-│                      ↓                ↓         │
-│              ┌──────────────┐  ┌─────────────┐ │
-│              │ Budget       │  │ State       │ │
-│              │ Metering     │  │ Persistence │ │
-│              └──────────────┘  └─────────────┘ │
-└─────────────────────────────────────────────────┘
-                       │
-                       │ Migration (libp2p)
-                       ↓
-┌─────────────────────────────────────────────────┐
-│  Igor Runtime (Node)                            │
-│  ┌──────────┐  ┌───────────┐  ┌──────────────┐ │
-│  │  WASM    │  │ Migration │  │  P2P         │ │
-│  │  Sandbox │  │ Protocol  │  │  Network     │ │
 │  └──────────┘  └───────────┘  └──────────────┘ │
 └─────────────────────────────────────────────────┘
+         │                             │
+         ↓                             ↓
+┌─────────────────┐  ┌────────────────────────────┐
+│  Igor Runtime   │  │  Checkpoint File (.ckpt)   │
+│  (igord)        │  │  ┌──────────────────────┐  │
+│  ┌───────────┐  │  │  │ Identity (Ed25519)   │  │
+│  │ WASM      │  │  │  │ State + Budget       │  │
+│  │ Sandbox   │  │  │  │ Signed Lineage       │  │
+│  └───────────┘  │  │  │ WASM Hash Binding    │  │
+│  ┌───────────┐  │  │  └──────────────────────┘  │
+│  │ Hostcalls │  │  │  ↕ Copy to any machine     │
+│  └───────────┘  │  │  ↕ igord resume → continues │
+└─────────────────┘  └────────────────────────────┘
 ```
 
 ### Agents
@@ -118,94 +115,49 @@ WASM executables implementing five lifecycle functions:
 
 Agents interact with the runtime through the `igor` host module (clock, rand, log hostcalls), mediated by a capability manifest declared at load time.
 
-Agents carry budgets. Cost calculated per tick: `duration_seconds × price_per_second`
-
-### Nodes
-
-Peer-to-peer participants providing execution services:
-
-- Execute agents in wazero WASM sandbox
-- Meter resource consumption per tick
-- Charge agents per second of execution
-- Facilitate migration via libp2p streams
-
-Nodes operate autonomously without coordination.
-
 ### Checkpoints
 
-Atomic snapshots preserving agent state, budget, and binary identity (209-byte header):
+The checkpoint file IS the agent. It contains everything needed to resume:
 
-```
-Offset  Size  Field
-0       1     Version (0x04)
-1       8     Budget (int64 microcents, little-endian)
-9       8     PricePerSecond (int64 microcents, little-endian)
-17      8     TickNumber (uint64, little-endian)
-25      32    WASMHash (SHA-256 of agent binary)
-57      8     MajorVersion (uint64, little-endian)
-65      8     LeaseGeneration (uint64, little-endian)
-73      8     LeaseExpiry (int64, little-endian)
-81      32    PrevHash (SHA-256 of previous checkpoint)
-113     32    AgentPubKey (Ed25519 public key)
-145     64    Signature (Ed25519, covers bytes 0–144)
-209     N     Agent State (application-defined)
-```
+- **Identity:** Ed25519 public key → DID (`did:key:z6Mk...`)
+- **State:** Application-defined agent memory
+- **Budget:** Remaining execution budget in microcents
+- **Lineage:** PrevHash chain + Ed25519 signature for tamper-evident history
+- **Binding:** SHA-256 hash of the WASM binary that created it
 
-Budget unit: 1 currency unit = 1,000,000 microcents. Integer arithmetic avoids float precision drift.
-
-### Migration Protocol
-
-Agents migrate via direct peer-to-peer streams:
-
-1. Source checkpoints agent
-2. Source packages: WASM + checkpoint + budget + manifest + WASM hash
-3. Source includes replay verification data (if available)
-4. Source transfers to target (libp2p stream)
-5. Target verifies WASM hash integrity
-6. Target replays last tick to verify checkpoint (if replay data present)
-7. Target resumes agent
-8. Target confirms success
-9. Source terminates local instance
-
-Single-instance invariant maintained throughout.
+Every checkpoint is archived to `history/{agentID}/{tickNumber}.ckpt` for full lineage verification.
 
 ## Current Capabilities
 
-**Phase 2 (Survival) - Complete**
+**Product Phase 1 (Portable Sovereign Agent) - Complete**
 
-All 6 success criteria met:
+- Agent runs with DID identity (`did:key:z6Mk...`)
+- Agent checkpoints and resumes on any machine — same DID, continuous tick count
+- Signed checkpoint lineage — cryptographic proof of entire life history
+- Checkpoint history archival for lineage verification
+- CLI subcommands: `igord run`, `resume`, `verify`, `inspect`
 
-1. ✓ Agent runs on Node A
-2. ✓ Agent checkpoints state explicitly
-3. ✓ Agent migrates to Node B
-4. ✓ Agent resumes from checkpoint
-5. ✓ Agent pays runtime rent
-6. ✓ No centralized coordination
+**Research Foundation (Phases 2–5) - Complete**
 
-## Project Status: Experimental
+- WASM sandboxing, P2P migration, budget metering, replay verification
+- Capability membranes, lease-based authority, signed lineage, migration failure recovery
 
-**Maturity:** Research-stage, proof-of-concept (Phase 3 complete, Phase 4 next)
-**Production:** Not ready for production use  
-**Security:** WASM hash identity binding; no full cryptographic attestation yet  
+## Project Status
+
+**Maturity:** Product Phase 1 complete. Built on research foundation (Phases 2–5).
+**Production:** Not yet production-ready — early product stage.
+**Security:** Ed25519 signed checkpoint lineage with DID identity.
 
 **Known limitations:**
-- Trusted runtime accounting (no payment receipts)
-- Chain migration tested (A→B→C→A) but no routing protocol
-- Local filesystem storage (no distribution)
-- No agent discovery protocol
+- Local filesystem storage only (no permanent archival yet)
+- No HTTP or payment hostcalls (agents can't call external APIs yet)
+- No self-provisioning (agents can't deploy themselves yet)
 - Minimal security hardening
 
-**Do not use for:**
-- Production workloads
-- Public network deployments
-- Sensitive data
-- Financial transactions
-
 **Suitable for:**
-- Research and experimentation
-- Trusted network environments
-- Understanding autonomous agent patterns
-- Academic exploration
+- Building and running portable agents
+- Experimenting with agent identity and continuity
+- Understanding infrastructure-independent agent patterns
 
 See [SECURITY.md](./SECURITY.md) for complete security model.
 
@@ -220,30 +172,35 @@ See [SECURITY.md](./SECURITY.md) for complete security model.
 ### Build and Run
 
 ```bash
-# Build node runtime
+# Build runtime and heartbeat agent
 make build
+make agent-heartbeat
 
-# Build example agent
-make agent
+# Run agent (creates identity, starts ticking)
+./bin/igord run --budget 1.0 agents/heartbeat/agent.wasm
+# [heartbeat] tick=1 age=1s
+# [heartbeat] tick=2 age=2s
+# Ctrl+C → checkpoint saved
 
-# Run agent with budget
-./bin/igord --run-agent agents/example/agent.wasm --budget 10.0
+# Resume on same or different machine
+./bin/igord resume checkpoints/heartbeat/checkpoint.ckpt agents/heartbeat/agent.wasm
+# [heartbeat] tick=3 age=3s  ← continues where it left off
+
+# Verify the agent's entire life history
+./bin/igord verify checkpoints/heartbeat/history/
+
+# Inspect a checkpoint
+./bin/igord inspect checkpoints/heartbeat/checkpoint.ckpt
 ```
 
-### Survival Demonstration
+### Portable Agent Demo
 
 ```bash
-# First run
-./bin/igord --run-agent agents/example/agent.wasm --budget 1.0
-# Agent ticks: 1, 2, 3, 4, 5...
-# Ctrl+C (checkpoint saved to ./checkpoints/)
-
-# Second run (restart)
-./bin/igord --run-agent agents/example/agent.wasm --budget 1.0
-# Agent resumes: 6, 7, 8, 9...
+# Full demo: run → stop → copy → resume → verify
+make demo-portable
 ```
 
-Agent state survives restart via checkpoint.
+The demo shows an agent running on "Machine A", checkpoint copied to "Machine B", resuming with the same DID identity and continuous tick count, then verifying the cryptographic lineage across both machines.
 
 ## Specification Overview
 
@@ -321,16 +278,16 @@ Security issues: [SECURITY.md](./SECURITY.md)
 ## Discovery Keywords
 
 **Core Identity:**
-Autonomous agent runtime | Survivable distributed systems | WASM agent execution | Peer-to-peer agent migration | Runtime economics | Decentralized execution infrastructure
+Portable agent runtime | Immortal software agents | Agent identity (did:key) | Sovereign agents | Infrastructure-independent agents | WASM agent execution | Verifiable agent continuity
 
 **Technical Stack:**
-WebAssembly sandbox | wazero runtime | libp2p networking | Go distributed systems | Agent checkpoint persistence | Budget metering infrastructure
+WebAssembly sandbox | wazero runtime | Ed25519 signed lineage | DID identity | Go distributed systems | Agent checkpoint persistence | TinyGo WASM agents
 
 **Use Cases:**
-DeFi automation infrastructure | Oracle network runtime | AI agent execution platform | Economic software agents | Autonomous service infrastructure | Distributed compute mobility
+Long-running autonomous agents | Self-provisioning compute | AI agent execution platform | Portable stateful agents | Agent survival across infrastructure | Decentralized agent deployment
 
-**Research Areas:**
-Agent survival primitives | Mobile code execution | Process migration protocols | Runtime accounting systems | Survivable software research | Experimental distributed infrastructure
+**Research Foundation:**
+Agent survival primitives | Mobile code execution | Process migration protocols | P2P agent migration | Runtime accounting systems | Survivable software research
 
 See [docs/governance/KEYWORDS.md](./docs/governance/KEYWORDS.md) for keyword governance policy.
 

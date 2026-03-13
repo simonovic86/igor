@@ -1,8 +1,14 @@
-# Igor v0 Roadmap
+# Igor Roadmap
 
-## Current Status: Phase 5 In Progress
+## Current Status: Product Phase 1 Complete
 
-Igor v0 has completed **Phase 2 (Survival)**, **Phase 3 (Autonomy)**, **Phase 4 (Economics)**, and started **Phase 5 (Hardening)** with Tasks 12–14.
+Igor has completed its research foundation (**Phases 2–5**) and pivoted to product development. The runtime now supports **portable, infrastructure-independent agents** with DID identity, cryptographic lineage verification, and clean CLI workflows (`igord run`, `resume`, `verify`).
+
+**Product Phase 1 (Portable Sovereign Agent)** is complete. **Product Phase 2 (Agent Self-Provisioning)** is next.
+
+---
+
+## Research Foundation
 
 ### Completed Tasks
 
@@ -174,50 +180,76 @@ Igor v0 has completed **Phase 2 (Survival)**, **Phase 3 (Autonomy)**, **Phase 4 
 
 **Outcome:** Robust migration under adverse conditions with single-instance invariant preserved.
 
-### Task 15: Permissionless Hardening
+### Task 15: Permissionless Hardening (Deprioritized)
 
-**Objective:** Security and incentive mechanisms for untrusted networks.
+**Status:** Deferred. Deprioritized in favor of product pivot.
 
-**Scope:**
-- Sybil resistance (stake/reputation/cost-to-advertise)
-- Host attestation options
-- Anti-withholding incentives
-- Full replay verification (cross-node)
-
-**Outcome:** Foundation for permissionless deployment.
+**Scope:** Sybil resistance, host attestation, anti-withholding, cross-node replay. May be revisited when agents self-provision infrastructure (Product Phase 2+).
 
 ---
 
-## Beyond Phase 5
+## Product Pivot
 
-Potential future directions (not committed):
+Igor's research foundation (Phases 2–5) proved that agents can checkpoint, migrate, resume, and maintain cryptographic lineage. The pivot focuses on making agents **portable and infrastructure-independent** — the agent is a digital object, not a deployment.
 
-### Advanced Features
+---
 
-- **Agent communication** - Peer-to-peer agent messaging
-- **Agent composition** - Agents spawning sub-agents
-- **Persistent agent storage** - Long-term state persistence
-- **Agent marketplaces** - Discovery and matching
-- **Reputation systems** - Node and agent ratings
-- **Advanced payment rails** - Payment channels, L2s
+## Product Phase 1: Portable Sovereign Agent ✅
 
-### Performance Optimizations
+**Goal:** Make the agent a portable digital object with identity and verifiable history.
 
-- **Multi-agent nodes** - Run multiple agents concurrently
-- **Hot migration** - Migrate without stopping ticks
-- **Checkpoint compression** - Reduce transfer size
-- **Connection pooling** - Reuse peer connections
-- **WASM compilation cache** - Faster agent loading
+**Status:** Complete.
 
-### Ecosystem Tools
+**Delivered:**
+- ✅ **Task P1** - DID identity encoding (`pkg/identity/did.go`) — agents get `did:key:z6Mk...` identifiers from their Ed25519 keys
+- ✅ **Task P2** - CLI subcommands — `igord run`, `igord resume`, `igord verify`, `igord inspect` for clean developer workflow
+- ✅ **Task P3** - Checkpoint history archival (`internal/storage/fs_provider.go`) — every checkpoint archived for lineage verification
+- ✅ **Task P4** - Lineage chain verifier (`internal/inspector/chain.go`) — walk checkpoint history, verify all signatures and hash chain
+- ✅ **Task P5** - Heartbeat demo agent (`agents/heartbeat/`) — visible agent that demonstrates continuity across machines
+- ✅ **Task P6** - Portable agent demo (`scripts/demo-portable.sh`) — end-to-end: run, stop, copy, resume on different machine, verify lineage
 
-- **Node operator tools** - Monitoring dashboards
-- **Agent debugger** - Inspect state and execution via replay
-- **Migration visualizer** - Track agent movement
-- **Economic analytics** - Budget and pricing insights
-- **Checkpoint inspector** - Browse lineage, verify signatures
+**Outcome:** An agent runs on Machine A, gets stopped, its checkpoint is copied to Machine B, and it resumes with the same DID, continuous tick count, and unbroken cryptographic lineage. The checkpoint file IS the agent.
 
-**Important:** These are speculative. Focus remains on v0 core functionality.
+---
+
+## Product Phase 2: Agent Self-Provisioning
+
+**Goal:** Agents choose and pay for their own infrastructure.
+
+**Scope:**
+- **HTTP hostcall** — agent calls external APIs (REST, webhooks)
+- **x402/USDC wallet hostcall** — agent pays for services with real money
+- **Compute provider hostcall** — agent deploys itself to Akash, Golem, or similar
+- **Self-migration** — agent decides when and where to move based on price/performance
+
+**Outcome:** Agents are economically autonomous — they rent infrastructure, pay for it, and move when they choose.
+
+---
+
+## Product Phase 3: Permanent Memory
+
+**Goal:** Agents have tamper-evident, publicly verifiable life histories.
+
+**Scope:**
+- **Arweave checkpoint archival** — permanent storage tier for checkpoint lineage
+- **Two-tier storage** — fast local checkpoints + periodic Arweave archival (async, not in critical path)
+- **Content-addressed checkpoints** — anyone can verify an agent's history from its content hash
+
+**Outcome:** An agent's entire execution history is publicly verifiable and permanent.
+
+---
+
+## Product Phase 4: Ecosystem
+
+**Goal:** Multi-language support, tooling, and community infrastructure.
+
+**Scope:**
+- **Multi-language SDK** — Rust and AssemblyScript compilation targets (beyond TinyGo)
+- **Agent registry** — discover and share agents
+- **Supervisor tooling** — optional auto-resurrection across node pools
+- **Dashboard** — deploy, monitor, and fund agents via web UI
+
+**Outcome:** A developer ecosystem around portable agents.
 
 ---
 
@@ -282,38 +314,28 @@ None. v0 is experimental. Things may be:
 
 ## Success Metrics
 
-### Phase 2 (Complete)
+### Research Foundation (Phases 2–5) — All Met
 
-- ✅ Agent runs on Node A
-- ✅ Agent checkpoints state
-- ✅ Agent migrates to Node B
-- ✅ Agent resumes from checkpoint
-- ✅ Agent pays for execution
-- ✅ No centralized coordination
+- ✅ Agent runs, checkpoints, migrates, resumes
+- ✅ Budget metering and payment receipts
+- ✅ Capability membrane and replay verification
+- ✅ Signed checkpoint lineage
+- ✅ Lease-based authority and migration failure recovery
 
-**All 6 success criteria met.**
+### Product Phase 1 (Complete)
 
-### Phase 3 Goals
+- ✅ Agent has DID identity (`did:key:z6Mk...`)
+- ✅ Agent checkpoints and resumes on a different machine
+- ✅ Same DID, continuous tick count across machines
+- ✅ Cryptographic lineage verified across machines
+- ✅ Clean CLI: `igord run`, `resume`, `verify`
 
-- All agent I/O through capability membrane (hostcalls)
-- Observation event log enables deterministic replay
-- Basic replay verification working
-- Agent SDK makes agent authoring accessible
-- Capability-aware multi-node migration
+### Product Phase 2 Goals
 
-### Phase 4 Goals
-
-- Cryptographic payment receipts
-- Auditable execution costs
-- Competitive pricing market
-- Economic incentives aligned
-
-### Phase 5 Goals
-
-- Production-ready reliability
-- Security hardening complete
-- Failure recovery robust
-- Performance acceptable
+- Agent calls external HTTP APIs via hostcall
+- Agent pays for compute with real money (x402/USDC)
+- Agent deploys itself to Akash/Golem
+- Agent decides when to migrate
 
 ---
 
@@ -351,28 +373,12 @@ Focus: Validate Phase 2 before expanding scope.
 
 ## Long-Term Vision
 
-### Year 1: Proof of Concept
+Agents will pick their own infrastructure. Igor makes them portable enough to do so.
 
-- Complete Phases 2-3
-- Validate autonomous migration
-- Run in research environments
-- Publish findings
-
-### Year 2: Economics
-
-- Complete Phase 4
-- Add payment infrastructure
-- Test with real economic incentives
-- Build small ecosystem
-
-### Year 3: Hardening
-
-- Complete Phase 5
-- Security audit
-- Production-grade reliability
-- Consider v1.0
-
-**Highly speculative.** Depends on validation results and community interest.
+- **Now:** Agents are portable digital objects with identity and verifiable history
+- **Next:** Agents pay for their own compute and self-provision infrastructure
+- **Later:** Agents have permanent, publicly verifiable memory on Arweave
+- **Eventually:** A multi-language ecosystem of sovereign, immortal agents
 
 ---
 
@@ -406,39 +412,19 @@ Igor is **not novel**. It combines existing ideas in a specific way to explore a
 
 ## Open Questions
 
-Questions to answer through v0 development:
-
-1. **Can agents practically migrate fast enough?**
-2. **Is budget accounting sufficient without cryptographic proofs?**
-3. **Do agents need more host functions?**
-4. **Is WASM overhead acceptable?**
-5. **Can checkpoint sizes stay small?**
-6. **Will nodes actually compete on price?**
-
-Answers will inform future phases.
-
----
-
-## Success Criteria for v0
-
-Igor v0 is **complete** when all Phase 2 tasks are done and validated.
-
-Phase 2 is **validated** when:
-
-- Agents run for days without issues
-- Migration works reliably (>95% success)
-- Budget accounting is accurate
-- No critical bugs remain
-- Documentation is comprehensive
-
-**Status: Phase 2 validated. Phase 5 in progress.**
+1. **Can agents practically self-provision infrastructure?** (Akash/Golem integration complexity)
+2. **Is the checkpoint format efficient enough for large agent state?** (MB+ state sizes)
+3. **Will developers adopt the Igor SDK over simpler alternatives?** (DX matters)
+4. **Is WASM overhead acceptable for latency-sensitive agents?** (not for HFT, but for long-running?)
+5. **Can two-tier storage (local + Arweave) work without slowing the critical path?**
+6. **What hostcalls do agents actually need?** (HTTP, storage, payments — what else?)
 
 ---
 
 ## Next Immediate Steps
 
-Phase 4 complete. Phase 5 in progress (Tasks 12–14 complete). Next:
+Product Phase 1 complete. Next:
 
-1. **Task 15: Permissionless Hardening** - Sybil resistance, host attestation, anti-withholding
-2. **Extended testing** - Run agents with migration retry under adverse conditions
-3. **Hardening** - Bug fixes, test coverage, documentation accuracy
+1. **Product Phase 2: Agent Self-Provisioning** — HTTP hostcall, x402 wallet, Akash deployment
+2. **Demo agents** — more compelling demo agents that use external APIs
+3. **Developer experience** — better error messages, documentation, examples
