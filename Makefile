@@ -1,4 +1,4 @@
-.PHONY: help bootstrap build build-lab clean test lint vet fmt fmt-check tidy agent agent-heartbeat agent-reconciliation agent-pricewatcher run-agent demo demo-portable demo-pricewatcher gh-check gh-metadata gh-release
+.PHONY: help bootstrap build build-lab clean test lint vet fmt fmt-check tidy agent agent-heartbeat agent-reconciliation agent-pricewatcher agent-sentinel run-agent demo demo-portable demo-pricewatcher demo-sentinel gh-check gh-metadata gh-release
 
 .DEFAULT_GOAL := help
 
@@ -9,6 +9,7 @@ AGENT_DIR := agents/example
 HEARTBEAT_AGENT_DIR := agents/heartbeat
 RECONCILIATION_AGENT_DIR := agents/reconciliation
 PRICEWATCHER_AGENT_DIR := agents/pricewatcher
+SENTINEL_AGENT_DIR := agents/sentinel
 
 # Go commands
 GOCMD := go
@@ -56,6 +57,7 @@ clean: ## Remove build artifacts
 	rm -f agents/heartbeat/agent.wasm
 	rm -f agents/reconciliation/agent.wasm
 	rm -f agents/pricewatcher/agent.wasm
+	rm -f agents/sentinel/agent.wasm
 	@echo "Clean complete"
 
 test: ## Run tests (with race detector)
@@ -127,6 +129,13 @@ agent-pricewatcher: ## Build price watcher demo agent WASM
 	cd $(PRICEWATCHER_AGENT_DIR) && $(MAKE) build
 	@echo "Agent built: $(PRICEWATCHER_AGENT_DIR)/agent.wasm"
 
+agent-sentinel: ## Build treasury sentinel demo agent WASM
+	@echo "Building sentinel agent..."
+	@which tinygo > /dev/null || \
+		(echo "tinygo not found. See docs/governance/DEVELOPMENT.md for installation" && exit 1)
+	cd $(SENTINEL_AGENT_DIR) && $(MAKE) build
+	@echo "Agent built: $(SENTINEL_AGENT_DIR)/agent.wasm"
+
 demo: build agent-reconciliation ## Build and run reconciliation demo
 	@echo "Building demo runner..."
 	@mkdir -p $(BINARY_DIR)
@@ -143,6 +152,11 @@ demo-pricewatcher: build agent-pricewatcher ## Run the price watcher demo (fetch
 	@echo "Running Price Watcher Demo..."
 	@chmod +x scripts/demo-pricewatcher.sh
 	@./scripts/demo-pricewatcher.sh
+
+demo-sentinel: build agent-sentinel ## Run the treasury sentinel demo (effect lifecycle, crash recovery)
+	@echo "Running Treasury Sentinel Demo..."
+	@chmod +x scripts/demo-sentinel.sh
+	@./scripts/demo-sentinel.sh
 
 check: fmt-check vet lint test ## Run all checks (formatting, vet, lint, tests)
 	@echo "All checks passed"

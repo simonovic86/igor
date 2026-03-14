@@ -18,6 +18,7 @@ make build           # Build igord → bin/igord
 make agent              # Build example WASM agent → agents/example/agent.wasm
 make agent-heartbeat    # Build heartbeat WASM agent → agents/heartbeat/agent.wasm
 make agent-pricewatcher # Build price watcher WASM agent → agents/pricewatcher/agent.wasm
+make agent-sentinel     # Build treasury sentinel WASM agent → agents/sentinel/agent.wasm
 make test            # Run tests: go test -v ./...
 make lint            # golangci-lint (5m timeout)
 make vet             # go vet
@@ -27,6 +28,7 @@ make run-agent       # Build + run example agent with budget 1.0
 make demo              # Build + run bridge reconciliation demo
 make demo-portable     # Build + run portable agent demo (run → stop → copy → resume → verify)
 make demo-pricewatcher # Build + run price watcher demo (fetch prices → stop → resume → verify)
+make demo-sentinel     # Build + run treasury sentinel demo (effect lifecycle → crash → reconcile)
 make clean           # Remove bin/, checkpoints/, agent.wasm
 ```
 
@@ -35,7 +37,7 @@ Run a single test: `go test -v -run TestName ./internal/agent/...`
 Run manually (new subcommands):
 ```bash
 ./bin/igord run --budget 1.0 agents/heartbeat/agent.wasm
-./bin/igord resume checkpoints/heartbeat/checkpoint.ckpt agents/heartbeat/agent.wasm
+./bin/igord resume --checkpoint checkpoints/heartbeat/checkpoint.ckpt --wasm agents/heartbeat/agent.wasm
 ./bin/igord verify checkpoints/heartbeat/history/
 ./bin/igord inspect checkpoints/heartbeat/checkpoint.ckpt
 ```
@@ -79,9 +81,11 @@ Atomic writes via temp file → fsync → rename. Every checkpoint is also archi
 - `pkg/manifest/` — Capability manifest parsing and validation
 - `pkg/protocol/` — Message types: `AgentPackage`, `AgentTransfer`, `AgentStarted`
 - `pkg/receipt/` — Payment receipt data structure, Ed25519 signing, binary serialization
-- `sdk/igor/` — Agent SDK: hostcall wrappers (ClockNow, RandBytes, Log, WalletBalance), lifecycle plumbing (Agent interface), Encoder/Decoder with Raw/FixedBytes/ReadInto for checkpoint serialization
+- `sdk/igor/` — Agent SDK: hostcall wrappers (ClockNow, RandBytes, Log, WalletBalance), lifecycle plumbing (Agent interface), Encoder/Decoder with Raw/FixedBytes/ReadInto for checkpoint serialization, EffectLog for intent tracking across checkpoint/resume
+- `sdk/igor/effects.go` — Effect lifecycle primitives: EffectLog, IntentState (Recorded→InFlight→Confirmed/Unresolved→Compensated), the resume rule (InFlight→Unresolved on Unmarshal)
 - `agents/heartbeat/` — Demo agent: logs heartbeat with tick count and age, milestones every 10 ticks
 - `agents/pricewatcher/` — Demo agent: fetches BTC/ETH prices from CoinGecko, tracks high/low/latest across checkpoint/resume
+- `agents/sentinel/` — Treasury sentinel: monitors simulated treasury balance, triggers refills with effect-safe intent tracking, demonstrates crash recovery and reconciliation
 - `agents/example/` — Original demo agent (Survivor) from research phases
 - `scripts/demo-portable.sh` — End-to-end portable agent demo
 
@@ -90,7 +94,7 @@ Source checkpoints → packages (WASM + checkpoint + budget) → transfers over 
 
 ### CLI subcommands (Product Phase 1)
 - `igord run [flags] <agent.wasm>` — run agent with new identity (`--budget`, `--checkpoint-dir`, `--agent-id`)
-- `igord resume <checkpoint.ckpt> <agent.wasm>` — resume agent from checkpoint file
+- `igord resume --checkpoint <path> --wasm <path>` — resume agent from checkpoint file
 - `igord verify <history-dir>` — verify checkpoint lineage chain
 - `igord inspect <checkpoint.ckpt>` — display checkpoint details with DID identity
 
