@@ -171,6 +171,39 @@ type pricingStateRef struct {
 
 func (p *pricingStateRef) GetNodePrice() int64 { return p.instance.PricePerSecond }
 
+// walletPayStateRef is an indirection layer that lets wallet_pay hostcall closures
+// reference the Instance before it is fully constructed. Same pattern as walletStateRef.
+type walletPayStateRef struct {
+	instance *Instance
+}
+
+func (w *walletPayStateRef) GetBudget() int64 { return w.instance.Budget }
+func (w *walletPayStateRef) DeductBudget(amount int64) error {
+	return w.instance.DeductBudget(amount)
+}
+func (w *walletPayStateRef) GetAgentPubKey() ed25519.PublicKey {
+	if w.instance.AgentIdentity == nil {
+		return make([]byte, ed25519.PublicKeySize)
+	}
+	return w.instance.AgentIdentity.PublicKey
+}
+func (w *walletPayStateRef) SignPayment(data []byte) []byte {
+	if w.instance.AgentIdentity == nil {
+		return make([]byte, ed25519.SignatureSize)
+	}
+	return ed25519.Sign(w.instance.AgentIdentity.PrivateKey, data)
+}
+
+// DeductBudget atomically deducts the given amount from the agent's budget.
+// Returns an error if the budget is insufficient.
+func (i *Instance) DeductBudget(amount int64) error {
+	if i.Budget < amount {
+		return fmt.Errorf("insufficient budget: have %d, need %d", i.Budget, amount)
+	}
+	i.Budget -= amount
+	return nil
+}
+
 // GetBudget returns the current budget (implements hostcall.WalletState).
 func (i *Instance) GetBudget() int64 {
 	return i.Budget
@@ -305,10 +338,12 @@ func loadAgent(
 	// agent_tick (not during loading), so the nil instance is safe at this point.
 	wsRef := &walletStateRef{}
 	psRef := &pricingStateRef{}
+	wpRef := &walletPayStateRef{}
 
 	registry := hostcall.NewRegistry(logger, el)
 	registry.SetWalletState(wsRef)
 	registry.SetPricingState(psRef)
+	registry.SetWalletPayState(wpRef)
 	if err := registry.RegisterHostModule(ctx, engine.Runtime(), capManifest); err != nil {
 		return nil, fmt.Errorf("failed to register host module: %w", err)
 	}
@@ -352,9 +387,10 @@ func loadAgent(
 	}
 
 	// Now that the instance exists, wire state refs so hostcall closures
-	// can access budget, receipts, and pricing during agent_tick.
+	// can access budget, receipts, pricing, and payments during agent_tick.
 	wsRef.instance = instance
 	psRef.instance = instance
+	wpRef.instance = instance
 
 	if err := instance.verifyExports(); err != nil {
 		return nil, fmt.Errorf("agent lifecycle validation failed: %w", err)

@@ -284,6 +284,11 @@ func registerReplayHostModule(
 		registered++
 	}
 
+	if m.Has("x402") {
+		registerReplayPayment(builder, iter, repErr)
+		registered++
+	}
+
 	if registered == 0 {
 		return nil
 	}
@@ -700,6 +705,11 @@ func registerChainReplayHostModule(
 		registered++
 	}
 
+	if m.Has("x402") {
+		registerChainReplayPayment(builder, holder, repErr)
+		registered++
+	}
+
 	if registered == 0 {
 		return nil
 	}
@@ -790,6 +800,101 @@ func registerChainReplayPricing(
 		}).
 		Export("node_price")
 }
+
+// registerReplayPayment registers wallet_pay that returns the recorded receipt.
+// Observation payload layout: [amount:8][receipt_bytes].
+// The hostcall writes [receipt_len:4 LE][receipt_bytes] to the output buffer.
+func registerReplayPayment(
+	builder wazero.HostModuleBuilder,
+	iter *entryIterator,
+	repErr *replayError,
+) {
+	builder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context, m api.Module,
+			_ int64,
+			_, _,
+			_, _,
+			receiptPtr, receiptCap uint32,
+		) int32 {
+			entry, err := iter.next(eventlog.WalletPay)
+			if err != nil {
+				repErr.err = err
+				return payReplayErr
+			}
+			if len(entry.Payload) < 8 {
+				repErr.err = fmt.Errorf("wallet_pay payload too short: %d", len(entry.Payload))
+				return payReplayErr
+			}
+			receipt := entry.Payload[8:] // skip amount prefix
+			needed := uint32(4 + len(receipt))
+			if needed > receiptCap {
+				// Write size hint, same as live hostcall.
+				if receiptCap >= 4 {
+					sizeBuf := make([]byte, 4)
+					binary.LittleEndian.PutUint32(sizeBuf, uint32(len(receipt)))
+					m.Memory().Write(receiptPtr, sizeBuf)
+				}
+				return -5 // payErrBufferTooSmall
+			}
+			out := make([]byte, needed)
+			binary.LittleEndian.PutUint32(out[:4], uint32(len(receipt)))
+			copy(out[4:], receipt)
+			if !m.Memory().Write(receiptPtr, out) {
+				repErr.err = fmt.Errorf("wallet_pay memory write failed")
+				return payReplayErr
+			}
+			return int32(needed)
+		}).
+		Export("wallet_pay")
+}
+
+// registerChainReplayPayment registers wallet_pay replay that reads from the
+// iteratorHolder, allowing the iterator to be swapped between ticks.
+func registerChainReplayPayment(
+	builder wazero.HostModuleBuilder,
+	holder *iteratorHolder,
+	repErr *replayError,
+) {
+	builder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context, m api.Module,
+			_ int64,
+			_, _,
+			_, _,
+			receiptPtr, receiptCap uint32,
+		) int32 {
+			entry, err := holder.iter.next(eventlog.WalletPay)
+			if err != nil {
+				repErr.err = err
+				return payReplayErr
+			}
+			if len(entry.Payload) < 8 {
+				repErr.err = fmt.Errorf("wallet_pay payload too short: %d", len(entry.Payload))
+				return payReplayErr
+			}
+			receipt := entry.Payload[8:]
+			needed := uint32(4 + len(receipt))
+			if needed > receiptCap {
+				if receiptCap >= 4 {
+					sizeBuf := make([]byte, 4)
+					binary.LittleEndian.PutUint32(sizeBuf, uint32(len(receipt)))
+					m.Memory().Write(receiptPtr, sizeBuf)
+				}
+				return -5
+			}
+			out := make([]byte, needed)
+			binary.LittleEndian.PutUint32(out[:4], uint32(len(receipt)))
+			copy(out[4:], receipt)
+			if !m.Memory().Write(receiptPtr, out) {
+				repErr.err = fmt.Errorf("wallet_pay memory write failed")
+				return payReplayErr
+			}
+			return int32(needed)
+		}).
+		Export("wallet_pay")
+}
+
+// payReplayErr is a generic error code for replay payment failures.
+const payReplayErr int32 = -6
 
 // firstDiff returns the index of the first differing byte, or -1 if equal.
 func firstDiff(a, b []byte) int {

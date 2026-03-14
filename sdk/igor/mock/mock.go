@@ -31,16 +31,20 @@ import (
 // HTTPHandler is a function that handles mock HTTP requests.
 type HTTPHandler func(method, url string, headers map[string]string, body []byte) (statusCode int, respBody []byte, err error)
 
+// PaymentHandler is a function that handles mock wallet_pay requests.
+type PaymentHandler func(amount int64, recipient, memo string) (receipt []byte, err error)
+
 // Runtime provides mock implementations of Igor hostcalls for native testing.
 type Runtime struct {
-	mu          sync.Mutex
-	clock       func() int64
-	randSrc     *rand.Rand
-	logs        []string
-	budget      int64
-	receipts    [][]byte
-	nodePrice   int64
-	httpHandler HTTPHandler
+	mu             sync.Mutex
+	clock          func() int64
+	randSrc        *rand.Rand
+	logs           []string
+	budget         int64
+	receipts       [][]byte
+	nodePrice      int64
+	httpHandler    HTTPHandler
+	paymentHandler PaymentHandler
 }
 
 // New creates a mock runtime using the real system clock and crypto-seeded rand.
@@ -205,4 +209,29 @@ func (r *Runtime) SetHTTPHandler(h HTTPHandler) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.httpHandler = h
+}
+
+// WalletPay implements MockBackend.
+func (r *Runtime) WalletPay(amount int64, recipient, memo string) ([]byte, error) {
+	r.mu.Lock()
+	handler := r.paymentHandler
+	r.mu.Unlock()
+	if handler != nil {
+		return handler(amount, recipient, memo)
+	}
+	// Default: deduct from budget and return a dummy receipt.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.budget < amount {
+		return nil, fmt.Errorf("insufficient budget: have %d, need %d", r.budget, amount)
+	}
+	r.budget -= amount
+	return []byte("mock-payment-receipt"), nil
+}
+
+// SetPaymentHandler configures a function to handle mock wallet_pay requests.
+func (r *Runtime) SetPaymentHandler(h PaymentHandler) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.paymentHandler = h
 }

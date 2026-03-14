@@ -1,4 +1,4 @@
-.PHONY: help bootstrap build build-lab clean test lint vet fmt fmt-check tidy agent agent-heartbeat agent-reconciliation agent-pricewatcher agent-sentinel run-agent demo demo-portable demo-pricewatcher demo-sentinel gh-check gh-metadata gh-release
+.PHONY: help bootstrap build build-lab clean test lint vet fmt fmt-check tidy agent agent-heartbeat agent-reconciliation agent-pricewatcher agent-sentinel agent-x402buyer run-agent demo demo-portable demo-pricewatcher demo-sentinel demo-x402 gh-check gh-metadata gh-release
 
 .DEFAULT_GOAL := help
 
@@ -10,6 +10,7 @@ HEARTBEAT_AGENT_DIR := agents/heartbeat
 RECONCILIATION_AGENT_DIR := agents/research/reconciliation
 PRICEWATCHER_AGENT_DIR := agents/pricewatcher
 SENTINEL_AGENT_DIR := agents/sentinel
+X402BUYER_AGENT_DIR := agents/x402buyer
 
 # Go commands
 GOCMD := go
@@ -58,6 +59,7 @@ clean: ## Remove build artifacts
 	rm -f agents/research/reconciliation/agent.wasm
 	rm -f agents/pricewatcher/agent.wasm
 	rm -f agents/sentinel/agent.wasm
+	rm -f agents/x402buyer/agent.wasm
 	@echo "Clean complete"
 
 test: ## Run tests (with race detector)
@@ -136,6 +138,13 @@ agent-sentinel: ## Build treasury sentinel demo agent WASM
 	cd $(SENTINEL_AGENT_DIR) && $(MAKE) build
 	@echo "Agent built: $(SENTINEL_AGENT_DIR)/agent.wasm"
 
+agent-x402buyer: ## Build x402 buyer demo agent WASM
+	@echo "Building x402buyer agent..."
+	@which tinygo > /dev/null || \
+		(echo "tinygo not found. See docs/governance/DEVELOPMENT.md for installation" && exit 1)
+	cd $(X402BUYER_AGENT_DIR) && $(MAKE) build
+	@echo "Agent built: $(X402BUYER_AGENT_DIR)/agent.wasm"
+
 demo: build agent-reconciliation ## Build and run reconciliation demo
 	@echo "Building demo runner..."
 	@mkdir -p $(BINARY_DIR)
@@ -157,6 +166,14 @@ demo-sentinel: build agent-sentinel ## Run the treasury sentinel demo (effect li
 	@echo "Running Treasury Sentinel Demo..."
 	@chmod +x scripts/demo-sentinel.sh
 	@./scripts/demo-sentinel.sh
+
+demo-x402: build agent-x402buyer ## Run the x402 payment demo (pay for premium data, crash recovery)
+	@echo "Building paywall server..."
+	@mkdir -p $(BINARY_DIR)
+	$(GOBUILD) -o $(BINARY_DIR)/paywall ./cmd/paywall
+	@echo "Running x402 Payment Demo..."
+	@chmod +x scripts/demo-x402.sh
+	@./scripts/demo-x402.sh
 
 check: fmt-check vet lint test ## Run all checks (formatting, vet, lint, tests)
 	@echo "All checks passed"
