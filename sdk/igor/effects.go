@@ -196,6 +196,9 @@ func (e *EffectLog) Unmarshal(data []byte) {
 		if d.Err() != nil {
 			break
 		}
+		if d.pos >= len(d.data) {
+			break
+		}
 		state := IntentState(d.data[d.pos])
 		d.pos++
 

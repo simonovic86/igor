@@ -142,7 +142,11 @@ func (s *Sentinel) recordRefillIntent(ageSec int64) bool {
 	igor.Logf("[sentinel] Intent RECORDED: refill $%d.%02d (key=%x...)",
 		refillAmount/100, refillAmount%100, key[:4])
 	igor.Logf("[sentinel] Waiting for checkpoint before execution...")
-	return true // request fast tick so we proceed quickly
+	// Return false (standard 1s interval) so the runtime has time to
+	// persist a checkpoint containing this intent before we execute.
+	// If we returned true (10ms fast tick), executeRefill would run
+	// before the intent is checkpointed, and a crash would lose it.
+	return false
 }
 
 // executeRefill transitions a Recorded intent to InFlight and performs
