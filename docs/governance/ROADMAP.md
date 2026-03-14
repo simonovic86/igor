@@ -216,8 +216,13 @@ Igor's research foundation (Phases 2–5) proved that agents can checkpoint, mig
 
 **Goal:** Agents choose and pay for their own infrastructure.
 
+**Status:** In progress.
+
 **Scope:**
-- **HTTP hostcall** — agent calls external APIs (REST, webhooks)
+- ✅ **HTTP hostcall** — agent calls external APIs (REST, webhooks) — `internal/hostcall/http.go`, allowed_hosts, timeout, max response size
+- ✅ **Effect lifecycle model** — intent state machine in SDK for crash-safe effect tracking — `sdk/igor/effects.go`
+- ✅ **Price watcher demo** — agent fetching live crypto prices via HTTP hostcall — `agents/pricewatcher/`
+- ✅ **Treasury sentinel demo** — effect-safe treasury monitoring with crash recovery — `agents/sentinel/`
 - **x402/USDC wallet hostcall** — agent pays for services with real money
 - **Compute provider hostcall** — agent deploys itself to Akash, Golem, or similar
 - **Self-migration** — agent decides when and where to move based on price/performance
@@ -295,11 +300,11 @@ Igor v0 is **not ready for production** and may never be.
 
 ### Breaking Changes
 
-Phase 2 → Phase 3 may break:
-- Checkpoint format (add manifest)
-- Protocol messages (add capabilities)
-- CLI flags (restructure)
-- Agent lifecycle (new host functions)
+Product phase transitions may break:
+- Checkpoint format (new fields)
+- CLI flags (new subcommands)
+- Agent lifecycle (new hostcalls)
+- SDK API (new types)
 
 **No compatibility guarantees in v0.**
 
@@ -332,7 +337,8 @@ None. v0 is experimental. Things may be:
 
 ### Product Phase 2 Goals
 
-- Agent calls external HTTP APIs via hostcall
+- ✅ Agent calls external HTTP APIs via hostcall
+- ✅ Effect lifecycle model for crash-safe side effects
 - Agent pays for compute with real money (x402/USDC)
 - Agent deploys itself to Akash/Golem
 - Agent decides when to migrate
@@ -348,7 +354,7 @@ Igor development follows "done when it's done" philosophy:
 - Correctness over features
 - Learning over shipping
 
-Phase 3 began after Phase 2 validation. Tasks 6, 7, and 8 are complete.
+Research phases (2–5) complete. Product Phase 2 in progress.
 
 ---
 
@@ -367,7 +373,7 @@ Igor v0 is experimental research software.
 - Performance optimizations (premature)
 - Production deployments (not ready)
 
-Focus: Validate Phase 2 before expanding scope.
+Focus: Complete Product Phase 2 before expanding scope.
 
 ---
 
@@ -423,8 +429,8 @@ Igor is **not novel**. It combines existing ideas in a specific way to explore a
 
 ## Next Immediate Steps
 
-Product Phase 1 complete. Next:
+Product Phase 2 in progress. HTTP hostcall, effect model, and demo agents delivered. Next:
 
-1. **Product Phase 2: Agent Self-Provisioning** — HTTP hostcall, x402 wallet, Akash deployment
-2. **Demo agents** — more compelling demo agents that use external APIs
-3. **Developer experience** — better error messages, documentation, examples
+1. **x402/USDC wallet hostcall** — agent pays for services with real money
+2. **Compute provider integration** — agent deploys itself to Akash/Golem
+3. **Self-migration** — agent decides when and where to move based on price/performance

@@ -70,10 +70,10 @@ Last updated: 2026-03-13
 | Periodic self-verification | Implemented | `internal/runner/runner.go` `VerifyNextTick` |
 | Migration-time replay verification | Implemented | `internal/migration/service.go` `verifyMigrationReplay` |
 | Replay window (sliding buffer) | Implemented | `internal/agent/instance.go` `ReplayWindow` |
-| `--replay-window` CLI flag | Implemented | `cmd/igord/main.go` |
-| `--verify-interval` CLI flag | Implemented | `cmd/igord/main.go` |
-| Formal replay modes (off/periodic/on-migrate/full) | Implemented | `internal/config/config.go` `ReplayMode`, `cmd/igord/main.go` `--replay-mode` |
-| Replay cost metering | Implemented | `internal/replay/engine.go` `Result.Duration`, `cmd/igord/main.go` `--replay-cost-log` |
+| `--replay-window` CLI flag | Implemented | `cmd/igord-lab/main.go` |
+| `--verify-interval` CLI flag | Implemented | `cmd/igord-lab/main.go` |
+| Formal replay modes (off/periodic/on-migrate/full) | Implemented | `internal/config/config.go` `ReplayMode`, `cmd/igord-lab/main.go` `--replay-mode` |
+| Replay cost metering | Implemented | `internal/replay/engine.go` `Result.Duration`, `cmd/igord-lab/main.go` `--replay-cost-log` |
 
 ## Capability Membrane
 
@@ -85,9 +85,9 @@ Last updated: 2026-03-13
 | Observation recording (CM-4) | Implemented | `internal/eventlog/eventlog.go` |
 | Manifest in migration package | Implemented | `pkg/protocol/messages.go` `ManifestData` |
 | Pre-migration capability check (CE-5) | Implemented | `internal/migration/service.go` `handleIncomingMigration` |
-| Side-effect authority gating (CM-5) | Not implemented | Requires authority state machine (Phase 5). Currently no side-effect hostcalls exist (kv/net are unimplemented). When added, side-effect hostcalls MUST only execute in ACTIVE_OWNER state. |
+| HTTP hostcall (`http_request`) | Implemented | `internal/hostcall/http.go` — side-effect hostcall with allowed_hosts, timeout, max response size. Recorded in event log for replay. |
+| Side-effect authority gating (CM-5) | Not implemented | Requires authority state machine (Phase 5). HTTP hostcall exists but is not gated on ACTIVE_OWNER. When authority gating is added, side-effect hostcalls MUST only execute in ACTIVE_OWNER state. |
 | KV storage hostcalls | Not implemented | Roadmap future task |
-| Network hostcalls | Not implemented | Roadmap future phase |
 
 ## Identity and Authority
 
@@ -101,7 +101,7 @@ Last updated: 2026-03-13
 | OA-2 authority lifecycle states | Partial | Lease-based authority (Task 12) provides ACTIVE/EXPIRED/RECOVERY_REQUIRED states via `internal/authority/`. Full OA-2 ownership model (HANDOFF_INITIATED, HANDOFF_PENDING, RETIRED) tracked implicitly through migration handoff. |
 | EI-11 divergent lineage detection | Partial | RECOVERY_REQUIRED state implemented in `internal/authority/`. Signed checkpoint lineage (Task 13) enables tamper detection. Full cross-node distributed detection requires Task 15 (Permissionless Hardening). |
 | Signed checkpoint lineage | Implemented | Task 13: `pkg/lineage/`, checkpoint v0x04 with signed hash chain. See [SIGNED_LINEAGE.md](runtime/SIGNED_LINEAGE.md). |
-| Lease-based authority epochs | Implemented | Task 12: `internal/authority/`, checkpoint v0x03 with epoch metadata. See [LEASE_EPOCH.md](runtime/LEASE_EPOCH.md). |
+| Lease-based authority epochs | Implemented | Task 12: `internal/authority/`, epoch metadata in checkpoint v0x04 header. See [LEASE_EPOCH.md](runtime/LEASE_EPOCH.md). |
 | Cryptographic agent identity | Implemented | Task 13: `pkg/identity/`, Ed25519 agent keypairs with persistent storage. |
 | DID encoding (did:key multicodec) | Implemented | `pkg/identity/did.go`, base58btc with 0xed01 prefix. |
 
@@ -138,11 +138,14 @@ Last updated: 2026-03-13
 | Simulator replay verification | Implemented | `internal/simulator/simulator.go` `verifyTick` |
 | Checkpoint inspector | Implemented | `internal/inspector/inspector.go` |
 | WASM hash verification in inspector | Implemented | `internal/inspector/inspector.go` `VerifyWASM` |
-| Agent template (Survivor example) | Implemented | `agents/example/` |
+| Agent template (Survivor example) | Implemented | `agents/example/` (research phase artifact) |
 | Heartbeat demo agent | Implemented | `agents/heartbeat/` — tick count, age, milestones |
+| Price watcher demo agent | Implemented | `agents/pricewatcher/` — fetches BTC/ETH prices via HTTP hostcall, tracks high/low/latest |
+| Treasury sentinel demo agent | Implemented | `agents/sentinel/` — treasury monitoring with effect-safe crash recovery |
+| Effect lifecycle model (SDK) | Implemented | `sdk/igor/effects.go` — EffectLog, intent state machine (Recorded→InFlight→Confirmed/Unresolved→Compensated), resume rule |
 | Lineage chain verifier | Implemented | `internal/inspector/chain.go` `VerifyChain`, `PrintChain` |
-| `--simulate` CLI flag | Implemented | `cmd/igord/main.go` |
-| `--inspect-checkpoint` CLI flag | Implemented | `cmd/igord/main.go` |
+| `--simulate` CLI flag | Implemented | `cmd/igord-lab/main.go` |
+| `--inspect-checkpoint` CLI flag | Implemented | `cmd/igord-lab/main.go` |
 
 ## Runtime Optimizations
 

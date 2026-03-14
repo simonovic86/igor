@@ -12,7 +12,7 @@ type Agent interface {
 	Init()
 
 	// Tick executes one step of the agent's logic.
-	// Must complete within 100ms.
+	// Must complete within the tick timeout (15s).
 	// Return true if there is more work pending (tick again soon, subject to
 	// 10ms minimum interval). Return false to sleep until the next normal
 	// interval (~1 Hz).

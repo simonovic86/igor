@@ -143,7 +143,7 @@ The system is designed to **fail loudly** when enforcement invariants are violat
 
 ### RE-5: Tick Duration Limit
 
-**Invariant:** Each tick completes within 100ms.
+**Invariant:** Each tick completes within 15s.
 
 **Derives from:** EI-1 (single active instance — responsiveness supports migration handoff)
 
@@ -275,7 +275,7 @@ init → [tick* → checkpoint*] → resume (optional)
 | RE-2 | Agent state survives shutdown and migration | Checkpoint | EI-2, EI-10 |
 | RE-3 | Budget is conserved (never created or destroyed) | Budget | EI-3 |
 | RE-4 | Budget never increases during execution | Budget | EI-3 |
-| RE-5 | Tick completes within 100ms | Tick | EI-1 |
+| RE-5 | Tick completes within 15s | Tick | EI-1 |
 | RE-6 | Tick is deterministic given same state | Tick | EI-3 |
 | RE-7 | Agents cannot access each other's checkpoints | Sandbox | EI-4, OA-1 |
 | RE-8 | Lifecycle functions called in strict order | Lifecycle | EI-2, OA-2 |
@@ -287,7 +287,7 @@ init → [tick* → checkpoint*] → resume (optional)
 ### What Igor Guarantees
 
 1. **Agents execute in WASM sandbox**
-2. **Ticks timeout at 100ms**
+2. **Ticks timeout at 15s**
 3. **Memory limited to 64MB**
 4. **Budget decreases monotonically**
 5. **Checkpoints are atomic**
