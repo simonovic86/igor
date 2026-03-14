@@ -36,6 +36,15 @@ import (
 // MigrateProtocol is the libp2p protocol ID for agent migration.
 const MigrateProtocol protocol.ID = "/igor/migrate/1.0.0"
 
+// getLease extracts the *authority.Lease from an instance's Lease field (any).
+func getLease(instance *agent.Instance) *authority.Lease {
+	if instance.Lease == nil {
+		return nil
+	}
+	l, _ := instance.Lease.(*authority.Lease)
+	return l
+}
+
 // Service coordinates agent migration between nodes.
 type Service struct {
 	host            host.Host
@@ -137,7 +146,7 @@ func (s *Service) buildMigrationPackage(
 	if hdr, _, parseErr := agent.ParseCheckpointHeader(checkpoint); parseErr == nil {
 		budgetVal = hdr.Budget
 		pricePerSecond = hdr.PricePerSecond
-		epoch = hdr.Epoch
+		epoch = authority.Epoch{MajorVersion: hdr.Epoch.MajorVersion, LeaseGeneration: hdr.Epoch.LeaseGeneration}
 		s.logger.Info("Budget metadata extracted",
 			"budget", budget.Format(budgetVal),
 			"price_per_second", budget.Format(pricePerSecond),
@@ -209,10 +218,12 @@ func (s *Service) MigrateAgent(
 
 	// Transition local lease to HANDOFF_INITIATED before anything else.
 	s.mu.RLock()
-	if li, ok := s.activeAgents[agentID]; ok && li.Lease != nil {
-		if err := li.Lease.TransitionToHandoff(); err != nil {
-			s.mu.RUnlock()
-			return fmt.Errorf("lease handoff transition: %w", err)
+	if li, ok := s.activeAgents[agentID]; ok {
+		if lease := getLease(li); lease != nil {
+			if err := lease.TransitionToHandoff(); err != nil {
+				s.mu.RUnlock()
+				return fmt.Errorf("lease handoff transition: %w", err)
+			}
 		}
 	}
 	s.mu.RUnlock()
@@ -298,9 +309,11 @@ func (s *Service) migrateToTarget(
 // and cleans up local storage after a successful migration.
 func (s *Service) finalizeMigration(ctx context.Context, agentID string, localInstance *agent.Instance) {
 	// Transition source lease to RETIRED after target confirms
-	if localInstance != nil && localInstance.Lease != nil {
-		if err := localInstance.Lease.TransitionToRetired(); err != nil {
-			s.logger.Warn("Failed to transition lease to RETIRED", "error", err)
+	if localInstance != nil {
+		if lease := getLease(localInstance); lease != nil {
+			if err := lease.TransitionToRetired(); err != nil {
+				s.logger.Warn("Failed to transition lease to RETIRED", "error", err)
+			}
 		}
 	}
 
@@ -351,9 +364,11 @@ func (s *Service) MigrateAgentWithRetry(
 	s.mu.RLock()
 	li, hasAgent := s.activeAgents[agentID]
 	s.mu.RUnlock()
-	if hasAgent && li.Lease != nil {
-		if err := li.Lease.TransitionToHandoff(); err != nil {
-			return "", fmt.Errorf("lease handoff transition: %w", err)
+	if hasAgent {
+		if lease := getLease(li); lease != nil {
+			if err := lease.TransitionToHandoff(); err != nil {
+				return "", fmt.Errorf("lease handoff transition: %w", err)
+			}
 		}
 	}
 
@@ -408,8 +423,10 @@ func (s *Service) MigrateAgentWithRetry(
 				s.logger.Error("Transfer sent but no confirmation (FS-2) — entering RECOVERY_REQUIRED",
 					"agent_id", agentID,
 				)
-				if hasAgent && li.Lease != nil {
-					li.Lease.State = authority.StateRecoveryRequired
+				if hasAgent {
+					if lease := getLease(li); lease != nil {
+						lease.State = authority.StateRecoveryRequired
+					}
 				}
 				return "", fmt.Errorf("migration ambiguous (transfer sent, no confirmation): %w", migrateErr)
 			}
@@ -447,11 +464,13 @@ func (s *Service) revertHandoff(agentID string) {
 	s.mu.RLock()
 	li, ok := s.activeAgents[agentID]
 	s.mu.RUnlock()
-	if ok && li.Lease != nil {
-		if err := li.Lease.RevertHandoff(); err != nil {
-			s.logger.Warn("Failed to revert handoff", "agent_id", agentID, "error", err)
-		} else {
-			s.logger.Info("Handoff reverted, agent can resume ticking", "agent_id", agentID)
+	if ok {
+		if lease := getLease(li); lease != nil {
+			if err := lease.RevertHandoff(); err != nil {
+				s.logger.Warn("Failed to revert handoff", "agent_id", agentID, "error", err)
+			} else {
+				s.logger.Info("Handoff reverted, agent can resume ticking", "agent_id", agentID)
+			}
 		}
 	}
 }
@@ -642,11 +661,12 @@ func (s *Service) handleIncomingMigration(stream network.Stream) {
 
 	// Grant lease with advanced epoch (MajorVersion+1) for the migrated agent
 	if s.leaseConfig.Duration > 0 {
-		instance.Lease = authority.NewLeaseFromMigration(pkg.MajorVersion, s.leaseConfig)
+		lease := authority.NewLeaseFromMigration(pkg.MajorVersion, s.leaseConfig)
+		instance.Lease = lease
 		s.logger.Info("Lease granted to migrated agent",
 			"agent_id", pkg.AgentID,
-			"epoch", instance.Lease.Epoch,
-			"expiry", instance.Lease.Expiry,
+			"epoch", lease.Epoch,
+			"expiry", lease.Expiry,
 		)
 	}
 

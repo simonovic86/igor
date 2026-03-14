@@ -15,7 +15,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/simonovic86/igor/internal/config"
+	"github.com/simonovic86/igor/internal/agent"
 	"github.com/simonovic86/igor/internal/eventlog"
 	"github.com/simonovic86/igor/internal/wasmutil"
 	"github.com/simonovic86/igor/pkg/manifest"
@@ -25,7 +25,7 @@ import (
 )
 
 // replayTickTimeout aliases the shared tick timeout constant.
-const replayTickTimeout = config.TickTimeout
+const replayTickTimeout = agent.DefaultTickTimeout
 
 // Result describes the outcome of replaying a single tick.
 type Result struct {

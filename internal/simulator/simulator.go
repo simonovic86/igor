@@ -13,7 +13,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/simonovic86/igor/internal/config"
+	"github.com/simonovic86/igor/internal/agent"
 	"github.com/simonovic86/igor/internal/eventlog"
 	"github.com/simonovic86/igor/internal/hostcall"
 	"github.com/simonovic86/igor/internal/replay"
@@ -242,7 +242,7 @@ func executeTick(ctx context.Context, env *simEnv, result *Result, tickNum uint6
 
 	env.el.BeginTick(tickNum)
 
-	tickCtx, cancel := context.WithTimeout(ctx, config.TickTimeout)
+	tickCtx, cancel := context.WithTimeout(ctx, agent.DefaultTickTimeout)
 	start := time.Now()
 	_, tickErr := env.mod.ExportedFunction("agent_tick").Call(tickCtx)
 	elapsed := time.Since(start)

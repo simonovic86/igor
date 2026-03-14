@@ -15,7 +15,7 @@ Igor is the runtime for portable, immortal software agents. The checkpoint file 
 ```bash
 make bootstrap       # Install toolchain (Go, golangci-lint, goimports, TinyGo)
 make build           # Build igord → bin/igord
-make agent              # Build example WASM agent → agents/example/agent.wasm
+make agent              # Build example WASM agent → agents/research/example/agent.wasm
 make agent-heartbeat    # Build heartbeat WASM agent → agents/heartbeat/agent.wasm
 make agent-pricewatcher # Build price watcher WASM agent → agents/pricewatcher/agent.wasm
 make agent-sentinel     # Build treasury sentinel WASM agent → agents/sentinel/agent.wasm
@@ -44,7 +44,7 @@ Run manually (new subcommands):
 
 Legacy mode (P2P/migration):
 ```bash
-./bin/igord --run-agent agents/example/agent.wasm --budget 10.0
+./bin/igord --run-agent agents/research/example/agent.wasm --budget 10.0
 ./bin/igord --migrate-agent local-agent --to /ip4/127.0.0.1/tcp/4002/p2p/<peerID> --wasm agent.wasm
 ```
 
@@ -86,7 +86,8 @@ Atomic writes via temp file → fsync → rename. Every checkpoint is also archi
 - `agents/heartbeat/` — Demo agent: logs heartbeat with tick count and age, milestones every 10 ticks
 - `agents/pricewatcher/` — Demo agent: fetches BTC/ETH prices from CoinGecko, tracks high/low/latest across checkpoint/resume
 - `agents/sentinel/` — Treasury sentinel: monitors simulated treasury balance, triggers refills with effect-safe intent tracking, demonstrates crash recovery and reconciliation
-- `agents/example/` — Original demo agent (Survivor) from research phases
+- `agents/research/example/` — Original demo agent (Survivor) from research phases
+- `agents/research/reconciliation/` — Bridge reconciliation demo agent (research phase)
 - `scripts/demo-portable.sh` — End-to-end portable agent demo
 
 ### Migration flow

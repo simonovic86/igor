@@ -112,7 +112,7 @@ Build the example agent:
 make agent
 ```
 
-Output: `agents/example/agent.wasm`
+Output: `agents/research/example/agent.wasm`
 
 ### Running Locally
 
@@ -125,7 +125,7 @@ make run-agent
 Or manually:
 
 ```bash
-./bin/igord --run-agent agents/example/agent.wasm --budget 10.0
+./bin/igord --run-agent agents/research/example/agent.wasm --budget 10.0
 ```
 
 ### Code Quality
@@ -489,7 +489,7 @@ Use delve debugger:
 go install github.com/go-delve/delve/cmd/dlv@latest
 
 # Debug igord
-dlv exec ./bin/igord -- --run-agent agents/example/agent.wasm
+dlv exec ./bin/igord -- --run-agent agents/research/example/agent.wasm
 ```
 
 ### Agent Debugging

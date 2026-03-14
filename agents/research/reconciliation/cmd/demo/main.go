@@ -158,8 +158,8 @@ func runDemo(wasmPath string) error {
 	}
 
 	leaseEpoch := "(1,0)"
-	if instB.Lease != nil {
-		leaseEpoch = instB.Lease.Epoch.String()
+	if lease, ok := instB.Lease.(*authority.Lease); ok && lease != nil {
+		leaseEpoch = lease.Epoch.String()
 	}
 	fmt.Printf("  Agent migrated to node-b (epoch: %s)\n", leaseEpoch)
 	fmt.Println()

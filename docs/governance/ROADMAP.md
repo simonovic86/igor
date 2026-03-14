@@ -78,7 +78,7 @@ Igor has completed its research foundation (**Phases 2–5**) and pivoted to pro
 - Capability mocks (`sdk/igor/mock/`): pluggable `MockBackend` for native testing without WASM, deterministic clock/rand, log capture
 - Local simulator (`internal/simulator/`): single-process WASM runner with deterministic hostcalls, per-tick replay verification, checkpoint round-trip verification
 - Checkpoint inspector (`internal/inspector/`): parse and display checkpoint files, WASM hash verification
-- Agent template (`agents/example/`): Survivor agent demonstrating SDK usage, hostcall patterns, and state serialization
+- Agent template (`agents/research/example/`): Survivor agent demonstrating SDK usage, hostcall patterns, and state serialization
 - CLI flags: `--simulate`, `--ticks`, `--verify`, `--deterministic`, `--seed`, `--inspect-checkpoint`, `--inspect-wasm`
 
 **Outcome:** Developers can build agents without manually managing WASM exports, memory, and hostcall signatures. Agents can be tested natively with mocks or as compiled WASM in the simulator.

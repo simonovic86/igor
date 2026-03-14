@@ -138,7 +138,7 @@ Last updated: 2026-03-13
 | Simulator replay verification | Implemented | `internal/simulator/simulator.go` `verifyTick` |
 | Checkpoint inspector | Implemented | `internal/inspector/inspector.go` |
 | WASM hash verification in inspector | Implemented | `internal/inspector/inspector.go` `VerifyWASM` |
-| Agent template (Survivor example) | Implemented | `agents/example/` (research phase artifact) |
+| Agent template (Survivor example) | Implemented | `agents/research/example/` (research phase artifact) |
 | Heartbeat demo agent | Implemented | `agents/heartbeat/` — tick count, age, milestones |
 | Price watcher demo agent | Implemented | `agents/pricewatcher/` — fetches BTC/ETH prices via HTTP hostcall, tracks high/low/latest |
 | Treasury sentinel demo agent | Implemented | `agents/sentinel/` — treasury monitoring with effect-safe crash recovery |

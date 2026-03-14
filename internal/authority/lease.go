@@ -200,3 +200,18 @@ func (l *Lease) Recover() error {
 func (l *Lease) Config() LeaseConfig {
 	return l.config
 }
+
+// GetMajorVersion implements agent.LeaseInfo.
+func (l *Lease) GetMajorVersion() uint64 {
+	return l.Epoch.MajorVersion
+}
+
+// GetLeaseGeneration implements agent.LeaseInfo.
+func (l *Lease) GetLeaseGeneration() uint64 {
+	return l.Epoch.LeaseGeneration
+}
+
+// ExpiryUnixNano implements agent.LeaseInfo.
+func (l *Lease) ExpiryUnixNano() int64 {
+	return l.Expiry.UnixNano()
+}

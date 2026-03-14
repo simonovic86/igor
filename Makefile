@@ -5,9 +5,9 @@
 # Build configuration
 BINARY_NAME := igord
 BINARY_DIR := bin
-AGENT_DIR := agents/example
+AGENT_DIR := agents/research/example
 HEARTBEAT_AGENT_DIR := agents/heartbeat
-RECONCILIATION_AGENT_DIR := agents/reconciliation
+RECONCILIATION_AGENT_DIR := agents/research/reconciliation
 PRICEWATCHER_AGENT_DIR := agents/pricewatcher
 SENTINEL_AGENT_DIR := agents/sentinel
 
@@ -52,10 +52,10 @@ clean: ## Remove build artifacts
 	$(GOCLEAN)
 	rm -rf $(BINARY_DIR)
 	rm -rf checkpoints
-	rm -f agents/example/agent.wasm
-	rm -f agents/example/agent.wasm.checkpoint
+	rm -f agents/research/example/agent.wasm
+	rm -f agents/research/example/agent.wasm.checkpoint
 	rm -f agents/heartbeat/agent.wasm
-	rm -f agents/reconciliation/agent.wasm
+	rm -f agents/research/reconciliation/agent.wasm
 	rm -f agents/pricewatcher/agent.wasm
 	rm -f agents/sentinel/agent.wasm
 	@echo "Clean complete"
@@ -139,7 +139,7 @@ agent-sentinel: ## Build treasury sentinel demo agent WASM
 demo: build agent-reconciliation ## Build and run reconciliation demo
 	@echo "Building demo runner..."
 	@mkdir -p $(BINARY_DIR)
-	$(GOBUILD) -o $(BINARY_DIR)/demo-reconciliation ./cmd/demo-reconciliation
+	$(GOBUILD) -o $(BINARY_DIR)/demo-reconciliation ./agents/research/reconciliation/cmd/demo
 	@echo "Running Bridge Reconciliation Demo..."
 	./$(BINARY_DIR)/demo-reconciliation --wasm $(RECONCILIATION_AGENT_DIR)/agent.wasm
 

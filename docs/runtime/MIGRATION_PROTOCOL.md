@@ -283,7 +283,7 @@ Source Node                              Target Node
 ./bin/igord \
   --migrate-agent local-agent \
   --to /ip4/127.0.0.1/tcp/4002/p2p/12D3KooW... \
-  --wasm agents/example/agent.wasm
+  --wasm agents/research/example/agent.wasm
 ```
 
 ### Requirements

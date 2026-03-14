@@ -372,7 +372,7 @@ If `agent_resume()` fails:
 
 ## Example Agent (Survivor)
 
-Complete implementation in `agents/example/main.go` using the Igor SDK (`sdk/igor`):
+Complete implementation in `agents/research/example/main.go` using the Igor SDK (`sdk/igor`):
 
 ```go
 type Survivor struct {

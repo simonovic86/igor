@@ -99,7 +99,7 @@ internal/migration/     # P2P migration
 internal/storage/       # Checkpoint persistence
 internal/p2p/           # libp2p networking
 pkg/protocol/           # Migration messages
-agents/example/         # Counter agent (TinyGo)
+agents/research/example/         # Counter agent (TinyGo)
 docs/                   # Technical documentation
 
 TECHNICAL STACK

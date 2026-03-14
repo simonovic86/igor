@@ -141,7 +141,7 @@ Documented in: README.md, SECURITY.md, docs/runtime/SECURITY_MODEL.md
 - [ ] `make clean && make build` succeeds
 - [ ] Binary runs: `./bin/igord`
 - [ ] Agent example compiles: `make agent`
-- [ ] Agent runs: `./bin/igord --run-agent agents/example/agent.wasm`
+- [ ] Agent runs: `./bin/igord --run-agent agents/research/example/agent.wasm`
 - [ ] No segfaults or panics during normal operation
 
 ### Platform Support
@@ -186,7 +186,7 @@ make build
 make check
 
 # Functionality test
-./bin/igord --run-agent agents/example/agent.wasm --budget 1.0
+./bin/igord --run-agent agents/research/example/agent.wasm --budget 1.0
 # Verify: agent runs, ticks, checkpoints, terminates on interrupt
 ```
 

@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/simonovic86/igor/internal/agent"
-	"github.com/simonovic86/igor/internal/authority"
 	"github.com/simonovic86/igor/pkg/budget"
 	"github.com/simonovic86/igor/pkg/lineage"
 )
@@ -29,7 +28,7 @@ type Result struct {
 	TickNumber      uint64
 	WASMHash        [32]byte
 	WASMHashHex     string
-	Epoch           authority.Epoch
+	Epoch           agent.EpochData
 	LeaseExpiry     int64 // Unix nanoseconds; 0 = no lease
 	StateSize       int
 	State           []byte

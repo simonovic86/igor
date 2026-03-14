@@ -68,17 +68,17 @@ make agent    # from repo root
 
 ```bash
 make run-agent                    # default budget 1.0
-./bin/igord --run-agent agents/example/agent.wasm --budget 10.0
+./bin/igord --run-agent agents/research/example/agent.wasm --budget 10.0
 ```
 
 ## Demonstrating Survival
 
 ```bash
 # Start the agent
-./bin/igord --run-agent agents/example/agent.wasm --budget 10.0
+./bin/igord --run-agent agents/research/example/agent.wasm --budget 10.0
 
 # Let it tick a few times, then Ctrl-C (checkpoints on shutdown)
 
 # Restart — it resumes from checkpoint, tick count and age continue
-./bin/igord --run-agent agents/example/agent.wasm --budget 10.0
+./bin/igord --run-agent agents/research/example/agent.wasm --budget 10.0
 ```

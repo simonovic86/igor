@@ -13,11 +13,22 @@ import (
 	"log/slog"
 
 	"github.com/simonovic86/igor/internal/agent"
+	"github.com/simonovic86/igor/internal/authority"
 	"github.com/simonovic86/igor/internal/config"
 	"github.com/simonovic86/igor/internal/p2p"
 	"github.com/simonovic86/igor/internal/replay"
 	"github.com/simonovic86/igor/internal/runner"
 )
+
+// getLease extracts the *authority.Lease from instance.Lease (which is any).
+// Returns nil if leases are disabled.
+func getLease(instance *agent.Instance) *authority.Lease {
+	if instance.Lease == nil {
+		return nil
+	}
+	l, _ := instance.Lease.(*authority.Lease)
+	return l
+}
 
 // HandleDivergenceAction acts on the escalation policy returned by VerifyNextTick.
 // migrateFn is optional — passing nil preserves the existing "fall through to pause"
@@ -58,19 +69,20 @@ func HandleDivergenceAction(ctx context.Context, instance *agent.Instance, cfg *
 // Returns nil if ticking is allowed, or an error if the lease has expired.
 // No-op if leases are disabled (instance.Lease == nil).
 func CheckAndRenewLease(instance *agent.Instance, logger *slog.Logger) error {
-	if instance.Lease == nil {
+	lease := getLease(instance)
+	if lease == nil {
 		return nil
 	}
-	if err := instance.Lease.ValidateForTick(); err != nil {
+	if err := lease.ValidateForTick(); err != nil {
 		return err
 	}
-	if instance.Lease.NeedsRenewal() {
-		if err := instance.Lease.Renew(); err != nil {
+	if lease.NeedsRenewal() {
+		if err := lease.Renew(); err != nil {
 			logger.Error("Lease renewal failed", "error", err)
 		} else {
 			logger.Info("Lease renewed",
-				"epoch", instance.Lease.Epoch,
-				"expiry", instance.Lease.Expiry,
+				"epoch", lease.Epoch,
+				"expiry", lease.Expiry,
 			)
 		}
 	}
@@ -90,16 +102,17 @@ func HandleLeaseExpiry(ctx context.Context, instance *agent.Instance, leaseErr e
 
 // AttemptLeaseRecovery tries to recover from RECOVERY_REQUIRED state.
 func AttemptLeaseRecovery(ctx context.Context, instance *agent.Instance, logger *slog.Logger) error {
-	if instance.Lease == nil {
+	lease := getLease(instance)
+	if lease == nil {
 		return fmt.Errorf("lease recovery: no lease configured")
 	}
-	if err := instance.Lease.Recover(); err != nil {
+	if err := lease.Recover(); err != nil {
 		return fmt.Errorf("lease recovery: %w", err)
 	}
 	logger.Info("Lease recovered",
 		"agent_id", instance.AgentID,
-		"epoch", instance.Lease.Epoch,
-		"expiry", instance.Lease.Expiry,
+		"epoch", lease.Epoch,
+		"expiry", lease.Expiry,
 	)
 	trySaveCheckpoint(ctx, instance, logger)
 	return nil

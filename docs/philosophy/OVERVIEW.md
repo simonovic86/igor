@@ -111,7 +111,7 @@ go build -o bin/igord ./cmd/igord
 ### Run an Agent
 
 ```bash
-./bin/igord --run-agent agents/example/agent.wasm --budget 10.0
+./bin/igord --run-agent agents/research/example/agent.wasm --budget 10.0
 ```
 
 ### Migrate an Agent
@@ -124,7 +124,7 @@ go build -o bin/igord ./cmd/igord
 ./bin/igord \
   --migrate-agent local-agent \
   --to /ip4/127.0.0.1/tcp/4002/p2p/<peer_id> \
-  --wasm agents/example/agent.wasm
+  --wasm agents/research/example/agent.wasm
 ```
 
 ## Further Reading
