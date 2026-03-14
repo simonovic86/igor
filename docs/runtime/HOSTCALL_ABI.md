@@ -91,13 +91,47 @@ Persistent key-value storage scoped to the agent. Reads are observations; writes
 | `kv_put` | `(key_ptr: i32, key_len: i32, val_ptr: i32, val_len: i32) -> (i32)` | Writes value for key. Side effect. Returns 0 on success, negative on error. |
 | `kv_delete` | `(key_ptr: i32, key_len: i32) -> (i32)` | Deletes key. Side effect. Returns 0 on success, negative on error. |
 
-### net — Network Requests (Not Yet Implemented)
+### http — HTTP Requests
 
-HTTP-like request/response capability. Side-effect hostcall gated on ACTIVE_OWNER (CE-4). Reserved for a future phase.
+HTTP request/response capability for calling external APIs. Side-effect hostcall. Recorded in event log for replay (CE-3).
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `net_request` | `(req_ptr: i32, req_len: i32, resp_ptr: i32, resp_cap: i32) -> (i32)` | Sends request, writes response to buffer. Returns bytes written or negative on error. |
+| `http_request` | `(method_ptr: i32, method_len: i32, url_ptr: i32, url_len: i32, headers_ptr: i32, headers_len: i32, body_ptr: i32, body_len: i32, resp_ptr: i32, resp_cap: i32) -> (i32)` | Sends HTTP request, writes response to buffer. Returns HTTP status code (>0) on success, negative error code on failure. |
+
+**Implementation:** `internal/hostcall/http.go` — reads method, URL, headers, and body from WASM memory, executes the request via `http.Client`, writes response as `[body_len: 4 bytes LE][body: N bytes]` to the response buffer, records status code and body in event log.
+
+**Replay behavior:** During replay, returns the recorded status code and response body from the event log.
+
+**Manifest configuration:**
+```json
+{
+  "http": {
+    "version": 1,
+    "options": {
+      "allowed_hosts": ["api.coingecko.com"],
+      "timeout_ms": 10000,
+      "max_response_bytes": 1048576
+    }
+  }
+}
+```
+
+**Options:**
+- `allowed_hosts` — list of permitted hostnames (empty = all hosts allowed)
+- `timeout_ms` — per-request timeout in milliseconds (default: 10000)
+- `max_response_bytes` — maximum response body size (default: 1MB)
+
+**Error codes:**
+| Value | Meaning |
+|-------|---------|
+| `-1` | Network error |
+| `-2` | Input too long (URL > 8KB, headers > 32KB, body > 1MB) |
+| `-3` | Host not in allowed_hosts |
+| `-4` | Request timeout |
+| `-5` | Response body exceeds max_response_bytes |
+
+**Size hint:** When response buffer is too small (`-5`), the first 4 bytes of the response buffer contain the required body length as LE uint32, allowing the agent to retry with a larger allocation.
 
 ---
 
@@ -131,7 +165,8 @@ Agents declare required capabilities in their manifest. The manifest is evaluate
     "clock": { "version": 1 },
     "rand": { "version": 1 },
     "log": { "version": 1 },
-    "wallet": { "version": 1 }
+    "wallet": { "version": 1 },
+    "http": { "version": 1, "options": { "allowed_hosts": ["api.example.com"] } }
   },
   "resource_limits": {
     "max_memory_bytes": 33554432

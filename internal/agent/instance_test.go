@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/simonovic86/igor/internal/config"
 	"github.com/simonovic86/igor/internal/eventlog"
 	"github.com/simonovic86/igor/internal/runtime"
 	"github.com/simonovic86/igor/internal/storage"
@@ -932,7 +931,7 @@ func TestTick_TimeoutEnforcement(t *testing.T) {
 	t.Logf("Tick timed out after %v with error: %v", elapsed, err)
 
 	// Should complete within a reasonable bound (allow generous margin for CI)
-	if elapsed > config.TickTimeout+5*time.Second {
-		t.Fatalf("tick took too long: %v (expected < %v)", elapsed, config.TickTimeout+5*time.Second)
+	if elapsed > DefaultTickTimeout+5*time.Second {
+		t.Fatalf("tick took too long: %v (expected < %v)", elapsed, DefaultTickTimeout+5*time.Second)
 	}
 }

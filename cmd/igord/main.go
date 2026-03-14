@@ -206,7 +206,7 @@ func runStandalone(wasmPath, agentID string, budgetVal float64, manifestPath, ch
 	defer engine.Close(ctx)
 
 	// Load or generate agent identity.
-	agentIdent, err := loadOrGenerateIdentity(ctx, storageProvider, agentID, logger)
+	agentIdent, err := identity.LoadOrGenerate(ctx, storageProvider, agentID, logger)
 	if err != nil {
 		logger.Error("Agent identity error", "error", err)
 		os.Exit(1)
@@ -300,7 +300,7 @@ func resumeFromCheckpoint(checkpointPath, wasmPath, agentID string, budgetVal fl
 		agentIdent, _ = identity.UnmarshalBinary(idData)
 	}
 	if agentIdent == nil {
-		agentIdent, err = loadOrGenerateIdentity(ctx, storageProvider, agentID, logger)
+		agentIdent, err = identity.LoadOrGenerate(ctx, storageProvider, agentID, logger)
 		if err != nil {
 			logger.Error("Agent identity error", "error", err)
 			os.Exit(1)
@@ -401,41 +401,6 @@ func runTickLoop(ctx context.Context, instance *agent.Instance, logger *slog.Log
 			}
 		}
 	}
-}
-
-// loadOrGenerateIdentity loads an existing agent identity from storage,
-// or generates a new one and persists it.
-func loadOrGenerateIdentity(
-	ctx context.Context,
-	storageProvider storage.Provider,
-	agentID string,
-	logger *slog.Logger,
-) (*identity.AgentIdentity, error) {
-	data, err := storageProvider.LoadIdentity(ctx, agentID)
-	if err == nil {
-		id, parseErr := identity.UnmarshalBinary(data)
-		if parseErr != nil {
-			logger.Warn("Corrupted agent identity, generating new", "error", parseErr)
-		} else {
-			logger.Info("Agent identity loaded",
-				"agent_id", agentID,
-				"pub_key_size", len(id.PublicKey),
-			)
-			return id, nil
-		}
-	}
-
-	id, err := identity.Generate()
-	if err != nil {
-		return nil, fmt.Errorf("generate identity: %w", err)
-	}
-
-	if err := storageProvider.SaveIdentity(ctx, agentID, id.MarshalBinary()); err != nil {
-		return nil, fmt.Errorf("save identity: %w", err)
-	}
-
-	logger.Info("Agent identity generated and saved", "agent_id", agentID)
-	return id, nil
 }
 
 // agentIDFromPath derives an agent ID from a WASM file path.

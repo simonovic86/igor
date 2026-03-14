@@ -14,8 +14,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/simonovic86/igor/internal/authority"
-	"github.com/simonovic86/igor/internal/config"
 	"github.com/simonovic86/igor/internal/eventlog"
 	"github.com/simonovic86/igor/internal/hostcall"
 	"github.com/simonovic86/igor/internal/runtime"
@@ -44,7 +42,33 @@ const (
 	// DefaultReplayWindowSize is the number of recent tick snapshots retained
 	// for sliding replay verification (CM-4).
 	DefaultReplayWindowSize = 16
+
+	// DefaultTickTimeout is the maximum duration for a single agent tick.
+	// Used by agent execution, replay verification, and the simulator.
+	// Set to 15s to accommodate agents making HTTP requests during ticks.
+	DefaultTickTimeout = 15 * time.Second
 )
+
+// EpochData holds authority epoch metadata from a checkpoint header.
+// Decoupled from the authority state machine (which is a research/P2P concern).
+type EpochData struct {
+	MajorVersion    uint64
+	LeaseGeneration uint64
+}
+
+// String returns a human-readable representation of the epoch.
+func (e EpochData) String() string {
+	return fmt.Sprintf("(%d,%d)", e.MajorVersion, e.LeaseGeneration)
+}
+
+// LeaseInfo provides lease metadata for checkpoint building.
+// Implemented by authority.Lease; nil when leases are disabled.
+// Research code may type-assert to *authority.Lease for full API access.
+type LeaseInfo interface {
+	GetMajorVersion() uint64
+	GetLeaseGeneration() uint64
+	ExpiryUnixNano() int64
+}
 
 // CheckpointHeader holds all parsed checkpoint metadata.
 // Returned by ParseCheckpointHeader for clean access to all fields.
@@ -54,7 +78,7 @@ type CheckpointHeader struct {
 	PricePerSecond int64
 	TickNumber     uint64
 	WASMHash       [32]byte
-	Epoch          authority.Epoch
+	Epoch          EpochData
 	LeaseExpiry    int64 // Unix nanoseconds; 0 = no lease
 	// V4 lineage fields (zero values for v0x02/v0x03)
 	PrevHash    [32]byte
@@ -116,7 +140,8 @@ type Instance struct {
 	BudgetAdapter   settlement.BudgetAdapter // optional; nil = no external budget validation
 
 	// Lease-based authority (Phase 5: Hardening)
-	Lease *authority.Lease // Lease state; nil = leases disabled
+	// Product code: always nil. Research code sets this to *authority.Lease.
+	Lease any // nil = leases disabled; set to *authority.Lease for research
 
 	// Agent cryptographic identity (Task 13: Signed Checkpoint Lineage)
 	AgentIdentity      *identity.AgentIdentity // Agent's Ed25519 keypair; nil = lineage disabled
@@ -397,7 +422,7 @@ func (i *Instance) Tick(ctx context.Context) (bool, error) {
 	i.EventLog.BeginTick(i.TickNumber)
 
 	// Enforce tick timeout
-	tickCtx, cancel := context.WithTimeout(ctx, config.TickTimeout)
+	tickCtx, cancel := context.WithTimeout(ctx, DefaultTickTimeout)
 	defer cancel()
 
 	fn := i.Module.ExportedFunction("agent_tick")
@@ -642,10 +667,10 @@ func (i *Instance) buildCheckpoint(state []byte) ([]byte, error) {
 	// Lease epoch metadata (zero values if leases disabled)
 	var majorVersion, leaseGeneration uint64
 	var leaseExpiryNanos int64
-	if i.Lease != nil {
-		majorVersion = i.Lease.Epoch.MajorVersion
-		leaseGeneration = i.Lease.Epoch.LeaseGeneration
-		leaseExpiryNanos = i.Lease.Expiry.UnixNano()
+	if lease, ok := i.Lease.(LeaseInfo); ok && lease != nil {
+		majorVersion = lease.GetMajorVersion()
+		leaseGeneration = lease.GetLeaseGeneration()
+		leaseExpiryNanos = lease.ExpiryUnixNano()
 	}
 
 	if i.AgentIdentity == nil {

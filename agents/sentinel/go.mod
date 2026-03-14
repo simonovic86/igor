@@ -1,4 +1,4 @@
-module github.com/simonovic86/igor/agents/example
+module github.com/simonovic86/igor/agents/sentinel
 
 go 1.24
 

@@ -62,7 +62,7 @@ Loop: Tick → Meter → Budget Check → Checkpoint (periodic) → Tick ...
 
 **Runtime Actions:**
 - Call `agent_tick()` every 1 second
-- Enforce 100ms timeout
+- Enforce 15s timeout
 - Measure execution duration
 - Calculate cost
 - Deduct from budget
@@ -72,7 +72,7 @@ Loop: Tick → Meter → Budget Check → Checkpoint (periodic) → Tick ...
 **Agent Actions:**
 - Execute one unit of work
 - Update internal state
-- Must complete quickly (<100ms)
+- Must complete within tick timeout (15s)
 
 **Example:**
 ```go
@@ -254,7 +254,7 @@ Checkpoints are:
 
 ### Time Limits
 
-- **Tick timeout**: 100ms per execution
+- **Tick timeout**: 15s per execution
 - **Context cancellation**: Respected by runtime
 - **No blocking**: Ticks must be short and resumable
 
@@ -372,7 +372,7 @@ If `agent_resume()` fails:
 
 ## Example Agent (Survivor)
 
-Complete implementation in `agents/example/main.go` using the Igor SDK (`sdk/igor`):
+Complete implementation in `agents/research/example/main.go` using the Igor SDK (`sdk/igor`):
 
 ```go
 type Survivor struct {

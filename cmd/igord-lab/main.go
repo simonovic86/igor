@@ -191,7 +191,7 @@ func runLocalAgent(
 	signingKey, nodeID := research.ExtractSigningKey(node)
 
 	// Load or generate agent cryptographic identity for signed checkpoint lineage.
-	agentIdent, err := loadOrGenerateIdentity(ctx, storageProvider, "local-agent", logger)
+	agentIdent, err := identity.LoadOrGenerate(ctx, storageProvider, "local-agent", logger)
 	if err != nil {
 		return fmt.Errorf("agent identity: %w", err)
 	}
@@ -325,10 +325,11 @@ func initLocalAgent(
 			RenewalWindow: cfg.LeaseRenewalWindow,
 			GracePeriod:   cfg.LeaseGracePeriod,
 		}
-		instance.Lease = authority.NewLease(leaseCfg)
+		lease := authority.NewLease(leaseCfg)
+		instance.Lease = lease
 		logger.Info("Lease granted",
-			"epoch", instance.Lease.Epoch,
-			"expiry", instance.Lease.Expiry,
+			"epoch", lease.Epoch,
+			"expiry", lease.Expiry,
 			"duration", cfg.LeaseDuration,
 		)
 	}
@@ -358,7 +359,7 @@ func handleTick(
 ) (tickResult, error) {
 	// Pre-tick lease validation (EI-6: safety over liveness)
 	if leaseErr := research.CheckAndRenewLease(instance, logger); leaseErr != nil {
-		if instance.Lease != nil && instance.Lease.State == authority.StateRecoveryRequired {
+		if lease, ok := instance.Lease.(*authority.Lease); ok && lease != nil && lease.State == authority.StateRecoveryRequired {
 			if recoverErr := research.AttemptLeaseRecovery(ctx, instance, logger); recoverErr == nil {
 				return tickRecovered, nil
 			}
@@ -455,39 +456,4 @@ func runSimulator(wasmPath, manifestPath string, budgetVal float64, ticks int, v
 	if len(result.Errors) > 0 {
 		os.Exit(1)
 	}
-}
-
-// loadOrGenerateIdentity loads an existing agent identity from storage,
-// or generates a new one and persists it.
-func loadOrGenerateIdentity(
-	ctx context.Context,
-	storageProvider storage.Provider,
-	agentID string,
-	logger *slog.Logger,
-) (*identity.AgentIdentity, error) {
-	data, err := storageProvider.LoadIdentity(ctx, agentID)
-	if err == nil {
-		id, parseErr := identity.UnmarshalBinary(data)
-		if parseErr != nil {
-			logger.Warn("Corrupted agent identity, generating new", "error", parseErr)
-		} else {
-			logger.Info("Agent identity loaded",
-				"agent_id", agentID,
-				"pub_key_size", len(id.PublicKey),
-			)
-			return id, nil
-		}
-	}
-
-	id, err := identity.Generate()
-	if err != nil {
-		return nil, fmt.Errorf("generate identity: %w", err)
-	}
-
-	if err := storageProvider.SaveIdentity(ctx, agentID, id.MarshalBinary()); err != nil {
-		return nil, fmt.Errorf("save identity: %w", err)
-	}
-
-	logger.Info("Agent identity generated and saved", "agent_id", agentID)
-	return id, nil
 }

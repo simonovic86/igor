@@ -32,7 +32,7 @@ Agents execute in isolated WASM instances using wazero:
 - **Memory limit:** 64MB (1024 pages × 64KB)
 - **Filesystem access:** Disabled (via WASI restrictions)
 - **Network access:** Disabled (via WASI restrictions)
-- **Tick timeout:** 100ms enforced via context cancellation
+- **Tick timeout:** 15s enforced via context cancellation
 - **Agent I/O:** Through `igor` hostcall module (see [HOSTCALL_ABI.md](./HOSTCALL_ABI.md)); raw WASI filesystem/network remain disabled
 
 Compilation and instantiation:
@@ -83,7 +83,7 @@ Agents interact with the outside world exclusively through runtime-provided host
 | `rand` | Observation | Cryptographic randomness | Implemented |
 | `kv` | Mixed | Per-agent key-value storage | Not implemented |
 | `log` | Observation | Structured logging | Implemented |
-| `net` | Side effect | Network requests | Not implemented |
+| `http` | Side effect | HTTP requests to external APIs | Implemented |
 | `wallet` | Mixed | Budget introspection, transfers | Implemented |
 
 Agents declare required capabilities in a manifest. The runtime grants only declared capabilities (deny by default, CM-3). All observation hostcalls are recorded in an event log for deterministic replay (CM-4, CE-3).
@@ -293,8 +293,8 @@ Agent budget never increases during execution.
 **I6: Execution Determinism**  
 Given same state and inputs, tick produces same outputs (agent responsibility).
 
-**I7: Tick Timeout**  
-Each tick completes within 100ms or is aborted.
+**I7: Tick Timeout**
+Each tick completes within 15s or is aborted.
 
 See [RUNTIME_ENFORCEMENT_INVARIANTS.md](../enforcement/RUNTIME_ENFORCEMENT_INVARIANTS.md) for enforcement specifications and [EXECUTION_INVARIANTS.md](../constitution/EXECUTION_INVARIANTS.md) for constitutional invariants.
 
@@ -344,7 +344,7 @@ These are architectural hooks, not committed features.
 
 **WASM Sandbox:** Agents cannot escape sandbox, access filesystem, or make network calls.
 
-**Resource Limits:** Memory capped at 64MB, tick timeout at 100ms.
+**Resource Limits:** Memory capped at 64MB, tick timeout at 15s.
 
 **Assumptions:** Nodes are semi-trusted. Agent state is visible to nodes. Budget accounting is not cryptographically verified.
 

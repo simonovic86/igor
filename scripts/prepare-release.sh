@@ -75,7 +75,7 @@ See [SECURITY.md](./SECURITY.md) for complete threat model.
 
 ```bash
 make build
-./bin/igord --run-agent agents/example/agent.wasm --budget 10.0
+./bin/igord --run-agent agents/research/example/agent.wasm --budget 10.0
 ```
 
 ## Documentation
