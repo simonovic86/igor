@@ -18,11 +18,12 @@ import (
 
 // Registry builds and manages the igor host module for a single agent.
 type Registry struct {
-	logger       *slog.Logger
-	eventLog     *eventlog.EventLog
-	walletState  WalletState  // optional; nil = wallet hostcalls not available
-	pricingState PricingState // optional; nil = pricing hostcalls not available
-	httpClient   HTTPClient   // optional; nil = use http.DefaultClient
+	logger         *slog.Logger
+	eventLog       *eventlog.EventLog
+	walletState    WalletState    // optional; nil = wallet hostcalls not available
+	pricingState   PricingState   // optional; nil = pricing hostcalls not available
+	httpClient     HTTPClient     // optional; nil = use http.DefaultClient
+	walletPayState WalletPayState // optional; nil = payment hostcalls not available
 }
 
 // NewRegistry creates a hostcall registry bound to the given event log.
@@ -49,6 +50,12 @@ func (r *Registry) SetPricingState(ps PricingState) {
 // If not set, http.DefaultClient is used. Useful for testing.
 func (r *Registry) SetHTTPClient(c HTTPClient) {
 	r.httpClient = c
+}
+
+// SetWalletPayState installs the payment state provider for the wallet_pay hostcall.
+// Must be called before RegisterHostModule if the agent declares "x402" capability.
+func (r *Registry) SetWalletPayState(wps WalletPayState) {
+	r.walletPayState = wps
 }
 
 // RegisterHostModule builds and instantiates the "igor" WASM host module
@@ -100,6 +107,12 @@ func (r *Registry) RegisterHostModule(
 	if m.Has("http") {
 		capCfg := m.Capabilities["http"]
 		r.registerHTTP(builder, capCfg)
+		registered++
+	}
+
+	if m.Has("x402") && r.walletPayState != nil {
+		capCfg := m.Capabilities["x402"]
+		r.registerPayment(builder, r.walletPayState, capCfg)
 		registered++
 	}
 

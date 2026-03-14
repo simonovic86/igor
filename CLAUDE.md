@@ -19,6 +19,7 @@ make agent              # Build example WASM agent → agents/research/example/a
 make agent-heartbeat    # Build heartbeat WASM agent → agents/heartbeat/agent.wasm
 make agent-pricewatcher # Build price watcher WASM agent → agents/pricewatcher/agent.wasm
 make agent-sentinel     # Build treasury sentinel WASM agent → agents/sentinel/agent.wasm
+make agent-x402buyer   # Build x402 buyer WASM agent → agents/x402buyer/agent.wasm
 make test            # Run tests: go test -v ./...
 make lint            # golangci-lint (5m timeout)
 make vet             # go vet
@@ -29,6 +30,7 @@ make demo              # Build + run bridge reconciliation demo
 make demo-portable     # Build + run portable agent demo (run → stop → copy → resume → verify)
 make demo-pricewatcher # Build + run price watcher demo (fetch prices → stop → resume → verify)
 make demo-sentinel     # Build + run treasury sentinel demo (effect lifecycle → crash → reconcile)
+make demo-x402         # Build + run x402 payment demo (pay for premium data → crash → reconcile)
 make clean           # Remove bin/, checkpoints/, agent.wasm
 ```
 
@@ -66,7 +68,7 @@ Atomic writes via temp file → fsync → rename. Every checkpoint is also archi
 - `cmd/igord/` — CLI entry point, subcommand dispatch (`run`, `resume`, `verify`, `inspect`), tick loop
 - `internal/agent/` — Agent lifecycle: load WASM, init, tick, checkpoint, resume, budget deduction
 - `internal/runtime/` — wazero sandbox: 64MB memory limit, WASI with fs/net disabled
-- `internal/hostcall/` — `igor` host module: clock, rand, log, wallet hostcall implementations
+- `internal/hostcall/` — `igor` host module: clock, rand, log, wallet, http, x402 payment hostcall implementations
 - `internal/inspector/` — Checkpoint inspection and lineage chain verification (`chain.go`: `VerifyChain`)
 - `internal/storage/` — `CheckpointProvider` interface + filesystem impl + checkpoint history archival
 - `internal/eventlog/` — Per-tick observation event log for deterministic replay
@@ -81,11 +83,12 @@ Atomic writes via temp file → fsync → rename. Every checkpoint is also archi
 - `pkg/manifest/` — Capability manifest parsing and validation
 - `pkg/protocol/` — Message types: `AgentPackage`, `AgentTransfer`, `AgentStarted`
 - `pkg/receipt/` — Payment receipt data structure, Ed25519 signing, binary serialization
-- `sdk/igor/` — Agent SDK: hostcall wrappers (ClockNow, RandBytes, Log, WalletBalance), lifecycle plumbing (Agent interface), Encoder/Decoder with Raw/FixedBytes/ReadInto for checkpoint serialization, EffectLog for intent tracking across checkpoint/resume
+- `sdk/igor/` — Agent SDK: hostcall wrappers (ClockNow, RandBytes, Log, WalletBalance, WalletPay, HTTPRequest), lifecycle plumbing (Agent interface), Encoder/Decoder with Raw/FixedBytes/ReadInto for checkpoint serialization, EffectLog for intent tracking across checkpoint/resume
 - `sdk/igor/effects.go` — Effect lifecycle primitives: EffectLog, IntentState (Recorded→InFlight→Confirmed/Unresolved→Compensated), the resume rule (InFlight→Unresolved on Unmarshal)
 - `agents/heartbeat/` — Demo agent: logs heartbeat with tick count and age, milestones every 10 ticks
 - `agents/pricewatcher/` — Demo agent: fetches BTC/ETH prices from CoinGecko, tracks high/low/latest across checkpoint/resume
 - `agents/sentinel/` — Treasury sentinel: monitors simulated treasury balance, triggers refills with effect-safe intent tracking, demonstrates crash recovery and reconciliation
+- `agents/x402buyer/` — x402 payment demo: encounters HTTP 402 paywall, pays from budget via wallet_pay hostcall, receives premium data, crash-safe payment reconciliation
 - `agents/research/example/` — Original demo agent (Survivor) from research phases
 - `agents/research/reconciliation/` — Bridge reconciliation demo agent (research phase)
 - `scripts/demo-portable.sh` — End-to-end portable agent demo

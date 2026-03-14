@@ -19,6 +19,7 @@ const (
 	WalletReceipt      HostcallID = 6
 	NodePrice          HostcallID = 7
 	HTTPRequest        HostcallID = 8
+	WalletPay          HostcallID = 9
 )
 
 // Entry is a single observation recorded during a tick.
