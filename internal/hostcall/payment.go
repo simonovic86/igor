@@ -108,6 +108,22 @@ func (r *Registry) registerPayment(builder wazero.HostModuleBuilder, state Walle
 				}
 			}
 
+			// Check receipt buffer capacity BEFORE deducting budget to avoid
+			// double-charge on retry when the buffer is too small.
+			pubKey := state.GetAgentPubKey()
+			receiptDataLen := 8 + 8 + 4 + len(recipient) + 4 + len(memo) + len(pubKey)
+			fullReceiptLen := receiptDataLen + ed25519.SignatureSize
+			needed := uint32(4 + fullReceiptLen)
+			if needed > receiptCap {
+				// Write size hint so caller can retry with correct buffer.
+				if receiptCap >= 4 {
+					sizeBuf := make([]byte, 4)
+					binary.LittleEndian.PutUint32(sizeBuf, uint32(fullReceiptLen))
+					m.Memory().Write(receiptPtr, sizeBuf)
+				}
+				return payErrBufferTooSmall
+			}
+
 			// Check sufficient budget.
 			if state.GetBudget() < amount {
 				r.logger.Warn("Insufficient budget for payment",
@@ -124,8 +140,6 @@ func (r *Registry) registerPayment(builder wazero.HostModuleBuilder, state Walle
 
 			// Build signed payment receipt.
 			// Format: [amount:8][timestamp:8][recipient_len:4][recipient][memo_len:4][memo][pubkey:32]
-			pubKey := state.GetAgentPubKey()
-			receiptDataLen := 8 + 8 + 4 + len(recipient) + 4 + len(memo) + len(pubKey)
 			receiptData := make([]byte, receiptDataLen)
 			off := 0
 			binary.LittleEndian.PutUint64(receiptData[off:], uint64(amount))
@@ -149,18 +163,6 @@ func (r *Registry) registerPayment(builder wazero.HostModuleBuilder, state Walle
 			fullReceipt := make([]byte, len(receiptData)+len(sig))
 			copy(fullReceipt, receiptData)
 			copy(fullReceipt[len(receiptData):], sig)
-
-			// Check receipt buffer capacity.
-			needed := uint32(4 + len(fullReceipt))
-			if needed > receiptCap {
-				// Write size hint.
-				if receiptCap >= 4 {
-					sizeBuf := make([]byte, 4)
-					binary.LittleEndian.PutUint32(sizeBuf, uint32(len(fullReceipt)))
-					m.Memory().Write(receiptPtr, sizeBuf)
-				}
-				return payErrBufferTooSmall
-			}
 
 			// Write receipt: [receipt_len: 4 bytes LE][receipt: N bytes].
 			out := make([]byte, needed)
