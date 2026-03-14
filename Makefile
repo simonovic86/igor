@@ -170,7 +170,7 @@ demo-sentinel: build agent-sentinel ## Run the treasury sentinel demo (effect li
 demo-x402: build agent-x402buyer ## Run the x402 payment demo (pay for premium data, crash recovery)
 	@echo "Building paywall server..."
 	@mkdir -p $(BINARY_DIR)
-	$(GOBUILD) -o $(BINARY_DIR)/paywall ./agents/x402buyer/cmd/paywall
+	$(GOBUILD) -o $(BINARY_DIR)/paywall ./cmd/paywall
 	@echo "Running x402 Payment Demo..."
 	@chmod +x scripts/demo-x402.sh
 	@./scripts/demo-x402.sh

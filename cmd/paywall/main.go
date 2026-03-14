@@ -74,7 +74,7 @@ func handlePremiumData(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[paywall] 402 → %s (no payment header)", r.RemoteAddr)
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.WriteHeader(http.StatusPaymentRequired)
-		w.Write(encodePaymentTerms(paymentAmount, paymentRecipient, paymentMemo))
+		_, _ = w.Write(encodePaymentTerms(paymentAmount, paymentRecipient, paymentMemo))
 		return
 	}
 
