@@ -1,0 +1,26 @@
+{
+  "capabilities": {
+    "clock": { "version": 1 },
+    "rand": { "version": 1 },
+    "log": { "version": 1 },
+    "wallet": { "version": 1 },
+    "http": {
+      "version": 1,
+      "options": {
+        "allowed_hosts": ["localhost"],
+        "timeout_ms": 5000,
+        "max_response_bytes": 8192
+      }
+    },
+    "x402": {
+      "version": 1,
+      "options": {
+        "allowed_recipients": ["mockcloud-provider"],
+        "max_payment_microcents": 5000000
+      }
+    }
+  },
+  "resource_limits": {
+    "max_memory_bytes": 67108864
+  }
+}

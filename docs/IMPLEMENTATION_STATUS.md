@@ -2,7 +2,7 @@
 
 Truth matrix mapping spec documents to current code. Source of truth is the code; docs have been updated to match.
 
-Last updated: 2026-03-13
+Last updated: 2026-03-15
 
 ## Portable Agent (Product Phase 1)
 
@@ -20,6 +20,29 @@ Last updated: 2026-03-13
 | Lineage chain verification | Implemented | `internal/inspector/chain.go` `VerifyChain` |
 | Heartbeat demo agent | Implemented | `agents/heartbeat/main.go` |
 | Portable demo script | Implemented | `scripts/demo-portable.sh` |
+
+## Agent Self-Provisioning (Product Phase 2)
+
+| Aspect | Status | Code Reference |
+|--------|--------|----------------|
+| HTTP hostcall (`http_request`) | Implemented | `internal/hostcall/http.go` — allowed_hosts, timeout, max response size. Recorded for replay (CM-4). |
+| HTTP SDK wrappers (`HTTPGet`, `HTTPPost`, `HTTPRequest`) | Implemented | `sdk/igor/hostcalls_http_wasm.go` — safe wrappers with buffer retry |
+| Payment hostcall (`wallet_pay`) | Implemented | `internal/hostcall/payment.go` — budget deduction, Ed25519-signed receipt, recorded for replay |
+| Payment SDK wrapper (`WalletPay`) | Implemented | `sdk/igor/hostcalls_payment_wasm.go` — safe wrapper with buffer retry |
+| Manifest: `x402` capability | Implemented | `internal/hostcall/registry.go` — gated on `allowed_recipients`, `max_payment_microcents` |
+| Effect lifecycle model | Implemented | `sdk/igor/effects.go` — EffectLog, intent state machine, resume rule (InFlight→Unresolved) |
+| Effect serialization in checkpoint | Implemented | `sdk/igor/effects.go` `Marshal`/`Unmarshal` — wire format with automatic InFlight→Unresolved transition |
+| Price watcher demo agent | Implemented | `agents/pricewatcher/` — fetches BTC/ETH prices via HTTP, tracks high/low/latest across checkpoint/resume |
+| Price watcher demo script | Implemented | `scripts/demo-pricewatcher.sh` |
+| Treasury sentinel demo agent | Implemented | `agents/sentinel/` — treasury monitoring with effect-safe crash recovery |
+| Treasury sentinel demo script | Implemented | `scripts/demo-sentinel.sh` |
+| x402 buyer demo agent | Implemented | `agents/x402buyer/` — encounters 402 paywall, pays from budget, receives premium data, crash-safe |
+| x402 buyer demo script | Implemented | `scripts/demo-x402.sh` |
+| Mock paywall server | Implemented | `cmd/paywall/main.go` — 402 payment terms, receipt-gated access |
+| Deployer demo agent | Implemented | `agents/deployer/` — pays compute provider, deploys with receipt, monitors status, multi-step effect-safe workflow |
+| Deployer demo script | Implemented | `scripts/demo-deployer.sh` |
+| Mock compute provider | Implemented | `cmd/mockcloud/main.go` — 402 payment terms, deployment lifecycle (pending→provisioning→running) |
+| Self-migration | Not implemented | Roadmap: agent decides when/where to move based on price/performance |
 
 ## Checkpoint Format
 
@@ -86,7 +109,8 @@ Last updated: 2026-03-13
 | Manifest in migration package | Implemented | `pkg/protocol/messages.go` `ManifestData` |
 | Pre-migration capability check (CE-5) | Implemented | `internal/migration/service.go` `handleIncomingMigration` |
 | HTTP hostcall (`http_request`) | Implemented | `internal/hostcall/http.go` — side-effect hostcall with allowed_hosts, timeout, max response size. Recorded in event log for replay. |
-| Side-effect authority gating (CM-5) | Not implemented | Requires authority state machine (Phase 5). HTTP hostcall exists but is not gated on ACTIVE_OWNER. When authority gating is added, side-effect hostcalls MUST only execute in ACTIVE_OWNER state. |
+| Payment hostcall (`wallet_pay`) | Implemented | `internal/hostcall/payment.go` — side-effect hostcall with allowed_recipients, max_payment_microcents. Budget deduction, Ed25519-signed receipt. Recorded in event log for replay. |
+| Side-effect authority gating (CM-5) | Not implemented | Requires authority state machine (Phase 5). HTTP and wallet_pay hostcalls exist but are not gated on ACTIVE_OWNER. When authority gating is added, side-effect hostcalls MUST only execute in ACTIVE_OWNER state. |
 | KV storage hostcalls | Not implemented | Roadmap future task |
 
 ## Identity and Authority
@@ -142,6 +166,8 @@ Last updated: 2026-03-13
 | Heartbeat demo agent | Implemented | `agents/heartbeat/` — tick count, age, milestones |
 | Price watcher demo agent | Implemented | `agents/pricewatcher/` — fetches BTC/ETH prices via HTTP hostcall, tracks high/low/latest |
 | Treasury sentinel demo agent | Implemented | `agents/sentinel/` — treasury monitoring with effect-safe crash recovery |
+| x402 buyer demo agent | Implemented | `agents/x402buyer/` — 402 paywall payment with crash-safe effect lifecycle |
+| Deployer demo agent | Implemented | `agents/deployer/` — multi-step self-provisioning: pay, deploy, monitor with crash recovery |
 | Effect lifecycle model (SDK) | Implemented | `sdk/igor/effects.go` — EffectLog, intent state machine (Recorded→InFlight→Confirmed/Unresolved→Compensated), resume rule |
 | Lineage chain verifier | Implemented | `internal/inspector/chain.go` `VerifyChain`, `PrintChain` |
 | `--simulate` CLI flag | Implemented | `cmd/igord-lab/main.go` |
