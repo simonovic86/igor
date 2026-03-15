@@ -223,8 +223,8 @@ Igor's research foundation (Phases 2–5) proved that agents can checkpoint, mig
 - ✅ **Effect lifecycle model** — intent state machine in SDK for crash-safe effect tracking — `sdk/igor/effects.go`
 - ✅ **Price watcher demo** — agent fetching live crypto prices via HTTP hostcall — `agents/pricewatcher/`
 - ✅ **Treasury sentinel demo** — effect-safe treasury monitoring with crash recovery — `agents/sentinel/`
-- **x402/USDC wallet hostcall** — agent pays for services with real money
-- **Compute provider hostcall** — agent deploys itself to Akash, Golem, or similar
+- ✅ **x402/USDC wallet hostcall** — agent pays for services from budget via `wallet_pay` hostcall — `internal/hostcall/payment.go`, signed receipts, crash-safe via effect lifecycle — `agents/x402buyer/`
+- ✅ **Compute provider demo** — agent pays for and deploys itself to mock compute provider — `agents/deployer/`, `cmd/mockcloud/`
 - **Self-migration** — agent decides when and where to move based on price/performance
 
 **Outcome:** Agents are economically autonomous — they rent infrastructure, pay for it, and move when they choose.
@@ -339,8 +339,8 @@ None. v0 is experimental. Things may be:
 
 - ✅ Agent calls external HTTP APIs via hostcall
 - ✅ Effect lifecycle model for crash-safe side effects
-- Agent pays for compute with real money (x402/USDC)
-- Agent deploys itself to Akash/Golem
+- ✅ Agent pays for compute with real money (x402/USDC)
+- ✅ Agent deploys itself to compute provider (mock)
 - Agent decides when to migrate
 
 ---
@@ -429,8 +429,7 @@ Igor is **not novel**. It combines existing ideas in a specific way to explore a
 
 ## Next Immediate Steps
 
-Product Phase 2 in progress. HTTP hostcall, effect model, and demo agents delivered. Next:
+Product Phase 2 in progress. HTTP hostcall, effect model, wallet_pay, x402buyer, and deployer demos delivered. Next:
 
-1. **x402/USDC wallet hostcall** — agent pays for services with real money
-2. **Compute provider integration** — agent deploys itself to Akash/Golem
-3. **Self-migration** — agent decides when and where to move based on price/performance
+1. **Self-migration** — agent decides when and where to move based on price/performance
+2. **Real compute provider** — replace mock with Akash or Golem integration

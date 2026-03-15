@@ -20,6 +20,7 @@ make agent-heartbeat    # Build heartbeat WASM agent → agents/heartbeat/agent.
 make agent-pricewatcher # Build price watcher WASM agent → agents/pricewatcher/agent.wasm
 make agent-sentinel     # Build treasury sentinel WASM agent → agents/sentinel/agent.wasm
 make agent-x402buyer   # Build x402 buyer WASM agent → agents/x402buyer/agent.wasm
+make agent-deployer    # Build deployer WASM agent → agents/deployer/agent.wasm
 make test            # Run tests: go test -v ./...
 make lint            # golangci-lint (5m timeout)
 make vet             # go vet
@@ -31,6 +32,7 @@ make demo-portable     # Build + run portable agent demo (run → stop → copy 
 make demo-pricewatcher # Build + run price watcher demo (fetch prices → stop → resume → verify)
 make demo-sentinel     # Build + run treasury sentinel demo (effect lifecycle → crash → reconcile)
 make demo-x402         # Build + run x402 payment demo (pay for premium data → crash → reconcile)
+make demo-deployer     # Build + run deployer demo (pay → deploy → monitor → crash → reconcile)
 make clean           # Remove bin/, checkpoints/, agent.wasm
 ```
 
@@ -89,6 +91,7 @@ Atomic writes via temp file → fsync → rename. Every checkpoint is also archi
 - `agents/pricewatcher/` — Demo agent: fetches BTC/ETH prices from CoinGecko, tracks high/low/latest across checkpoint/resume
 - `agents/sentinel/` — Treasury sentinel: monitors simulated treasury balance, triggers refills with effect-safe intent tracking, demonstrates crash recovery and reconciliation
 - `agents/x402buyer/` — x402 payment demo: encounters HTTP 402 paywall, pays from budget via wallet_pay hostcall, receives premium data, crash-safe payment reconciliation
+- `agents/deployer/` — Deployer demo: pays compute provider, deploys itself, monitors deployment status, multi-step effect-safe crash recovery
 - `agents/research/example/` — Original demo agent (Survivor) from research phases
 - `agents/research/reconciliation/` — Bridge reconciliation demo agent (research phase)
 - `scripts/demo-portable.sh` — End-to-end portable agent demo

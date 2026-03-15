@@ -91,6 +91,45 @@ Persistent key-value storage scoped to the agent. Reads are observations; writes
 | `kv_put` | `(key_ptr: i32, key_len: i32, val_ptr: i32, val_len: i32) -> (i32)` | Writes value for key. Side effect. Returns 0 on success, negative on error. |
 | `kv_delete` | `(key_ptr: i32, key_len: i32) -> (i32)` | Deletes key. Side effect. Returns 0 on success, negative on error. |
 
+### x402 — Payment Operations
+
+Payment capability for agents to pay for services from their budget. Side-effect hostcall. Recorded in event log for replay (CE-3). Declared under the `x402` manifest capability key.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `wallet_pay` | `(amount: i64, recipient_ptr: i32, recipient_len: i32, memo_ptr: i32, memo_len: i32, receipt_ptr: i32, receipt_cap: i32) -> (i32)` | Deducts `amount` microcents from budget, creates a signed payment receipt, writes receipt to buffer. Returns bytes written on success, negative error code on failure. |
+
+**Implementation:** `internal/hostcall/payment.go` — validates recipient against `allowed_recipients`, validates amount against `max_payment_microcents`, deducts from budget, creates Ed25519-signed receipt (amount, timestamp, recipient, memo, agent pubkey), records amount and receipt in event log.
+
+**Replay behavior:** During replay, returns the recorded amount and receipt from the event log.
+
+**Manifest configuration:**
+```json
+{
+  "x402": {
+    "version": 1,
+    "options": {
+      "allowed_recipients": ["service-provider"],
+      "max_payment_microcents": 1000000
+    }
+  }
+}
+```
+
+**Options:**
+- `allowed_recipients` — list of permitted payment recipients (empty = all recipients allowed)
+- `max_payment_microcents` — maximum amount per payment (0 = no limit)
+
+**Error codes:**
+| Value | Meaning |
+|-------|---------|
+| `-1` | Insufficient budget |
+| `-2` | Input too long (recipient > 256 bytes, memo > 1KB) |
+| `-3` | Recipient not in allowed_recipients |
+| `-4` | Amount exceeds max_payment_microcents |
+| `-5` | Receipt buffer too small (first 4 bytes contain required size as LE uint32) |
+| `-6` | Processing error |
+
 ### http — HTTP Requests
 
 HTTP request/response capability for calling external APIs. Side-effect hostcall. Recorded in event log for replay (CE-3).
@@ -166,7 +205,8 @@ Agents declare required capabilities in their manifest. The manifest is evaluate
     "rand": { "version": 1 },
     "log": { "version": 1 },
     "wallet": { "version": 1 },
-    "http": { "version": 1, "options": { "allowed_hosts": ["api.example.com"] } }
+    "http": { "version": 1, "options": { "allowed_hosts": ["api.example.com"] } },
+    "x402": { "version": 1, "options": { "allowed_recipients": ["service"], "max_payment_microcents": 1000000 } }
   },
   "resource_limits": {
     "max_memory_bytes": 33554432
@@ -197,7 +237,7 @@ Per CM-4 and CE-3, the runtime records all observation hostcall return values in
 
 ```go
 type Entry struct {
-    HostcallID HostcallID // ClockNow=1, RandBytes=2, LogEmit=3, WalletBalance=4, etc.
+    HostcallID HostcallID // ClockNow=1, RandBytes=2, LogEmit=3, WalletBalance=4, ..., HTTPRequest=8, WalletPay=9
     Payload    []byte     // Return value bytes (e.g., 8-byte timestamp, N random bytes)
 }
 ```
@@ -221,6 +261,7 @@ Hostcalls are registered using wazero's host module builder. The `internal/hostc
 // From internal/hostcall/registry.go
 registry := hostcall.NewRegistry(logger, eventLog)
 registry.SetWalletState(walletState)
+registry.SetWalletPayState(walletPayState) // for x402 payments
 if err := registry.RegisterHostModule(ctx, rt, capManifest); err != nil {
     return err
 }
