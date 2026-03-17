@@ -299,17 +299,17 @@ func resumeFromCheckpoint(checkpointPath, wasmPath, agentID string, budgetVal fl
 		}
 	}
 
-	fmt.Fprintf(os.Stdout, "\n  Resuming: %s\n", agentID)
-	fmt.Fprintf(os.Stdout, "  DID:      %s\n", agentIdent.DID())
-	fmt.Fprintf(os.Stdout, "  From:     tick %d\n", hdr.TickNumber)
-	fmt.Fprintf(os.Stdout, "  Budget:   %s\n\n", budget.Format(hdr.Budget))
-
 	manifestData := runner.LoadManifestData(wasmPath, manifestPath, logger)
 
 	b := budget.FromFloat(budgetVal)
 	if b == 0 {
 		b = hdr.Budget
 	}
+
+	fmt.Fprintf(os.Stdout, "\n  Resuming: %s\n", agentID)
+	fmt.Fprintf(os.Stdout, "  DID:      %s\n", agentIdent.DID())
+	fmt.Fprintf(os.Stdout, "  From:     tick %d\n", hdr.TickNumber)
+	fmt.Fprintf(os.Stdout, "  Budget:   %s\n\n", budget.Format(b))
 
 	instance, err := agent.LoadAgent(
 		ctx, engine, wasmPath, agentID, storageProvider,

@@ -58,7 +58,7 @@ echo ""
 # Show checkpoint identity.
 CKPT_FILE="$DIR_A/${AGENT_ID}.checkpoint"
 if [ -f "$CKPT_FILE" ]; then
-    NODE_A_DID=$($IGORD inspect "$CKPT_FILE" 2>/dev/null | grep "Agent DID" | awk '{print $NF}')
+    NODE_A_DID=$($IGORD inspect "$CKPT_FILE" 2>/dev/null | grep "Agent DID" | awk '{print $NF}' || true)
     if [ -n "$NODE_A_DID" ]; then
         echo "[demo] Node A identity: $NODE_A_DID"
         echo ""
@@ -119,7 +119,7 @@ echo ""
 # Verify same identity on Node B.
 CKPT_FILE_B="$DIR_B/${AGENT_ID}.checkpoint"
 if [ -f "$CKPT_FILE_B" ]; then
-    NODE_B_DID=$($IGORD inspect "$CKPT_FILE_B" 2>/dev/null | grep "Agent DID" | awk '{print $NF}')
+    NODE_B_DID=$($IGORD inspect "$CKPT_FILE_B" 2>/dev/null | grep "Agent DID" | awk '{print $NF}' || true)
     if [ -n "$NODE_B_DID" ] && [ -n "$NODE_A_DID" ]; then
         if [ "$NODE_A_DID" = "$NODE_B_DID" ]; then
             echo "[demo] ✓ Same identity across nodes: $NODE_B_DID"
