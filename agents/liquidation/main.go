@@ -112,10 +112,15 @@ func (w *LiquidationWatcher) Tick() bool {
 	// Detect gap.
 	if currentSlot > w.LastProcessedSlot+1 {
 		gap := currentSlot - w.LastProcessedSlot - 1
-		igor.Logf("[resume]    restored checkpoint from slot %d", w.LastProcessedSlot)
-		igor.Logf("[resume]    current slot is %d", currentSlot)
-		igor.Logf("[resume]    gap detected: %d missed slots (%d..%d)",
+		igor.Logf("")
+		igor.Logf("────────────────────────────────────────────────────")
+		igor.Logf("  GAP DETECTED")
+		igor.Logf("  Last processed:  slot %d", w.LastProcessedSlot)
+		igor.Logf("  Current time:    slot %d", currentSlot)
+		igor.Logf("  Missed:          %d slots (%d..%d)",
 			gap, w.LastProcessedSlot+1, currentSlot-1)
+		igor.Logf("  Replaying missed history...")
+		igor.Logf("────────────────────────────────────────────────────")
 
 		// Remember whether warning was already known before catch-up.
 		warningBefore := w.FirstWarningSlot
@@ -126,9 +131,16 @@ func (w *LiquidationWatcher) Tick() bool {
 		}
 
 		// Summary after catch-up.
+		igor.Logf("────────────────────────────────────────────────────")
 		if w.FirstWarningSlot != 0 && warningBefore == 0 {
-			igor.Logf("[catch-up] ⚠ WARNING first occurred at slot %d (during downtime)", w.FirstWarningSlot)
+			igor.Logf("  ⚠ THRESHOLD BREACHED AT SLOT %d (DURING DOWNTIME)", w.FirstWarningSlot)
+			igor.Logf("  The agent was dead. The world kept moving.")
+			igor.Logf("  Catch-up reconstructed %d missed slots.", gap)
+		} else {
+			igor.Logf("  Catch-up complete: %d missed slots replayed.", gap)
 		}
+		igor.Logf("────────────────────────────────────────────────────")
+		igor.Logf("")
 	}
 
 	// Process current slot as live.

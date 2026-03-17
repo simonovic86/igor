@@ -1,18 +1,24 @@
-# Igor v0 Overview
+# Igor Overview
 
 ## What is Igor?
 
-Igor v0 is an experimental distributed systems runtime that enables portable autonomous agents to migrate between peer nodes and execute independently.
+Igor is a runtime for portable, continuous software agents. The checkpoint file IS the agent — copy it anywhere, run `igord resume`, it continues exactly where it left off. Every agent has a DID identity (`did:key:z6Mk...`) and a signed checkpoint lineage providing cryptographic proof of its entire life history.
+
+## The Core Idea
+
+An agent treats its checkpoint as a boundary between processed and unprocessed history. When it resumes after downtime, it detects the gap, replays missed time slots, and discovers what happened while it was absent. The agent does not stay alive — it stays continuous.
+
+The canonical demonstration is the liquidation watcher (`make demo-liquidation`): a DeFi monitoring agent that dies during a critical price drawdown, resumes on a different node, catches up on missed history, and discovers the liquidation threshold was breached during downtime.
 
 ## Core Vision
 
-Igor achieves **true execution autonomy**:
+Igor achieves **execution continuity**:
 
-- **Agents own identity** - Each agent has its own cryptographic identity
-- **Agents own state** - State is explicit and agent-controlled
+- **Agents own identity** - Each agent has a DID derived from its Ed25519 keypair
+- **Agents own state** - State is explicit, checkpointed, and portable
 - **Agents own budget** - Agents pay for their own execution
-- **Agents decide where to run** - Migration is agent-initiated
 - **Agents survive infrastructure churn** - Execution persists across node failures
+- **Agents stay continuous** - Gap-aware catch-up reconstructs missed history
 
 ## Fundamental Separation
 
@@ -23,9 +29,8 @@ Igor separates two concerns that are traditionally coupled:
 The **Igor node** (`igord`) is untrusted infrastructure that:
 - Provides sandboxed WASM execution environment
 - Meters resource consumption
-- Facilitates P2P agent migration
+- Facilitates agent migration (research foundation)
 - Charges agents for runtime usage
-- Discovers and communicates with peer nodes
 
 Nodes are passive infrastructure providers with no special authority.
 
@@ -35,11 +40,9 @@ Nodes are passive infrastructure providers with no special authority.
 - Carry cryptographic identity
 - Own and manage execution state
 - Control their own budget
-- Decide when and where to migrate
 - Execute in WASM sandboxes
 - Survive infrastructure failures
-
-Agents are active entities. They decide, nodes comply.
+- Detect and replay missed history on resume
 
 ## Why Igor Exists
 
@@ -50,44 +53,44 @@ Traditional cloud computing couples execution to infrastructure:
 
 Igor inverts this relationship:
 - Agents carry their own state
-- Agents can migrate to any compatible node
+- Agents can resume on any compatible node
 - Infrastructure is fungible and untrusted
-- Agent survival is independent of any single node
+- Agent continuity is independent of any single node
 
 ## What Igor Is NOT
 
-Igor v0 explicitly does **not** implement:
+Igor explicitly does **not** implement:
 
 - Agent marketplaces or discovery
-- Reputation systems
-- Staking or token economics
+- Reputation systems or token economics
 - AI / LLM functionality
 - Multi-agent coordination frameworks
-- Advanced security systems
 - Distributed consensus protocols
+- Production-grade trustless security (v0 limitation)
 
 These are out of scope by design.
 
-## Current Status (Phase 2 Complete)
+## Current Status
 
-Igor v0 Phase 2 implements:
+Early product stage. Not production-ready for value-critical workloads.
 
-✅ P2P networking with libp2p  
-✅ WASM agent sandbox execution  
-✅ Agent lifecycle (init, tick, checkpoint, resume)  
-✅ Agent migration between nodes  
-✅ Runtime rent metering and budget enforcement  
-✅ Checkpoint storage abstraction  
+What works today:
+- DID identity (`did:key:z6Mk...`) with Ed25519 keypair
+- Checkpoint/resume across machines with same identity
+- Gap-aware catch-up (replay missed time slots on resume)
+- Signed checkpoint lineage (cryptographic proof of life history)
+- CLI: `igord run`, `resume`, `verify`, `inspect`
+- Demo agents: liquidation watcher, price tracker, heartbeat, treasury sentinel, deployer
 
-Phase 2 proves that **agents can survive and migrate autonomously**.
+Research foundation (complete): WASM sandboxing, P2P migration, budget metering, replay verification, capability membranes, lease-based authority.
 
 ## Technology Stack
 
-- **Runtime**: Go 1.22+
+- **Runtime**: Go 1.25
 - **P2P Transport**: libp2p-go
-- **Sandbox**: wazero (WASM runtime)
+- **Sandbox**: wazero (WASM runtime, pure Go)
 - **Agent Language**: TinyGo → WASM
-- **Serialization**: Binary protocols (JSON for P2P messages)
+- **Serialization**: Binary protocols
 
 ## Design Philosophy
 
@@ -98,34 +101,6 @@ Igor follows strict principles:
 - **Small testable increments** over large refactors
 - **Minimal scope** over feature richness
 - **Fail loudly** on invariant violations
-
-## Quick Start
-
-### Run a Node
-
-```bash
-go build -o bin/igord ./cmd/igord
-./bin/igord
-```
-
-### Run an Agent
-
-```bash
-./bin/igord --run-agent agents/research/example/agent.wasm --budget 10.0
-```
-
-### Migrate an Agent
-
-```bash
-# Terminal A: Start receiving node
-./bin/igord
-
-# Terminal B: Migrate agent (after checkpoint exists)
-./bin/igord \
-  --migrate-agent local-agent \
-  --to /ip4/127.0.0.1/tcp/4002/p2p/<peer_id> \
-  --wasm agents/research/example/agent.wasm
-```
 
 ## Further Reading
 
