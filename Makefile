@@ -1,4 +1,4 @@
-.PHONY: help bootstrap build build-lab clean test lint vet fmt fmt-check tidy agent agent-heartbeat agent-reconciliation agent-pricewatcher agent-sentinel agent-x402buyer agent-deployer run-agent demo demo-portable demo-pricewatcher demo-sentinel demo-x402 demo-deployer gh-check gh-metadata gh-release
+.PHONY: help bootstrap build build-lab clean test lint vet fmt fmt-check tidy agent agent-heartbeat agent-reconciliation agent-pricewatcher agent-sentinel agent-x402buyer agent-deployer agent-liquidation run-agent demo demo-portable demo-pricewatcher demo-sentinel demo-x402 demo-deployer demo-liquidation gh-check gh-metadata gh-release
 
 .DEFAULT_GOAL := help
 
@@ -12,6 +12,7 @@ PRICEWATCHER_AGENT_DIR := agents/pricewatcher
 SENTINEL_AGENT_DIR := agents/sentinel
 X402BUYER_AGENT_DIR := agents/x402buyer
 DEPLOYER_AGENT_DIR := agents/deployer
+LIQUIDATION_AGENT_DIR := agents/liquidation
 
 # Go commands
 GOCMD := go
@@ -62,6 +63,7 @@ clean: ## Remove build artifacts
 	rm -f agents/sentinel/agent.wasm
 	rm -f agents/x402buyer/agent.wasm
 	rm -f agents/deployer/agent.wasm
+	rm -f agents/liquidation/agent.wasm
 	@echo "Clean complete"
 
 test: ## Run tests (with race detector)
@@ -154,6 +156,13 @@ agent-deployer: ## Build deployer demo agent WASM
 	cd $(DEPLOYER_AGENT_DIR) && $(MAKE) build
 	@echo "Agent built: $(DEPLOYER_AGENT_DIR)/agent.wasm"
 
+agent-liquidation: ## Build liquidation watcher demo agent WASM
+	@echo "Building liquidation watcher agent..."
+	@which tinygo > /dev/null || \
+		(echo "tinygo not found. See docs/governance/DEVELOPMENT.md for installation" && exit 1)
+	cd $(LIQUIDATION_AGENT_DIR) && $(MAKE) build
+	@echo "Agent built: $(LIQUIDATION_AGENT_DIR)/agent.wasm"
+
 demo: build agent-reconciliation ## Build and run reconciliation demo
 	@echo "Building demo runner..."
 	@mkdir -p $(BINARY_DIR)
@@ -191,6 +200,11 @@ demo-deployer: build agent-deployer ## Run the deployer demo (pay, deploy, monit
 	@echo "Running Deployer Demo..."
 	@chmod +x scripts/demo-deployer.sh
 	@./scripts/demo-deployer.sh
+
+demo-liquidation: build agent-liquidation ## Run the liquidation watcher demo (gap-aware continuity proof)
+	@echo "Running Liquidation Watcher Demo..."
+	@chmod +x scripts/demo-liquidation.sh
+	@./scripts/demo-liquidation.sh
 
 check: fmt-check vet lint test ## Run all checks (formatting, vet, lint, tests)
 	@echo "All checks passed"

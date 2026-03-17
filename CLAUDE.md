@@ -21,6 +21,7 @@ make agent-pricewatcher # Build price watcher WASM agent → agents/pricewatcher
 make agent-sentinel     # Build treasury sentinel WASM agent → agents/sentinel/agent.wasm
 make agent-x402buyer   # Build x402 buyer WASM agent → agents/x402buyer/agent.wasm
 make agent-deployer    # Build deployer WASM agent → agents/deployer/agent.wasm
+make agent-liquidation # Build liquidation watcher WASM agent → agents/liquidation/agent.wasm
 make test            # Run tests: go test -v ./...
 make lint            # golangci-lint (5m timeout)
 make vet             # go vet
@@ -33,6 +34,7 @@ make demo-pricewatcher # Build + run price watcher demo (fetch prices → stop �
 make demo-sentinel     # Build + run treasury sentinel demo (effect lifecycle → crash → reconcile)
 make demo-x402         # Build + run x402 payment demo (pay for premium data → crash → reconcile)
 make demo-deployer     # Build + run deployer demo (pay → deploy → monitor → crash → reconcile)
+make demo-liquidation  # Build + run liquidation watcher demo (gap-aware continuity proof)
 make clean           # Remove bin/, checkpoints/, agent.wasm
 ```
 
@@ -92,6 +94,7 @@ Atomic writes via temp file → fsync → rename. Every checkpoint is also archi
 - `agents/sentinel/` — Treasury sentinel: monitors simulated treasury balance, triggers refills with effect-safe intent tracking, demonstrates crash recovery and reconciliation
 - `agents/x402buyer/` — x402 payment demo: encounters HTTP 402 paywall, pays from budget via wallet_pay hostcall, receives premium data, crash-safe payment reconciliation
 - `agents/deployer/` — Deployer demo: pays compute provider, deploys itself, monitors deployment status, multi-step effect-safe crash recovery
+- `agents/liquidation/` — Liquidation risk watcher: gap-aware continuity demo with deterministic price curve, detects and replays missed time slots on resume
 - `agents/research/example/` — Original demo agent (Survivor) from research phases
 - `agents/research/reconciliation/` — Bridge reconciliation demo agent (research phase)
 - `scripts/demo-portable.sh` — End-to-end portable agent demo
