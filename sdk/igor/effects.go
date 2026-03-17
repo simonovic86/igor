@@ -94,14 +94,16 @@ func (e *EffectLog) Confirm(id []byte) error {
 	return nil
 }
 
-// Compensate transitions an intent from Unresolved to Compensated.
+// Compensate transitions an intent from InFlight or Unresolved to Compensated.
 // Call this after determining the action did not happen or was rolled back.
+// From InFlight: the agent observed the action fail (e.g., HTTP error, payment rejected).
+// From Unresolved: the agent investigated after a crash and determined the action didn't complete.
 func (e *EffectLog) Compensate(id []byte) error {
 	intent := e.find(id)
 	if intent == nil {
 		return errIntentNotFound
 	}
-	if intent.State != Unresolved {
+	if intent.State != InFlight && intent.State != Unresolved {
 		return errInvalidTransition
 	}
 	intent.State = Compensated
