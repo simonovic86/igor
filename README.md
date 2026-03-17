@@ -1,83 +1,32 @@
 # Igor
 
-**Runtime for Portable, Immortal Software Agents**
+**This agent did not stay alive. It stayed continuous.**
 
-Igor makes any WASM program into a sovereign agent with its own identity, memory, and verifiable life history. The checkpoint file IS the agent — copy it anywhere, run `igord resume`, it continues exactly where it left off. No infrastructure lock-in.
+An agent monitors a DeFi position for liquidation risk. Node A dies. The price keeps moving. The threshold is breached while the agent is absent. Node B picks up the checkpoint, detects the gap, replays the missed time slots, and discovers what happened during downtime. Same DID identity. Cryptographic proof of the entire life history. No state lost.
 
----
-
-## About This Repository
-
-**What:** Runtime for portable, infrastructure-independent agents
-**Status:** Product Phase 1 complete. Agents have DID identity, checkpoint/resume across machines, and cryptographic lineage verification. Built on a research foundation (Phases 2–5) of WASM sandboxing, P2P migration, budget metering, replay verification, and signed checkpoint lineage.
-**Purpose:** Give software agents identity, memory, and continuity — independent of any machine, cloud, or operator
-
-**Read first:**
-- [ANNOUNCEMENT.md](./ANNOUNCEMENT.md) - Public project introduction
-- [docs/philosophy/OVERVIEW.md](./docs/philosophy/OVERVIEW.md) - Introduction to Igor concepts and status
-- [docs/philosophy/VISION.md](./docs/philosophy/VISION.md) - Why autonomous software needs survival
-
-**Contribute:**
-- [CONTRIBUTING.md](./CONTRIBUTING.md) - Guidelines and workflow
-- [docs/governance/DEVELOPMENT.md](./docs/governance/DEVELOPMENT.md) - Developer setup
+```bash
+make demo-liquidation    # See it happen in 60 seconds
+```
 
 ---
+
+Igor is a runtime for portable, continuous software agents. The checkpoint file IS the agent — copy it anywhere, run `igord resume`, it continues exactly where it left off. Every agent has a DID identity (`did:key:z6Mk...`), and a signed checkpoint lineage providing cryptographic proof of its entire life history.
+
+**Status:** Early product stage. Agents have DID identity, checkpoint/resume across machines, gap-aware catch-up, and cryptographic lineage verification. Not production-ready for value-critical workloads.
 
 ## Why Igor Exists
 
-Agents today are tied to their infrastructure. Kill the server, the agent dies. Restart it, and it has to start from scratch — losing in-memory state, execution history, and continuity.
-
-Kubernetes restarts processes but loses state. Temporal forces you into a workflow programming model. AO replays entire message histories from Arweave. An LLM with a wallet can rent a server but can't survive dying on it.
+Agents today are tied to their infrastructure. Kill the server, the agent dies. Restart it, and it starts from scratch — losing state, execution history, and continuity.
 
 Igor gives agents three things nothing else provides together: **identity** (DID), **memory** (checkpointed state that survives infrastructure failure), and **verifiable continuity** (cryptographic proof of the agent's entire life history). The agent is a portable digital object — not a deployment tied to specific infrastructure.
 
-## Technical Domains
-
-Igor addresses challenges in:
-
-* **Autonomous agent infrastructure** - Runtime for self-managing software entities
-* **Survivable distributed systems** - Execution persistence across infrastructure failure
-* **WASM sandbox runtimes** - Portable deterministic agent execution (wazero)
-* **Peer-to-peer compute mobility** - Agent migration over libp2p networks
-* **Runtime economic accounting** - Budget-based execution metering and enforcement
-* **Self-hosting autonomous software** - Agents that pay for their own compute
-* **Distributed systems research** - Experimental infrastructure for agent survival
-
-## Related Ecosystem Areas
-
-Igor occupies a lower-level runtime infrastructure layer, distinct from agent reasoning or orchestration frameworks.
-
-Relevant adjacent domains:
-* Autonomous AI agent infrastructure and runtimes
-* Distributed compute execution environments
-* WebAssembly execution engines and sandbox runtimes
-* Peer-to-peer service fabrics and distributed protocols
-* DeFi solver network infrastructure
-* Oracle and economic automation service infrastructure
-* Mobile code and process migration research
-
-Igor provides execution survival primitives that these higher-level systems could build upon.
-
 ## Core Guarantees
 
+- **Continuous:** Agents detect gaps in their history and reconstruct what they missed
 - **Portable:** The checkpoint file IS the agent — copy it anywhere, resume it
 - **Identity:** Every agent has a DID (`did:key:z6Mk...`) derived from its Ed25519 keypair
 - **Verifiable:** Signed checkpoint lineage — cryptographic proof of entire life history
-- **Survival:** Agents checkpoint state and resume after infrastructure failure
-- **Sandboxing:** WASM isolation, 64MB memory limit, no filesystem/network access
-- **Migration:** Agents transfer between nodes over libp2p streams (research foundation)
-
-## What Igor Does Not Provide
-
-Igor is **not**:
-
-- An AI reasoning framework
-- An agent marketplace or discovery protocol
-- A blockchain or consensus system
-- A multi-agent coordination platform
-- A general-purpose orchestration system
-
-Igor is a minimal runtime for portable, sovereign agents. It provides identity, checkpointing, and verifiable continuity. Nothing more.
+- **Sandboxed:** WASM isolation, 64MB memory limit, no filesystem/network access
 
 ## Architecture Overview
 
@@ -127,39 +76,13 @@ The checkpoint file IS the agent. It contains everything needed to resume:
 
 Every checkpoint is archived to `history/{agentID}/{tickNumber}.ckpt` for full lineage verification.
 
-## Current Capabilities
-
-**Product Phase 1 (Portable Sovereign Agent) - Complete**
-
-- Agent runs with DID identity (`did:key:z6Mk...`)
-- Agent checkpoints and resumes on any machine — same DID, continuous tick count
-- Signed checkpoint lineage — cryptographic proof of entire life history
-- Checkpoint history archival for lineage verification
-- CLI subcommands: `igord run`, `resume`, `verify`, `inspect`
-
-**Research Foundation (Phases 2–5) - Complete**
-
-- WASM sandboxing, P2P migration, budget metering, replay verification
-- Capability membranes, lease-based authority, signed lineage, migration failure recovery
-
 ## Project Status
 
-**Maturity:** Product Phase 1 complete. Built on research foundation (Phases 2–5).
-**Production:** Not yet production-ready — early product stage.
-**Security:** Ed25519 signed checkpoint lineage with DID identity.
+Early product stage. Not production-ready for value-critical workloads.
 
-**Known limitations:**
-- Local filesystem storage only (no permanent archival yet)
-- No HTTP or payment hostcalls (agents can't call external APIs yet)
-- No self-provisioning (agents can't deploy themselves yet)
-- Minimal security hardening
+What works today: DID identity, checkpoint/resume across machines, gap-aware catch-up, signed checkpoint lineage, CLI (`igord run/resume/verify/inspect`). Built on a research foundation of WASM sandboxing, P2P migration, budget metering, and replay verification.
 
-**Suitable for:**
-- Building and running portable agents
-- Experimenting with agent identity and continuity
-- Understanding infrastructure-independent agent patterns
-
-See [SECURITY.md](./SECURITY.md) for complete security model.
+See [SECURITY.md](./SECURITY.md) for the complete security model and known limitations.
 
 ## Quick Start
 
@@ -169,38 +92,44 @@ See [SECURITY.md](./SECURITY.md) for complete security model.
 - TinyGo 0.40.1+ (for agents)
 - golangci-lint (for development)
 
-### Build and Run
+### The Canonical Demo
 
 ```bash
-# Build runtime and heartbeat agent
-make build
-make agent-heartbeat
+make demo-liquidation
+```
 
-# Run agent (creates identity, starts ticking)
-./bin/igord run --budget 1.0 agents/heartbeat/agent.wasm
-# [heartbeat] tick=1 age=1s
-# [heartbeat] tick=2 age=2s
-# Ctrl+C → checkpoint saved
+This runs the full continuity proof: agent starts on Node A monitoring a simulated ETH position, Node A dies during a critical price drawdown, Node B resumes from checkpoint, detects the gap, replays missed time slots, discovers the threshold was breached during downtime, and verifies the cryptographic lineage across both nodes.
+
+### Manual Usage
+
+```bash
+# Build runtime and agent
+make build
+make agent-liquidation
+
+# Run agent (creates DID identity, starts monitoring)
+./bin/igord run --budget 100.0 agents/liquidation/agent.wasm
 
 # Resume on same or different machine
-./bin/igord resume checkpoints/heartbeat/checkpoint.ckpt agents/heartbeat/agent.wasm
-# [heartbeat] tick=3 age=3s  ← continues where it left off
+./bin/igord resume --checkpoint checkpoints/liquidation/liquidation.checkpoint \
+    --wasm agents/liquidation/agent.wasm
 
 # Verify the agent's entire life history
-./bin/igord verify checkpoints/heartbeat/history/
+./bin/igord verify checkpoints/liquidation/history/
 
 # Inspect a checkpoint
-./bin/igord inspect checkpoints/heartbeat/checkpoint.ckpt
+./bin/igord inspect checkpoints/liquidation/liquidation.checkpoint
 ```
 
-### Portable Agent Demo
+### Other Demos
 
 ```bash
-# Full demo: run → stop → copy → resume → verify
-make demo-portable
+make demo-portable      # Basic portable resume (heartbeat agent)
+make demo-pricewatcher  # Price tracking across resume
+make demo-sentinel      # Effect-safe crash recovery
+make demo-x402          # Payment with crash reconciliation
+make demo-deployer      # Multi-step deployment with crash recovery
 ```
-
-The demo shows an agent running on "Machine A", checkpoint copied to "Machine B", resuming with the same DID identity and continuous tick count, then verifying the cryptographic lineage across both machines.
 
 ## Specification Overview
 

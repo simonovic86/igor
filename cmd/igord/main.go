@@ -212,10 +212,9 @@ func runStandalone(wasmPath, agentID string, budgetVal float64, manifestPath, ch
 		os.Exit(1)
 	}
 
-	logger.Info("Agent identity",
-		"did", agentIdent.DID(),
-		"did_short", agentIdent.DIDShort(),
-	)
+	fmt.Fprintf(os.Stdout, "\n  Agent:    %s\n", agentID)
+	fmt.Fprintf(os.Stdout, "  DID:      %s\n", agentIdent.DID())
+	fmt.Fprintf(os.Stdout, "  Budget:   %s\n\n", budget.Format(budget.FromFloat(budgetVal)))
 
 	manifestData := runner.LoadManifestData(wasmPath, manifestPath, logger)
 	budgetMicrocents := budget.FromFloat(budgetVal)
@@ -240,15 +239,8 @@ func runStandalone(wasmPath, agentID string, budgetVal float64, manifestPath, ch
 
 	// Try to load existing checkpoint.
 	if loadErr := instance.LoadCheckpointFromStorage(ctx); loadErr != nil {
-		logger.Info("No existing checkpoint, starting fresh")
+		logger.Debug("No existing checkpoint, starting fresh")
 	}
-
-	logger.Info("Agent started",
-		"agent_id", agentID,
-		"did", agentIdent.DIDShort(),
-		"budget", budget.Format(budgetMicrocents),
-		"tick", instance.TickNumber,
-	)
 
 	runTickLoop(ctx, instance, logger)
 }
@@ -307,18 +299,17 @@ func resumeFromCheckpoint(checkpointPath, wasmPath, agentID string, budgetVal fl
 		}
 	}
 
-	logger.Info("Resuming agent",
-		"did", agentIdent.DID(),
-		"from_tick", hdr.TickNumber,
-		"checkpoint", checkpointPath,
-	)
-
 	manifestData := runner.LoadManifestData(wasmPath, manifestPath, logger)
 
 	b := budget.FromFloat(budgetVal)
 	if b == 0 {
 		b = hdr.Budget
 	}
+
+	fmt.Fprintf(os.Stdout, "\n  Resuming: %s\n", agentID)
+	fmt.Fprintf(os.Stdout, "  DID:      %s\n", agentIdent.DID())
+	fmt.Fprintf(os.Stdout, "  From:     tick %d\n", hdr.TickNumber)
+	fmt.Fprintf(os.Stdout, "  Budget:   %s\n\n", budget.Format(b))
 
 	instance, err := agent.LoadAgent(
 		ctx, engine, wasmPath, agentID, storageProvider,
@@ -342,13 +333,6 @@ func resumeFromCheckpoint(checkpointPath, wasmPath, agentID string, budgetVal fl
 		logger.Error("Failed to resume from checkpoint", "error", err)
 		os.Exit(1)
 	}
-
-	logger.Info("Agent resumed",
-		"agent_id", agentID,
-		"did", agentIdent.DIDShort(),
-		"tick", instance.TickNumber,
-		"budget", budget.Format(b),
-	)
 
 	runTickLoop(ctx, instance, logger)
 }
