@@ -78,10 +78,6 @@ func TestEffectLog_InvalidTransitions(t *testing.T) {
 	if err := e.Begin(id); err == nil {
 		t.Fatal("expected error: Begin from InFlight")
 	}
-	// Can't Compensate from InFlight (only from Unresolved).
-	if err := e.Compensate(id); err == nil {
-		t.Fatal("expected error: Compensate from InFlight")
-	}
 
 	e.Confirm(id)
 
@@ -161,6 +157,28 @@ func TestEffectLog_Compensate(t *testing.T) {
 	// Compensated is terminal.
 	if err := resumed.Confirm(id); err == nil {
 		t.Fatal("expected error: Confirm from Compensated")
+	}
+}
+
+func TestEffectLog_CompensateFromInFlight(t *testing.T) {
+	var e EffectLog
+	id := []byte("tx")
+	e.Record(id, nil)
+	e.Begin(id)
+
+	// Agent observes the action fail (e.g., HTTP error, payment rejected).
+	// It knows the action didn't complete, so it compensates directly.
+	if err := e.Compensate(id); err != nil {
+		t.Fatalf("Compensate from InFlight: %v", err)
+	}
+	if e.Get(id).State != Compensated {
+		t.Fatal("expected Compensated")
+	}
+
+	// Compensated is terminal — prune should remove it.
+	removed := e.Prune()
+	if removed != 1 {
+		t.Fatalf("expected 1 pruned, got %d", removed)
 	}
 }
 
