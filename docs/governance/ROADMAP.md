@@ -2,9 +2,9 @@
 
 ## Current Status: Product Phase 2.5 Next
 
-Igor has completed its research foundation (**Phases 2–5**) and product phases 1–2. The runtime supports **portable, infrastructure-independent agents** with DID identity, cryptographic lineage verification, effect-safe side effects, HTTP/payment hostcalls, and clean CLI workflows (`igord run`, `resume`, `verify`).
+Igor has completed its research foundation (**Phases 2–5**) and Product Phase 1. The runtime supports **portable, infrastructure-independent agents** with DID identity, cryptographic lineage verification, effect-safe side effects, HTTP/payment hostcalls, and clean CLI workflows (`igord run`, `resume`, `verify`).
 
-**Product Phase 1 (Portable Sovereign Agent)** and **Phase 2 (Agent Self-Provisioning)** feature work are complete. **Product Phase 2.5 (Protocol Foundation)** is next — making the checkpoint format, verifier, and effect primitives independently adoptable.
+**Product Phase 1 (Portable Sovereign Agent)** is complete. **Phase 2 (Agent Self-Provisioning)** is in progress — HTTP, effects, payments, and deployer demos are delivered; self-migration is deferred to after Phase 2.5. **Product Phase 2.5 (Protocol Foundation)** is next — making the checkpoint format, verifier, and effect primitives independently adoptable.
 
 ---
 
@@ -248,7 +248,7 @@ Igor's research foundation (Phases 2–5) proved that agents can checkpoint, mig
 **Binary model after this phase:**
 - `igor` (renamed from `igord`) — agent operators — run, resume, verify, inspect
 - `igor-verify` (new) — anyone verifying lineage — checkpoint parsing + chain verification only
-- `igor-lab` (existing, unchanged) — protocol developers — migration, replay, leases, simulator
+- `igord-lab` (existing, unchanged) — protocol developers — migration, replay, leases, simulator
 
 **Design principle:** No configurability, no extension points, no generalization. Five operations and one rule. A fixed offset table. Green or red. "I understand this completely in 5 minutes."
 
