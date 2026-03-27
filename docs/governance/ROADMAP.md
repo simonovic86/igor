@@ -1,10 +1,10 @@
 # Igor Roadmap
 
-## Current Status: Product Phase 1 Complete
+## Current Status: Product Phase 2.5 Next
 
-Igor has completed its research foundation (**Phases 2–5**) and pivoted to product development. The runtime now supports **portable, infrastructure-independent agents** with DID identity, cryptographic lineage verification, and clean CLI workflows (`igord run`, `resume`, `verify`).
+Igor has completed its research foundation (**Phases 2–5**) and Product Phase 1. The runtime supports **portable, infrastructure-independent agents** with DID identity, cryptographic lineage verification, effect-safe side effects, HTTP/payment hostcalls, and clean CLI workflows (`igord run`, `resume`, `verify`).
 
-**Product Phase 1 (Portable Sovereign Agent)** is complete. **Product Phase 2 (Agent Self-Provisioning)** is next.
+**Product Phase 1 (Portable Sovereign Agent)** is complete. **Phase 2 (Agent Self-Provisioning)** is in progress — HTTP, effects, payments, and deployer demos are delivered; self-migration is deferred to after Phase 2.5. **Product Phase 2.5 (Protocol Foundation)** is next — making the checkpoint format, verifier, and effect primitives independently adoptable.
 
 ---
 
@@ -231,6 +231,31 @@ Igor's research foundation (Phases 2–5) proved that agents can checkpoint, mig
 
 ---
 
+## Product Phase 2.5: Protocol Foundation
+
+**Goal:** Make Igor's checkpoint format, verification tools, and effect primitives independently adoptable — before building more runtime features.
+
+**Status:** Not started.
+
+**Strategic context:** Igor is a protocol, not a platform. The competitive moat is agent sovereignty (identity + lineage + portability), not durable execution. Durable execution platforms (Golem, Temporal, Restate) are potential deployment targets for Igor agents, not competitors. Adoption comes bottom-up through verification — publish the spec, ship the verifier, let verification pull developers toward the runtime. The analogy: the checkpoint format spec is JWT (RFC 7519), the standalone verifier is jwt.io, the Igor runtime is Auth0.
+
+**Scope:**
+- **Effects library extraction** (`igor.dev/effects`) — extract `sdk/igor/effects.go` + `encoding.go` as standalone Go module with zero Igor-specific dependencies. Blog post: "Crash-safe side effects in 200 lines." Tests bottom-up adoption thesis with minimal risk. (~1 day)
+- **Checkpoint format spec** — formal one-page spec in `docs/runtime/CHECKPOINT_FORMAT.md`: byte-level offset table, signing domain construction, chain rule, DID encoding, version dispatch, reserved epoch fields, CID compatibility note. Language-agnostic — enables third-party implementations without reading Go code. (~1-2 days)
+- **Standalone verifier** (`igor-verify`) — extract `ParseCheckpointHeader` from `internal/agent/instance.go` into `pkg/checkpoint` (fixes existing layering violation). Build zero-dependency binary: no wazero, no libp2p, no hostcalls (~5MB vs ~30MB). Bundle sample liquidation watcher history for zero-to-verification in 30 seconds. (~1-2 days)
+- **Browser WASM verifier** — compile the verify path (`pkg/lineage/`, `pkg/identity/`, `pkg/checkpoint/`) to WASM via `GOOS=js GOARCH=wasm` (pure stdlib, no TinyGo needed). Embeddable in protocol dashboards: "agent lineage: verified, 847 checkpoints, no gaps." (~2-3 days)
+
+**Binary model after this phase:**
+- `igor` (renamed from `igord`) — agent operators — run, resume, verify, inspect
+- `igor-verify` (new) — anyone verifying lineage — checkpoint parsing + chain verification only
+- `igord-lab` (existing, unchanged) — protocol developers — migration, replay, leases, simulator
+
+**Design principle:** No configurability, no extension points, no generalization. Five operations and one rule. A fixed offset table. Green or red. "I understand this completely in 5 minutes."
+
+**Outcome:** The checkpoint spec is an adoptable protocol artifact. The standalone verifier is the on-ramp. The effects library generates Go ecosystem mindshare. All three are independently valuable and create the conditions for runtime adoption — without requiring anyone to run a WASM agent first.
+
+---
+
 ## Product Phase 3: Permanent Memory
 
 **Goal:** Agents have tamper-evident, publicly verifiable life histories.
@@ -343,6 +368,14 @@ None. v0 is experimental. Things may be:
 - ✅ Agent deploys itself to compute provider (mock)
 - Agent decides when to migrate
 
+### Product Phase 2.5 Goals
+
+- Checkpoint format has a formal one-page spec (`docs/runtime/CHECKPOINT_FORMAT.md`)
+- Effects library published as standalone Go module (`igor.dev/effects`)
+- `igor-verify` binary verifies lineage chains with zero runtime dependencies
+- Browser WASM verifier can parse and verify checkpoints
+- Binary rename: `igord` → `igor`
+
 ---
 
 ## Timeline
@@ -354,7 +387,7 @@ Igor development follows "done when it's done" philosophy:
 - Correctness over features
 - Learning over shipping
 
-Research phases (2–5) complete. Product Phase 2 in progress.
+Research phases (2–5) complete. Product Phase 2 feature work complete. Phase 2.5 (Protocol Foundation) is next.
 
 ---
 
@@ -373,7 +406,7 @@ Igor v0 is experimental research software.
 - Performance optimizations (premature)
 - Production deployments (not ready)
 
-Focus: Complete Product Phase 2 before expanding scope.
+Focus: Complete Product Phase 2.5 (Protocol Foundation) before expanding scope.
 
 ---
 
@@ -382,9 +415,10 @@ Focus: Complete Product Phase 2 before expanding scope.
 Agents will pick their own infrastructure. Igor makes them portable enough to do so.
 
 - **Now:** Agents are portable digital objects with identity and verifiable history
-- **Next:** Agents pay for their own compute and self-provision infrastructure
+- **Next:** Checkpoint format spec, standalone verifier, and effects library enable verification-first adoption
+- **Then:** Agents pay for their own compute; Golem/Temporal/Restate become deployment targets, not competitors
 - **Later:** Agents have permanent, publicly verifiable memory on Arweave
-- **Eventually:** A multi-language ecosystem of sovereign, immortal agents
+- **Eventually:** A multi-language ecosystem of sovereign agents built on the Igor protocol
 
 ---
 
@@ -414,22 +448,32 @@ Igor builds on ideas from:
 
 Igor is **not novel**. It combines existing ideas in a specific way to explore autonomous agent survival.
 
+**Competitive positioning:** Golem Cloud, Temporal, and Restate provide durable execution platforms. Igor's differentiator is agent-owned identity, cryptographic lineage, and true portability — the agent is a protocol-level entity, not a platform deployment. These platforms are potential deployment targets for Igor agents, not competitors. Igor answers "who IS the agent?" while they answer "where does the agent run?"
+
 ---
 
 ## Open Questions
 
-1. **Can agents practically self-provision infrastructure?** (Akash/Golem integration complexity)
-2. **Is the checkpoint format efficient enough for large agent state?** (MB+ state sizes)
-3. **Will developers adopt the Igor SDK over simpler alternatives?** (DX matters)
+1. **Can the checkpoint format spec gain adoption independently of the runtime?** (The JWT analogy test — does verification pull people toward the protocol?)
+2. **Is the checkpoint format efficient enough for large agent state?** (MB+ state sizes; content-addressed external storage pointers as escape hatch)
+3. **Will DeFi teams adopt igor-verify for agent lineage proofs before the full runtime?** (Bottom-up adoption test)
 4. **Is WASM overhead acceptable for latency-sensitive agents?** (not for HFT, but for long-running?)
 5. **Can two-tier storage (local + Arweave) work without slowing the critical path?**
 6. **What hostcalls do agents actually need?** (HTTP, storage, payments — what else?)
+7. **Should Golem/Temporal/Restate be treated as deployment targets rather than competitors?** (Protocol-not-platform thesis)
 
 ---
 
 ## Next Immediate Steps
 
-Product Phase 2 in progress. HTTP hostcall, effect model, wallet_pay, x402buyer, and deployer demos delivered. Next:
+Product Phase 2 feature work complete. Protocol foundation is next — verification-first adoption.
 
-1. **Self-migration** — agent decides when and where to move based on price/performance
-2. **Real compute provider** — replace mock with Akash or Golem integration
+1. **Effects library extraction** — standalone Go module at `igor.dev/effects` (~1 day)
+2. **Checkpoint format spec** — formal spec in `docs/runtime/CHECKPOINT_FORMAT.md` (~1-2 days)
+3. **Standalone verifier** (`igor-verify`) — zero-dependency lineage verification binary (~1-2 days)
+4. **Browser WASM verifier** — checkpoint verification compiled to WASM (~2-3 days)
+
+Then:
+
+5. **Self-migration** — agent decides when and where to move based on price/performance
+6. **Real compute provider** — Akash or Golem as deployment targets (not competitors)

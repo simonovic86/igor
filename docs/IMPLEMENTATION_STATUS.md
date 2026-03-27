@@ -220,3 +220,15 @@ Last updated: 2026-03-15
 | `LoadSidecarData` tests | Added | `pkg/manifest/parse_test.go` — explicit path, derived path, no file, non-WASM |
 | CI: TinyGo before tests | Fixed | `.github/workflows/ci.yml` — WASM integration tests now run in CI |
 | CI: test coverage reporting | Added | `.github/workflows/ci.yml` — `go test -coverprofile` + summary |
+
+## Known Issues / Tech Debt
+
+Discovered during project review (2026-03-27). None are blockers for current functionality; all should be addressed during Phase 2.5 or as standalone fixes.
+
+| Issue | Severity | Location | Description |
+|-------|----------|----------|-------------|
+| Budget can go negative (RE-3 violation) | Medium | `internal/agent/instance.go` `Tick()` | Tick cost deduction `i.Budget -= costMicrocents` does not clamp to zero. A long tick can create budget debt before the next pre-tick check catches it. Fix: clamp `costMicrocents` to remaining budget before deduction. |
+| `ParseCheckpointHeader` layering violation | Low | `internal/agent/instance.go` | Checkpoint header parsing (~80 lines of `encoding/binary`) lives in the agent package alongside WASM compilation and tick execution. Should be extracted to `pkg/checkpoint` so standalone tools (`igor-verify`) can parse headers without importing the full runtime. Phase 2.5 prerequisite. |
+| Stringly-typed retry classification | Low | `internal/migration/retry.go` | Fatal error detection uses `strings.Contains` on error messages. If anyone rewords an error message, retry/fatal/ambiguous classification silently changes. Should use sentinel errors or typed error values. |
+| Unchecked lease type assertion | Low | `internal/runner/research/research.go` | `instance.Lease.(*authority.Lease)` uses blank identifier for ok value. Wrong interface type silently produces nil, triggering "lease disabled" behavior instead of surfacing the mismatch. |
+| Stale timeout comments | Low | Multiple files | Comments reference old 100ms tick timeout. Actual timeout is 15s (`internal/config/config.go` `TickTimeout`), changed to accommodate HTTP hostcalls. |
