@@ -90,6 +90,16 @@ Igor is an experiment in providing capabilities that autonomous software increas
 
 The development philosophy is minimal and iterative. Igor v0 implements only what is necessary to demonstrate survival and migration. It fails loudly when invariants are violated rather than attempting graceful degradation. It prioritizes correctness over performance, clarity over optimization.
 
+## Igor as Protocol
+
+Igor is a protocol, not a platform. Durable execution platforms — Golem Cloud, Temporal, Restate — answer "where does the agent run?" Igor answers a different question: "who IS the agent?" The competitive moat is agent sovereignty: agent-owned identity (DID), cryptographic lineage (signed checkpoint chain), and true portability (the checkpoint file IS the agent). These platforms are potential deployment targets for Igor agents, not competitors. An Igor agent could run on Golem today, Akash tomorrow, and bare metal next week, with the same DID and unbroken lineage across all three.
+
+The adoption model follows verification, not runtime adoption. Trust primitives spread bottom-up — people verify before they run. The checkpoint format spec is the adoptable artifact (like JWT's RFC 7519). The standalone verifier is the on-ramp (like jwt.io — paste a token, see it decoded). The Igor runtime is one implementation of the protocol (like Auth0 is one implementation of JWT-based auth). Publish the spec, ship the verifier, let verification pull developers toward the runtime.
+
+The initial audience is DeFi. This community already thinks in DIDs, signed proofs, and "don't trust the platform." Provable agent uptime and integrity — "agent lineage: verified, 847 checkpoints, no gaps" — solves a problem DeFi has today and currently addresses with trust-me-bro operator reputation. Agent-owned identity and cryptographic lineage are table stakes in this context, not novel features.
+
+---
+
 Igor exists because the gap between what software can do (execute autonomously) and what software can survive (infrastructure failure) has become untenable for emerging autonomous systems. The technologies needed to solve this have matured to the point where exploration becomes feasible.
 
 Whether autonomous software survival matters in practice can only be answered through building systems that embody these capabilities and observing what emerges.
